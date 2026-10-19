@@ -4,8 +4,11 @@ import { normalizeContent, ZONE_IDS } from '../../site/src/content/normalize.js'
 import shipped from '../../site/content.js';
 import fixture from '../fixtures/content.fixture.js';
 
-test('shipped content.js normalizes with no errors', () => {
-  const { content, errors } = normalizeContent(shipped);
+// The plan ran this one on site/content.js. That is the file the author rewrites, so its exact
+// contents are not pinned: these assertions run on the fixture, and the shipped file only gets the
+// invariant tests further down.
+test('fixture content normalizes with no errors, in the default zone order', () => {
+  const { content, errors } = normalizeContent(fixture);
   assert.deepEqual(errors, []);
   assert.deepEqual(content.zones, ZONE_IDS);
   assert.deepEqual(content.moments.map((m) => m.zone),
@@ -321,23 +324,19 @@ test('whatever ends up in content.js, the result is well-formed and nothing thro
   }
 });
 
-test('shipped content.js has no warnings either', () => {
-  assert.deepEqual(normalizeContent(shipped).warnings, []);
+// The two tests below are about whatever site/content.js holds right now. They pin no text and no
+// count, so personalising that file (names, twelve moments, another zone order) cannot turn them
+// red; a mistake in it can, which is the point.
+test('shipped content.js normalizes with no errors, and its moments follow its zones', () => {
+  const { content, errors } = normalizeContent(shipped);
+  assert.deepEqual(errors, []);
+  assert.equal(content.zones[content.zones.length - 1], 'evening');
+  assert.ok(content.moments.every((m) => content.zones.includes(m.zone)));
+  assert.deepEqual(content.moments.map((m) => m.index), content.moments.map((_, i) => i));
 });
 
-test('shipped content.js is all clearly marked placeholders', () => {
-  assert.equal(shipped.herName, '[Her name]');
-  assert.equal(shipped.yourName, '[Your name]');
-  assert.equal(shipped.intro.note, '[A short note to her before the ride starts]');
-  assert.equal(shipped.finale.message, '[Your 1-year message to her]');
-  assert.equal(shipped.moments.length, 10);
-  shipped.moments.forEach((moment, i) => {
-    assert.equal(moment.title, `[Moment ${i + 1} title]`);
-    assert.equal(moment.date, '[Date]');
-    assert.equal(moment.caption, '[What made this moment special]');
-    assert.equal(moment.photo, '');
-  });
-  assert.equal(shipped.music, '');
+test('shipped content.js has no warnings either', () => {
+  assert.deepEqual(normalizeContent(shipped).warnings, []);
 });
 
 test('the e2e fixture is clean and gives the exact strings the e2e specs look for', () => {
