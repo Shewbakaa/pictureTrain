@@ -73,7 +73,7 @@ const { name, query, width, height, waitMs } = parseArgs(process.argv.slice(2));
 const url = `http://127.0.0.1:${PORT}/site/index.html${query ? `?${query}` : ''}`;
 const outFile = join(root, 'artifacts', 'shots', `${name}.png`);
 
-const server = spawn('python3', ['-m', 'http.server', String(PORT), '--bind', '127.0.0.1'], { cwd: root, stdio: 'ignore' });
+const server = spawn('python3', ['scripts/serve.py', String(PORT), '--bind', '127.0.0.1'], { cwd: root, stdio: 'ignore' });
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
     server.kill();

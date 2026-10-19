@@ -4,6 +4,7 @@ import { PROP_TYPES, PROP_VARIANTS, createPropGeometry } from '../../site/src/wo
 import { triangleCount } from '../../site/src/util/geo.js';
 import { ZONES } from '../../site/src/world/zones.js';
 import { ZONE_IDS } from '../../site/src/content/normalize.js';
+import { TRACK_BED_HALF_WIDTH } from '../../site/src/world/trackMesh.js';
 import * as THREE from '../../site/src/three.js';
 
 const HEIGHT = {
@@ -128,7 +129,6 @@ test('a fence runs along X, so turning its front (+Z) to the track lines it up w
 });
 
 test('nothing reaches over the track bed from the nearest offset its zone allows', () => {
-  const BED_HALF_WIDTH = 2.2; // the track bed (Task 8) is 4.4 m wide
   const reach = (g) => {
     const p = g.attributes.position;
     let most = 0;
@@ -138,6 +138,6 @@ test('nothing reaches over the track bed from the nearest offset its zone allows
   for (const id of ZONE_IDS) for (const rule of ZONES[id].props) for (const v of variantsOf(rule.type)) {
     const { body, glow } = built(rule.type, v);
     const gap = rule.minOffset - Math.max(reach(body), glow ? reach(glow) : 0) * rule.scale[1];
-    assert.ok(gap >= BED_HALF_WIDTH, `${id} ${rule.type}#${v} reaches to ${gap.toFixed(2)} m from the centre line`);
+    assert.ok(gap >= TRACK_BED_HALF_WIDTH, `${id} ${rule.type}#${v} reaches to ${gap.toFixed(2)} m from the centre line`);
   }
 });

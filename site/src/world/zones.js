@@ -117,8 +117,8 @@ export const ZONES = deepFreeze({
   // An autumn forest in low golden light: orange trees, pumpkins, falling leaves.
   autumn: {
     id: 'autumn',
-    sky: { top: '#98c4ea', horizon: '#f6dcb8' },
-    fog: { color: '#f6dcb8', near: 55, far: 145 },
+    sky: { top: '#8cc6ee', horizon: '#fbeed6' },
+    fog: { color: '#fbeed6', near: 55, far: 145 },
     sun: { color: '#ffd49a', intensity: 2.7, dir: [-0.6, 0.59, 0.54] }, // 36 degrees up
     hemi: { sky: '#d6e0f0', ground: '#b88a50', intensity: 2.55 },
     ground: { near: '#c9a046', far: '#a8843a', path: '#d9c7a0' },

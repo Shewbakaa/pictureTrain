@@ -18,7 +18,7 @@ import { clamp } from '../util/math.js';
 
 export const TRACK = Object.freeze({
   SEG: 60,             // metres between control points
-  MAX_TURN: 0.14,      // largest heading change at one control point (radians)
+  MAX_TURN: 0.2,       // largest heading change at one control point (radians)
   HEADING_LIMIT: 1.0,  // the heading never strays further than this from straight ahead (radians)
   SEED: 7,
 });

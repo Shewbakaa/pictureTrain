@@ -91,14 +91,27 @@ export function mergeParts(parts) {
       at++;
     }
   }
-  const merged = new BufferGeometry();
-  merged.setAttribute('position', new BufferAttribute(positions, 3));
-  merged.setAttribute('color', new BufferAttribute(colors, 3));
+  return triangleSoup(positions, colors);
+}
+
+/**
+ * Triangle soup from flat lists of corners, three numbers per corner: each triangle's corners in turn
+ * (counter-clockwise seen from the side it faces) and their linear colours. The result is a non-indexed geometry
+ * with `position`, flat `normal` and `color` attributes and its bounding box and sphere computed, like `mergeParts`
+ * gives. For shapes built straight from points, such as the ground and the track.
+ * @param {Float32Array|number[]} positions
+ * @param {Float32Array|number[]} colors
+ * @returns {BufferGeometry}
+ */
+export function triangleSoup(positions, colors) {
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new BufferAttribute(positions instanceof Float32Array ? positions : new Float32Array(positions), 3));
+  geometry.setAttribute('color', new BufferAttribute(colors instanceof Float32Array ? colors : new Float32Array(colors), 3));
   // On triangle soup no vertex is shared, so this gives each triangle's corners that triangle's own face normal.
-  merged.computeVertexNormals();
-  merged.computeBoundingBox();
-  merged.computeBoundingSphere();
-  return merged;
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
 }
 
 /** How many triangles a geometry draws, indexed or not. */
