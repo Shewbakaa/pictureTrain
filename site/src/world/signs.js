@@ -23,9 +23,8 @@ import {
 } from '../three.js';
 import { MATERIALS } from '../render/materials.js';
 import { clamp } from '../util/math.js';
-import { displayTextWidth, fillDisplayText } from '../util/canvasText.js';
+import { displayTextWidth, drawHeart, fillDisplayText } from '../util/canvasText.js';
 import { mergeParts, part } from '../util/geo.js';
-import { drawHeart } from '../photos/photos.js';
 import { COUPLE_HALF_WIDTH } from './figures.js';
 
 /**

@@ -27,7 +27,7 @@ import {
 } from '../three.js';
 import { MATERIALS } from '../render/materials.js';
 import { mergeParts, moveParts, part, triangleSoup } from '../util/geo.js';
-import { displayTextWidth, fillDisplayText } from '../util/canvasText.js';
+import { displayTextWidth, drawHeart, fillDisplayText } from '../util/canvasText.js';
 import { createPropGeometry } from './props.js';
 
 /** The platform: its top's height and how far its near and far edges are right of the centre line (m). */
@@ -334,21 +334,8 @@ function drawBoard(name) {
   if (measured > room) size = Math.floor((size * room) / measured);
   g.fillStyle = COLOURS.boardInk;
   const textWidth = fillDisplayText(g, name, w / 2, h * 0.5, size);
-  for (const side of [-1, 1]) heart(g, w / 2 + side * (textWidth / 2 + h * 0.2), h * 0.5, h * 0.14);
+  for (const side of [-1, 1]) drawHeart(g, w / 2 + side * (textWidth / 2 + h * 0.2), h * 0.5, h * 0.14, COLOURS.heart);
   return canvas;
-}
-
-/** A small heart centred on (x, y), `r` across each lobe. */
-function heart(g, x, y, r) {
-  g.save();
-  g.translate(x, y);
-  g.fillStyle = COLOURS.heart;
-  g.beginPath();
-  g.moveTo(0, r * 1.15);
-  g.bezierCurveTo(-r * 1.9, -r * 0.1, -r * 0.9, -r * 1.4, 0, -r * 0.45);
-  g.bezierCurveTo(r * 0.9, -r * 1.4, r * 1.9, -r * 0.1, 0, r * 1.15);
-  g.fill();
-  g.restore();
 }
 
 /** The board's paper: a face towards the arriving train and one towards the train once it has passed, both reading the right way round. */

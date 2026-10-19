@@ -1,4 +1,4 @@
-// Words drawn on canvases in the display font: the station boards, the signs' date placards, the placeholder photos.
+// Words and hearts drawn on canvases: the station boards, the signs' date placards, the placeholder photos.
 //
 // Cormorant Garamond draws old-style figures, whose "1" looks like a small "ı" and whose "10" looks like "ıo", so
 // "Day 1" and "Photo 1" read as typos. Runs of digits are drawn in Nunito 700 instead, sized to stand as tall as
@@ -62,8 +62,8 @@ export function displayTextWidth(g, text, px) {
  * @returns {number}  how wide the text is
  */
 export function fillDisplayText(g, text, x, y, px) {
-  const width = displayTextWidth(g, text, px);
   g.save();
+  const width = displayTextWidth(g, text, px);
   g.textAlign = 'left';
   g.textBaseline = 'alphabetic';
   g.font = `600 ${px}px ${WORDS}`;
@@ -77,4 +77,17 @@ export function fillDisplayText(g, text, x, y, px) {
   }
   g.restore();
   return width;
+}
+
+/** A small heart centred on (x, y), `r` across each lobe, filled with `colour`. */
+export function drawHeart(g, x, y, r, colour) {
+  g.save();
+  g.translate(x, y);
+  g.fillStyle = colour;
+  g.beginPath();
+  g.moveTo(0, r * 1.15);
+  g.bezierCurveTo(-r * 1.9, -r * 0.1, -r * 0.9, -r * 1.4, 0, -r * 0.45);
+  g.bezierCurveTo(r * 0.9, -r * 1.4, r * 1.9, -r * 0.1, 0, r * 1.15);
+  g.fill();
+  g.restore();
 }

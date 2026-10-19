@@ -7,10 +7,14 @@
 // with "Photo N" and a little heart, so the ride still looks finished. A photo that fails is named in a console
 // warning, so the author can see which file to fix.
 //
+// Photos load a few at a time (CONCURRENCY), so each has the connection to itself rather than a share of it, and
+// each gets TIMEOUT_MS from when its own request starts. However many hang, the loading as a whole gives up after
+// TOTAL_MS, so the loading screen never waits longer than that.
+//
 // `fitWithin` and `placeholderPalette` are pure. `loadPhotos` needs a browser, and only touches the DOM once it
 // is called, so the Node unit tests can import this module.
 
-import { fillDisplayText } from '../util/canvasText.js';
+import { drawHeart, fillDisplayText } from '../util/canvasText.js';
 import { createRng, rngRange } from '../util/rng.js';
 
 /**
@@ -20,12 +24,16 @@ import { createRng, rngRange } from '../util/rng.js';
  * }} PhotoAsset
  *   The photo of moment `index`, drawn on `canvas` (`width` x `height` pixels, never more than MAX_SIZE on its
  *   long side). `aspect` is the photo's own width / height. `src` is the photo's URL as content.js gives it, or
- *   for a placeholder a data: URL of its picture, so a page can show it in an <img> either way.
+ *   for a placeholder a data: URL of its picture, so a page can show it in an <img> either way. In the rare
+ *   browser that will not give a 2D canvas, `canvas` is null (the sign shows plain paper) and a placeholder's
+ *   `src` is ''.
  */
 
 export const PHOTOS = Object.freeze({
   MAX_SIZE: 1024,          // the longest side of a photo's canvas (px)
-  TIMEOUT_MS: 15000,       // a photo still loading after this long is given up on
+  CONCURRENCY: 3,          // photos loading at once
+  TIMEOUT_MS: 15000,       // a photo still loading this long after its request started is given up on
+  TOTAL_MS: 45000,         // and any photo not loaded this long after the loading started
   PLACEHOLDER_WIDTH: 800,  // the placeholders are portrait, 4:5
   PLACEHOLDER_HEIGHT: 1000,
 });
@@ -62,85 +70,148 @@ export function placeholderPalette(index) {
   return PALETTES[i];
 }
 
-/**
- * Loads every moment's photo, all at once.
- * @param {import('../content/normalize.js').Moment[]} moments
- * @param {{ onProgress?: (done: number, total: number) => void }} [options]
- *   `onProgress` hears each photo as it finishes (or falls back to its placeholder).
- * @returns {Promise<PhotoAsset[]>}  in the moments' order; a photo that fails never rejects it
- */
-export function loadPhotos(moments, { onProgress } = {}) {
-  const total = moments.length;
-  let done = 0;
-  return Promise.all(moments.map(async (moment) => {
-    const asset = await loadMomentPhoto(moment);
-    done += 1;
-    if (onProgress) onProgress(done, total);
-    return asset;
-  }));
-}
+/** @typedef {CanvasImageSource & { naturalWidth: number, naturalHeight: number }} LoadedImage  a decoded photo */
 
-/** The moment's photo, or its placeholder when it has none or it cannot be shown. */
-async function loadMomentPhoto(moment) {
-  if (!moment.photo) return placeholderAsset(moment.index);
-  try {
-    const image = await loadImage(moment.photo, PHOTOS.TIMEOUT_MS);
-    return photoAsset(moment.index, image, moment.photo);
-  } catch {
+/**
+ * Loads every moment's photo, CONCURRENCY at a time, in the moments' order.
+ * @param {import('../content/normalize.js').Moment[]} moments
+ * @param {{ onProgress?: (done: number, total: number) => void,
+ *           loadImage?: (src: string, signal: AbortSignal) => Promise<LoadedImage> }} [options]
+ *   `onProgress` hears each moment as its photo finishes (or falls back to its placeholder). `loadImage` fetches
+ *   and decodes one photo, giving up when `signal` aborts; the default loads it into an <img> (tests pass their own).
+ * @returns {Promise<PhotoAsset[]>}  in the moments' order; never rejects for a photo that fails
+ */
+export async function loadPhotos(moments, { onProgress, loadImage = loadImageElement } = {}) {
+  const total = moments.length;
+  const assets = new Array(total);
+  const loading = new Set(); // the AbortControllers of the requests in flight
+  let expired = false;
+  const cap = setTimeout(() => {
+    expired = true;
+    for (const request of loading) request.abort();
+  }, PHOTOS.TOTAL_MS);
+
+  /** One moment's asset: its photo if it loads in time, its placeholder otherwise. */
+  async function assetFor(moment) {
+    if (!moment.photo) return placeholderAsset(moment.index);
+    if (!expired) {
+      const request = new AbortController();
+      const timer = setTimeout(() => request.abort(), PHOTOS.TIMEOUT_MS);
+      loading.add(request);
+      try {
+        const gaveUp = new Promise((_, reject) => {
+          request.signal.addEventListener('abort', () => reject(new Error('gave up')), { once: true });
+        });
+        const image = await Promise.race([new Promise((resolve) => resolve(loadImage(moment.photo, request.signal))), gaveUp]);
+        return photoAsset(moment.index, image, moment.photo);
+      } catch {
+        // Falls through to the placeholder.
+      } finally {
+        clearTimeout(timer);
+        loading.delete(request);
+      }
+    }
     console.warn(`[photos] Could not load "${moment.photo}" — showing a placeholder. Use JPG or PNG.`);
     return placeholderAsset(moment.index);
   }
+
+  let next = 0;
+  let done = 0;
+  async function worker() {
+    while (next < total) {
+      const i = next++;
+      assets[i] = await assetFor(moments[i]);
+      done += 1;
+      if (onProgress) onProgress(done, total);
+    }
+  }
+  try {
+    await Promise.all(Array.from({ length: Math.min(PHOTOS.CONCURRENCY, total) }, worker));
+  } finally {
+    clearTimeout(cap);
+  }
+  return assets;
 }
 
-/** Resolves with the decoded image, or rejects when it fails, decodes to nothing or takes longer than `timeoutMs`. */
-function loadImage(src, timeoutMs) {
+/**
+ * Loads `src` into an <img> and decodes it off the main thread where the browser can. Rejects when it fails,
+ * decodes to nothing, or `signal` aborts (which also stops the download).
+ */
+function loadImageElement(src, signal) {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.decoding = 'async';
-    let timer = 0;
-    const settle = (error) => {
-      clearTimeout(timer);
+    const stop = () => {
       image.onload = null;
       image.onerror = null;
-      if (error) {
-        image.src = ''; // stops a download that is still going
-        reject(error);
-      } else {
-        resolve(image);
-      }
+      signal.removeEventListener('abort', onAbort);
     };
-    timer = setTimeout(() => settle(new Error('timed out')), timeoutMs);
-    image.onload = () => settle(image.naturalWidth > 0 && image.naturalHeight > 0 ? null : new Error('no picture'));
-    image.onerror = () => settle(new Error('failed to load'));
+    function onAbort() {
+      stop();
+      image.src = ''; // stops a download that is still going
+      reject(new Error('gave up'));
+    }
+    signal.addEventListener('abort', onAbort);
+    image.onload = () => {
+      if (!(image.naturalWidth > 0 && image.naturalHeight > 0)) {
+        stop();
+        reject(new Error('no picture'));
+        return;
+      }
+      // Decoded now, drawing it onto its canvas will not stall a frame. If decode() fails, drawImage decodes it.
+      const decoded = typeof image.decode === 'function' ? image.decode().catch(() => {}) : Promise.resolve();
+      decoded.then(() => {
+        stop();
+        resolve(image);
+      });
+    };
+    image.onerror = () => {
+      stop();
+      reject(new Error('failed to load'));
+    };
     image.src = src;
   });
 }
 
-/** A canvas of the given size and its 2D context. */
+/** A canvas of the given size and its 2D context, or null where there is none (Node, or a browser out of memory). */
 function newCanvas(width, height) {
+  if (typeof document === 'undefined') return null;
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const g = canvas.getContext('2d');
-  if (!g) throw new Error('no 2D canvas');
-  return { canvas, g };
+  return g ? { canvas, g } : null;
 }
 
 /** A loaded photo, drawn at most MAX_SIZE on its long side. Browsers turn phone photos upright as they draw them. */
 function photoAsset(index, image, src) {
   const { naturalWidth: w, naturalHeight: h } = image;
   const { width, height } = fitWithin(w, h, PHOTOS.MAX_SIZE);
-  const { canvas, g } = newCanvas(width, height);
-  g.imageSmoothingEnabled = true;
-  g.imageSmoothingQuality = 'high';
-  g.drawImage(image, 0, 0, width, height);
-  return { index, canvas, width, height, aspect: w / h, src, isPlaceholder: false };
+  const made = newCanvas(width, height);
+  if (made) {
+    made.g.imageSmoothingEnabled = true;
+    made.g.imageSmoothingQuality = 'high';
+    made.g.drawImage(image, 0, 0, width, height);
+  }
+  return { index, canvas: made ? made.canvas : null, width, height, aspect: w / h, src, isPlaceholder: false };
 }
 
 /** The soft placeholder of moment `index`: a portrait pastel gradient with "Photo N" and a small heart. */
 function placeholderAsset(index) {
   const { PLACEHOLDER_WIDTH: w, PLACEHOLDER_HEIGHT: h } = PHOTOS;
-  const { canvas, g } = newCanvas(w, h);
+  const plain = { index, canvas: null, width: w, height: h, aspect: w / h, src: '', isPlaceholder: true };
+  const made = newCanvas(w, h);
+  if (!made) return plain;
+  try {
+    drawPlaceholder(made.g, w, h, index);
+    return { ...plain, canvas: made.canvas, src: made.canvas.toDataURL('image/jpeg', 0.92) };
+  } catch {
+    return plain;
+  }
+}
+
+/** Paints placeholder `index` onto `g`, `w` x `h`. */
+function drawPlaceholder(g, w, h, index) {
   const { from, to, ink } = placeholderPalette(index);
 
   const wash = g.createLinearGradient(0, 0, w * 0.6, h);
@@ -176,22 +247,4 @@ function placeholderAsset(index) {
   g.fillStyle = ink;
   fillDisplayText(g, `Photo ${index + 1}`, w / 2, h * 0.47, Math.round(w * 0.15));
   drawHeart(g, w / 2, h * 0.58, w * 0.03, ink);
-
-  return { index, canvas, width: w, height: h, aspect: w / h, src: canvas.toDataURL('image/jpeg', 0.92), isPlaceholder: true };
-}
-
-/**
- * A small heart centred on (x, y) of a 2D canvas context, `r` across each lobe. The photo signs' date placards
- * use it too.
- */
-export function drawHeart(g, x, y, r, colour) {
-  g.save();
-  g.translate(x, y);
-  g.fillStyle = colour;
-  g.beginPath();
-  g.moveTo(0, r * 1.15);
-  g.bezierCurveTo(-r * 1.9, -r * 0.1, -r * 0.9, -r * 1.4, 0, -r * 0.45);
-  g.bezierCurveTo(r * 0.9, -r * 1.4, r * 1.9, -r * 0.1, 0, r * 1.15);
-  g.fill();
-  g.restore();
 }
