@@ -89,7 +89,7 @@ const UP = new Vector3(0, 1, 0);
 
 /**
  * Starts the 3D ride in `#scene`. Resolves once the first frame is on screen, so the loading screen can stay up
- * until then (the first frame compiles the shaders, which can take a moment on a phone). If building the world or
+ * until then (every shader is compiled just before it, which can take a moment on a phone). If building the world or
  * drawing that first frame fails, it rejects instead, having taken the canvas away again: the caller tells the
  * story another way rather than lifting the loading screen off an empty canvas.
  * @param {{ content: import('./content/normalize.js').Content, debug: ReturnType<import('./debug.js').parseDebugParams>,
@@ -231,6 +231,12 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     finale.setQuality(governor.tier);
   }
   applyTier();
+
+  // Every shader the ride and the finale will need is compiled now, under the loading screen, hidden things
+  // included: compiled the first time each came into view, they would stall the ride for a moment, often just as
+  // the train pulls in at a stop. They are compiled for the starting tier, so a later step up to shadows compiles
+  // its own variants then (a phone that fast takes it in its stride).
+  renderer.compile(scene, camera);
 
   // The page around the canvas.
   const resize = () => {
