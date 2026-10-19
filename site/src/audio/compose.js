@@ -1,7 +1,7 @@
 // The built-in tune's score: a sixteen-bar music-box loop in F major, written out note by note from a seed, so it
 // sounds the same on every phone and every visit. music.js plays it.
 //
-// Four voices of the same four chords, I–vi–IV–V, round and round: a pad holding each bar's chord, a soft bass on
+// Three voices over the same four chords, I–vi–IV–V, round and round: a pad holding each bar's chord, a soft bass on
 // its root every half bar, and a bell melody on top. The melody is four phrases of four bars, A A′ B A″: the second
 // and last phrases echo the first, so it is a tune she can recognise rather than a wander, and the last bar ends
 // on the V chord, which leads back home to the first.

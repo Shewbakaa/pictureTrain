@@ -848,6 +848,8 @@ body {
   font: italic 500 24px/1.3 var(--font-display);
   font-variant-numeric: lining-nums;
   color: var(--rose-ink);
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 /* --- Less motion when she has asked for it ------------------------------------------------------------------- */

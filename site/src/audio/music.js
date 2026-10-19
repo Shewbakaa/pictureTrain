@@ -7,7 +7,9 @@
 // a locked phone) the sound is held, and it comes back as she left it.
 //
 // The built-in tune's AudioContext is unlocked by that same tap even when her song is the one playing, so that if
-// the song cannot play (a mistyped file name, say) the tune takes over without asking for another tap.
+// the song cannot play (a mistyped file name, say) the tune can take over without asking for another tap. That is
+// certain only when the song fails at the start; if it fails mid-song, the browser may refuse to wake the tune
+// without a tap, and then the music shows as off ('blocked') until she taps the music button.
 
 import { composeLoop, midiToFreq } from './compose.js';
 
