@@ -218,6 +218,7 @@ body {
   font: 600 46px/1.05 var(--font-display);
   font-variant-numeric: lining-nums;
   letter-spacing: -0.005em;
+  word-break: break-word; /* the same, for Safari 15.0, which has no overflow-wrap: anywhere (here and below) */
   overflow-wrap: anywhere;
 }
 
@@ -238,6 +239,7 @@ body {
   line-height: 1.55;
   color: var(--soft-ink);
   white-space: pre-line;
+  word-break: break-word;
   overflow-wrap: anywhere;
 }
 
@@ -284,6 +286,7 @@ body {
   margin: 2px 0 0;
   font: 600 30px/1.1 var(--font-display);
   font-variant-numeric: lining-nums;
+  word-break: break-word;
   overflow-wrap: anywhere;
 }
 
@@ -336,6 +339,7 @@ body {
   line-height: 1.55;
   color: var(--soft-ink);
   white-space: pre-line;
+  word-break: break-word;
   overflow-wrap: anywhere;
 }
 
@@ -728,6 +732,7 @@ body {
   margin: 6px 0 0;
   font: 600 40px/1.08 var(--font-display);
   font-variant-numeric: lining-nums;
+  word-break: break-word;
   overflow-wrap: anywhere;
 }
 
@@ -737,6 +742,7 @@ body {
   line-height: 1.6;
   color: var(--soft-ink);
   white-space: pre-line;
+  word-break: break-word;
   overflow-wrap: anywhere;
 }
 

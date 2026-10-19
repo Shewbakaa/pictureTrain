@@ -72,10 +72,18 @@ test('small screen, long caption and rotation keep Continue reachable', async ({
   await page.goto('index.html?speed=25');
   await page.getByRole('button', { name: 'Begin the ride' }).click();
   const cont = page.getByRole('button', { name: 'Continue' });
+  // Continue sits clear of the bottom bar, not just somewhere on screen.
+  const clearOfBottomBar = async () => {
+    const button = await cont.boundingBox();
+    const bar = await page.locator('#bottombar').boundingBox();
+    return button.y + button.height <= bar.y;
+  };
   await expect(cont).toBeInViewport();
+  expect(await clearOfBottomBar()).toBe(true);
   expect(await page.locator('.stop-card-body').evaluate((e) => e.scrollHeight > e.clientHeight)).toBe(true);
   await page.setViewportSize({ width: 667, height: 375 });
   await expect(cont).toBeInViewport();
+  await expect.poll(clearOfBottomBar).toBe(true);
   await expect.poll(async () => (await page.locator('#scene canvas').boundingBox()).width).toBe(667);
   expect(await page.evaluate(() => document.scrollingElement.scrollTop)).toBe(0);
 });
@@ -85,10 +93,15 @@ test('timeline taps during a jump fade are ignored', async ({ page }) => {
   await page.getByRole('button', { name: 'Begin the ride' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.locator('#stop-card')).toContainText('Rainy walk');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.locator('#stop-card')).toContainText('Beach day');
   const dots = page.locator('#timeline button');
   await dots.nth(0).click();
-  await dots.nth(1).click({ force: true });
-  await expect.poll(async () => (await appState(page)).stopIndex).toBe(0);
+  // A second jump while the blush covers the screen, to a dot that is reached and not the current one. Fired on
+  // the button itself (as a keyboard would), since a pointer tap would only land on the cover (R32).
+  await page.evaluate(() => document.querySelectorAll('#timeline button')[1].click());
+  await expect(page.locator('#fade')).toBeHidden(); // every fade has finished
+  expect((await appState(page)).stopIndex).toBe(0);
   await expect(page.locator('#stop-card')).toContainText('First coffee');
 });
 
@@ -193,12 +206,22 @@ test('a first frame that throws falls back to the 2D story', async ({ page }) =>
     for (const name of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']) {
       WebGL2RenderingContext.prototype[name] = () => { throw new Error('no drawing today'); };
     }
+    // Notes when the ride's GL context is lost, after any listener the stage added has heard it.
+    const orig = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, ...rest) {
+      const context = orig.call(this, type, ...rest);
+      if (type === 'webgl2' && context) this.addEventListener('webglcontextlost', () => setTimeout(() => { window.__contextLost = true; }));
+      return context;
+    };
   });
   await page.goto('index.html');
   await expect(page.locator('.fallback-moment')).toHaveCount(10);
   await expect(page.locator('#loading')).toBeHidden();
   expect((await appState(page)).mode).toBe('fallback');
-  // The 3D attempt is cleared away rather than left running behind the story.
+  // The 3D attempt is cleared away rather than left running behind the story: the canvas is gone, its GPU context
+  // given up, and losing it says nothing over the story.
   expect(await page.locator('#scene canvas').count()).toBe(0);
+  await page.waitForFunction(() => window.__contextLost === true);
+  await expect(page.locator('#toast')).toBeHidden();
   expect(errors).toEqual([]);
 });

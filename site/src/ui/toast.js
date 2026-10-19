@@ -10,8 +10,7 @@ import { el, reveal, setChildren } from './dom.js';
  * @param {{ action?: { label: string, onClick: () => void } }} [options]  a button beside the words
  */
 export function showToast(text, { action } = {}) {
-  const toast = document.getElementById('toast');
-  toast.setAttribute('role', 'status');
+  const toast = document.getElementById('toast'); // role="status" in index.html, so it is read out as it appears
   setChildren(toast, [
     el('span', { class: 'toast-text' }, [text]),
     action ? el('button', { type: 'button', class: 'btn-primary toast-action', onClick: action.onClick }, [action.label]) : null,

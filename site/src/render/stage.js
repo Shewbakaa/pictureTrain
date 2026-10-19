@@ -26,7 +26,8 @@ const FAR = 400;
  *   `resize` fits the canvas and the camera to the container; it does nothing if the size has not changed, so
  *   it is cheap to call often. `info` counts what the last `render` drew (the shadow pass not included).
  *   `onContextLost` calls `fn` when the browser takes the GPU away (a locked phone, memory pressure).
- *   `dispose` stops the animation loop, frees what the renderer holds on the GPU and takes the canvas off the page.
+ *   `dispose` stops the animation loop, frees what the renderer holds on the GPU, gives up the context at once
+ *   (without telling `onContextLost`, as nothing is lost that is still wanted) and takes the canvas off the page.
  */
 
 /**
@@ -64,6 +65,8 @@ export function createStage(container, { antialias = true } = {}) {
   rig.add(camera);
   scene.add(rig);
 
+  const contextListeners = new AbortController(); // the onContextLost handlers, which dispose() lets go of
+
   let width = 0;
   let height = 0;
   function resize() {
@@ -99,11 +102,13 @@ export function createStage(container, { antialias = true } = {}) {
       canvas.addEventListener('webglcontextlost', (event) => {
         event.preventDefault(); // lets the browser give the context back later
         fn();
-      });
+      }, { signal: contextListeners.signal });
     },
     dispose() {
+      contextListeners.abort();
       renderer.setAnimationLoop(null);
       renderer.dispose();
+      renderer.forceContextLoss(); // frees the GPU now, rather than whenever the canvas is collected
       canvas.remove();
     },
   };
