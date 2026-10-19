@@ -5,7 +5,13 @@
 // the camera. Each particle has a fixed spot in the world plus its own motion (falling, swaying, wandering), and
 // is drawn wherever that lands inside the box: a particle that drifts or falls out of one side comes back in
 // at the other. So the train rolls through particles that stay put in the world, and the box never runs dry.
-// Particles fade out within a few metres of the eye and towards the edge of the box, so none ever pops.
+// Fireflies are the exception: they hover in a low band round her eye height and never wrap up or down.
+//
+// Nothing ever pops in or out. Particles fade out within a few metres of the eye (so none smears across the
+// screen) and with distance, which hides the box's sides (all at least 20 m away, past the fade). They also
+// fade out over the last EDGE_FADE metres of the top and bottom of the box (or of the fireflies' band), so a
+// particle that falls out of the bottom and comes back in at the top is invisible while it does, even when
+// she looks up.
 //
 // Between two zones the effect does not mix two kinds at once: the first fades out to nothing at the middle of
 // the blend window, then the second fades in (`particleStyleAt`), and the swap happens while nothing shows.
@@ -19,7 +25,7 @@ import {
   AdditiveBlending, BufferAttribute, BufferGeometry, Color, DynamicDrawUsage, NormalBlending, Points, ShaderMaterial,
   Vector2,
 } from '../three.js';
-import { clamp } from '../util/math.js';
+import { clamp, smoothstep } from '../util/math.js';
 import { createRng, rngRange } from '../util/rng.js';
 
 /**
@@ -32,6 +38,12 @@ const BOX = Object.freeze({ X: 40, Y: 18, Z: 40, BELOW: 3 });
 
 /** Fireflies keep low: within this band (m) round her eye height, not up in the sky. */
 const FIREFLY_BAND = Object.freeze({ BELOW: 1.7, ABOVE: 3.2 });
+
+/** How far (m) a firefly bobs up and down; its resting height keeps this far inside its band. */
+const FIREFLY_BOB = 0.5;
+
+/** Particles fade in and out over this distance (m) from the top and bottom of the box or band. */
+const EDGE_FADE = 0.6;
 
 /**
  * How each kind is drawn and moves. `shape` picks the fragment shader's shape. Each particle's colour lies
@@ -224,6 +236,9 @@ export function createAmbientParticles({ maxCount = 260 } = {}) {
     uniforms.uHalfHeight.value = renderer.getDrawingBufferSize(bufferSize).y / 2;
   };
 
+  /** What `update` changes every frame; each is uploaded whole (at most a few kilobytes). */
+  const moving = [positionAttribute, sizeAttribute, alphaAttribute, spinAttribute, flipAttribute];
+
   let drawCount = count;
   geometry.setDrawRange(0, drawCount);
   let time = 0;
@@ -251,7 +266,7 @@ export function createAmbientParticles({ maxCount = 260 } = {}) {
 
     const kind = KINDS[style.kind];
     const fireflies = style.kind === 'fireflies';
-    // The box's low corner, and how tall the band is that particles live in.
+    // The box's low corner, and how tall the box or band is that particles live in.
     const x0 = cameraPosition.x - BOX.X / 2;
     const z0 = cameraPosition.z - BOX.Z / 2;
     const y0 = cameraPosition.y - (fireflies ? FIREFLY_BAND.BELOW : BOX.BELOW);
@@ -265,21 +280,22 @@ export function createAmbientParticles({ maxCount = 260 } = {}) {
       const ph = i * 4;
       const p = pace[i];
       let x = anchor[a] * BOX.X;
-      let y = anchor[a + 1] * height;
       let z = anchor[a + 2] * BOX.Z;
+      let up; // how far up the box or band (m), 0 to `height`
       if (fireflies) {
-        // Wandering slowly in loops, and blinking.
+        // Wandering slowly in loops, bobbing within the band, and blinking.
         x += style.sway * 1.5 * Math.sin(time * 0.31 * p + phase[ph]);
-        y += 0.5 * Math.sin(time * 0.53 * p + phase[ph + 1]);
         z += style.sway * 1.5 * Math.cos(time * 0.27 * p + phase[ph + 2]);
+        up = FIREFLY_BOB + anchor[a + 1] * (height - 2 * FIREFLY_BOB) + FIREFLY_BOB * Math.sin(time * 0.53 * p + phase[ph + 1]);
         const blink = 0.5 + 0.5 * Math.sin(time * 1.7 * p + phase[ph + 3]);
         alphas[i] = 0.15 + 0.85 * blink * blink;
         sizes[i] = style.size * sizeFactor[i] * (0.8 + 0.3 * blink);
         spins[i] = 0;
         flips[i] = 1;
       } else {
-        // Falling and swinging from side to side; petals and leaves also turn and tumble as they go.
-        y -= style.fall * p * time;
+        // Falling and swinging from side to side; petals and leaves also turn and tumble as they go. The fall is
+        // in the world, so a particle that leaves the bottom of the box comes back in at the top.
+        up = wrap(anchor[a + 1] * height - style.fall * p * time - y0, height);
         x += style.sway * Math.sin(time * 0.7 * p + phase[ph]);
         z += style.sway * 0.6 * Math.cos(time * 0.55 * p + phase[ph + 1]);
         alphas[i] = 1;
@@ -287,16 +303,14 @@ export function createAmbientParticles({ maxCount = 260 } = {}) {
         spins[i] = phase[ph + 2] + kind.spin * p * time;
         flips[i] = kind.flip > 0 ? 0.25 + 0.75 * Math.abs(Math.cos(kind.flip * p * time + phase[ph + 3])) : 1;
       }
+      // Faded in and out at the top and bottom, where it wraps.
+      alphas[i] *= smoothstep(0, EDGE_FADE, up) * smoothstep(height, height - EDGE_FADE, up);
       // Wherever that is in the world, drawn inside the box round the camera.
       positions[a] = x0 + wrap(x - x0, BOX.X);
-      positions[a + 1] = y0 + wrap(y - y0, height);
+      positions[a + 1] = y0 + up;
       positions[a + 2] = z0 + wrap(z - z0, BOX.Z);
     }
-    for (const attr of [positionAttribute, sizeAttribute, alphaAttribute, spinAttribute, flipAttribute]) {
-      attr.clearUpdateRanges();
-      attr.addUpdateRange(0, drawCount * attr.itemSize);
-      attr.needsUpdate = true;
-    }
+    for (let k = 0; k < moving.length; k++) moving[k].needsUpdate = true;
   }
 
   return {

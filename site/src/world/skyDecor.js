@@ -177,7 +177,8 @@ export function createSkyDecor() {
   function update(dt, cameraPosition, env) {
     time += dt;
     if (env) cloudMaterial.color.lerpColors(white, env.skyHorizon, CLOUD_TINT);
-    cloudStates.forEach((c, i) => {
+    for (let i = 0; i < cloudStates.length; i++) {
+      const c = cloudStates[i];
       // Round the arc and back to its start, growing out of nothing and melting away at either end.
       const angle = -ARC + ((((c.angle + c.speed * time + ARC) % (2 * ARC)) + 2 * ARC) % (2 * ARC));
       const grown = smoothstep(ARC, ARC - FADE, Math.abs(angle));
@@ -186,7 +187,7 @@ export function createSkyDecor() {
       // Each cloud keeps its long side roughly across her view.
       turn.setFromAxisAngle(UP, -angle + c.turn);
       clouds.setMatrixAt(i, matrix.compose(position, turn, size.set(s * c.stretch, s * 0.8, s)));
-    });
+    }
     clouds.instanceMatrix.needsUpdate = true;
 
     for (const b of balloons) {

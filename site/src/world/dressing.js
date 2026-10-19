@@ -173,8 +173,10 @@ export function createDressing({ path, layout, seed = 1 }) {
   const angular = PERIODS.map((period) => (2 * Math.PI) / period);
 
   function update(dt, time) {
-    for (const { mesh, clusters } of swaying) {
-      clusters.forEach((c, i) => {
+    for (let m = 0; m < swaying.length; m++) {
+      const { mesh, clusters } = swaying[m];
+      for (let i = 0; i < clusters.length; i++) {
+        const c = clusters[i];
         // Tilted about its peg and stretched up its strings, so the gift box stays on the ground.
         tiltX.setFromAxisAngle(X_AXIS, TILT * Math.sin(angular[0] * time + c.phase[0]));
         tiltZ.setFromAxisAngle(Z_AXIS, TILT * Math.sin(angular[1] * time + c.phase[1]));
@@ -182,7 +184,7 @@ export function createDressing({ path, layout, seed = 1 }) {
         const stretch = 1 + STRETCH * Math.sin(angular[2] * time + c.phase[2]);
         size.set(c.scale, c.scale * stretch, c.scale);
         mesh.setMatrixAt(i, matrix.compose(position.set(c.x, c.y, c.z), turn, size));
-      });
+      }
       mesh.instanceMatrix.needsUpdate = true;
     }
   }

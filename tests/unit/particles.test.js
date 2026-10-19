@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { particleStyleAt } from '../../site/src/world/particles.js';
+import { createAmbientParticles, particleStyleAt } from '../../site/src/world/particles.js';
 import { ZONES } from '../../site/src/world/zones.js';
+import { AdditiveBlending, NormalBlending, Vector3 } from '../../site/src/three.js';
 
 const env = (a, b, t) => ({ particlesA: ZONES[a].particles, particlesB: ZONES[b].particles, particlesT: t });
 
@@ -25,9 +26,6 @@ test('kind none is invisible', () => {
 // ---------------------------------------------------------------------------------------------
 // Beyond the brief's three: the particle system itself, in Node (no renderer needed).
 // ---------------------------------------------------------------------------------------------
-import { AdditiveBlending, NormalBlending, Vector3 } from '../../site/src/three.js';
-import { createAmbientParticles } from '../../site/src/world/particles.js';
-
 const inside = (zone) => env(zone, zone, 0);
 
 test('every particle drawn stays in the 40 x 18 x 40 m box round the camera', () => {
@@ -71,4 +69,38 @@ test('nothing is drawn where the zone has no particles, and the quality share th
   assert.equal(p.points.geometry.drawRange.count, Math.ceil(260 * 0.35));
   p.update(0.1, env('spring', 'autumn', 0.5), new Vector3());
   assert.equal(p.points.visible, false, 'nothing shows at the middle of a crossfade');
+});
+
+test('nothing pops: no particle that shows jumps up or down from one frame to the next', () => {
+  // Thirty seconds at 30 frames a second, the train still and then rolling on. Any particle that is showing at
+  // all (alpha above 0.05) on either side of a frame moves less than a metre up or down across it, so none
+  // wraps from the bottom of the box to the top, or round the fireflies' band, while it can be seen.
+  const dt = 1 / 30;
+  for (const zone of ['spring', 'autumn', 'winter', 'evening']) {
+    const p = createAmbientParticles({ maxCount: 600 });
+    const camera = new Vector3(4, 2.05, -800);
+    const ys = p.points.geometry.attributes.position.array;
+    const alphas = p.points.geometry.attributes.aAlpha.array;
+    p.update(0, inside(zone), camera);
+    let previousY = Float32Array.from({ length: 600 }, (_, i) => ys[i * 3 + 1]);
+    let previousAlpha = Float32Array.from(alphas);
+    let jumps = 0, hidden = 0;
+    for (let frame = 1; frame <= 900; frame++) {
+      if (frame > 450) camera.z -= 6.5 * dt;
+      p.update(dt, inside(zone), camera);
+      for (let i = 0; i < 600; i++) {
+        const y = ys[i * 3 + 1];
+        const moved = Math.abs(y - previousY[i]);
+        if (moved > 1) {
+          if (Math.max(alphas[i], previousAlpha[i]) > 0.05) jumps++;
+          else hidden++;
+        }
+        previousY[i] = y;
+        previousAlpha[i] = alphas[i];
+      }
+    }
+    assert.equal(jumps, 0, `${zone}: ${jumps} visible jumps`);
+    if (zone === 'evening') assert.equal(hidden, 0, 'fireflies never wrap at all');
+    else assert.ok(hidden > 0, `${zone}: particles do fall out of the box and come back, unseen`);
+  }
 });
