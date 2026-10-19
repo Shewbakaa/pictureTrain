@@ -1,4 +1,15 @@
 // Shared helpers for the Playwright specs.
+import fixture from '../fixtures/content.fixture.js';
+
+/**
+ * Makes the page run on the shared test content instead of site/content.js. `overrides` replaces
+ * whole top-level fields (a shallow merge: pass the full `moments` array, not one moment).
+ * Call it before page.goto.
+ */
+export async function useFixture(page, overrides = {}) {
+  const body = `export default ${JSON.stringify({ ...fixture, ...overrides })};`;
+  await page.route('**/site/content.js', (route) => route.fulfill({ contentType: 'text/javascript', body }));
+}
 
 /**
  * Records every console error and uncaught page error. Returns a live array, so read it after the
