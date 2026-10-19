@@ -11,7 +11,8 @@ test('page metadata is private and preview-ready', async ({ page }) => {
   await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /\S/);
   await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', /\S/);
   await expect(page.locator('meta[property="og:description"]')).toHaveAttribute('content', /\S/);
-  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', 'og-image.jpg');
+  // A file name now, a full https:// address after the author deploys (README section 8).
+  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', /og-image\.jpg$/);
   await expect(page.locator('meta[property="og:type"]')).toHaveAttribute('content', 'website');
   await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary_large_image');
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#f4a37c');
