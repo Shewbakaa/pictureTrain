@@ -48,6 +48,23 @@ function text(value, fallback = '') {
   return string.trim() || fallback;
 }
 
+/**
+ * A file path as the site needs it: relative to the site folder, like 'photos/01.jpg'. A "/" in front works on
+ * the computer but not once the site is online under a sub-path (user.github.io/repo/), and "site/" in front
+ * works nowhere, so both are taken off (and "./", which changes nothing), with a warning naming `label`.
+ */
+function sitePath(value, label, warnings) {
+  const path = text(value);
+  const clean = path.replace(/^(?:\.?\/)+/, '').replace(/^site\/+/, '');
+  if (clean !== path) {
+    warnings.push(
+      `${label}: ${show(path)} was read as ${show(clean)}. Write paths from inside the site folder, like ` +
+      `'photos/01.jpg', with nothing in front: a "/" or "site/" in front breaks once the site is online.`,
+    );
+  }
+  return clean;
+}
+
 /** parent[key] as an object. Leaving it out is fine ({}); anything else that is not an object is reported. */
 function readBlock(parent, key, warnings, path = key) {
   const value = parent[key];
@@ -129,7 +146,7 @@ function readMoments(value, zones, warnings, errors) {
     previousZone = zone;
     moments.push({
       index: i,
-      photo: text(moment.photo),
+      photo: sitePath(moment.photo, `Moment ${n} photo`, warnings),
       date: text(moment.date),
       title: text(moment.title, `Moment ${n}`),
       caption: text(moment.caption),
@@ -162,7 +179,7 @@ function readMusic(value, warnings) {
     warnings.push(`music should be a file name in quotes, like 'music/our-song.mp3', so the built-in music is used.`);
     return '';
   }
-  return value.trim();
+  return sitePath(value, 'music', warnings);
 }
 
 /**

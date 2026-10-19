@@ -286,6 +286,29 @@ test('music: a file path is kept, trimmed', () => {
   assert.deepEqual(warnings, []);
 });
 
+// A leading "/" works on the computer (npm run serve) but not at user.github.io/repo/, and "site/" works nowhere:
+// paths are relative to the site folder, so both are taken off (and "./", for tidiness), with a warning.
+test('photo paths: a leading "/", "./" or "site/" is taken off, with a warning naming the moment', () => {
+  const photos = ['/photos/01.jpg', './photos/02.jpg', 'site/photos/03.jpg', '/site/photos/04.jpg', ' ./site/photos/05.jpg ', 'photos/06.jpg'];
+  const { content, warnings, errors } = normalizeContent({ moments: photos.map((photo) => ({ photo, zone: 'spring' })) });
+  assert.deepEqual(content.moments.map((m) => m.photo), ['photos/01.jpg', 'photos/02.jpg', 'photos/03.jpg', 'photos/04.jpg', 'photos/05.jpg', 'photos/06.jpg']);
+  assert.deepEqual(errors, []);
+  assert.equal(warnings.length, 5);
+  warnings.forEach((w, i) => {
+    assert.ok(w.startsWith(`Moment ${i + 1} photo: `), w);
+    assert.ok(w.includes(JSON.stringify(photos[i].trim())) && w.includes(`"photos/0${i + 1}.jpg"`), w);
+  });
+});
+
+test('music path: a leading "/", "./" or "site/" is taken off, with a warning naming the field', () => {
+  for (const music of ['/music/our-song.mp3', './music/our-song.mp3', 'site/music/our-song.mp3', '/site/music/our-song.mp3']) {
+    const { content, warnings } = normalizeContent({ music });
+    assert.equal(content.music, 'music/our-song.mp3', music);
+    assert.equal(warnings.length, 1, music);
+    assert.ok(warnings[0].startsWith('music: ') && warnings[0].includes(JSON.stringify(music)), warnings[0]);
+  }
+});
+
 test('whatever ends up in content.js, the result is well-formed and nothing throws', () => {
   const junk = [
     undefined, null, 0, 42, '', 'text', true, [], [1, 2], {},
