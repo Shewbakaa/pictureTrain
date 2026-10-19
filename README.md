@@ -196,10 +196,27 @@ nicer.
 
 1. Create a repository on GitHub and push this project to it.
 2. In the repository, open Settings, Pages, and set Source to **GitHub Actions**.
-3. Merge your work into the `main` branch. Every push to `main` publishes the `site` folder. You can also
-   start it by hand from the Actions tab (Deploy to GitHub Pages, Run workflow). The first run takes a
-   minute or two.
+3. Once it is personalised (your `content.js`, photos and title) and pushed to the `main` branch, publish
+   it by hand: open the Actions tab, choose Deploy to GitHub Pages, and press Run workflow. The first run
+   takes a minute or two. Nothing is published until you do this, and you run it again after each change.
 4. Your address is `https://<your-username>.github.io/<repository-name>/`.
+
+If you would rather have every push to `main` publish by itself, open `.github/workflows/pages.yml` and
+change
+
+```yaml
+on:
+  workflow_dispatch:
+```
+
+to
+
+```yaml
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+```
 
 On a free GitHub plan, Pages only works for public repositories. That means the whole repository is public,
 and so are your photos and your message in `site/`, for anyone who goes looking. If that is not what you
@@ -231,7 +248,8 @@ title and a line of text. Those come from the top of `site/index.html` (the titl
    <meta property="og:image" content="https://you.github.io/repo/og-image.jpg">
    ```
 
-   Chat apps need the whole address, which is why it is not filled in yet. Deploy again afterwards.
+   Chat apps need the whole address, which is why it is not filled in yet. Deploy again afterwards (drop
+   the `site` folder on Netlify again, or push and run the Pages workflow again).
 3. Send the link to yourself first. Chat apps remember a preview once they have made it, so if you change
    the picture or title after sending, the old one may stick. Adding something to the end of the link,
    like `?v=2`, makes the app look again.
