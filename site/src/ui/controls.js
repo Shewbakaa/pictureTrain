@@ -1,6 +1,7 @@
 // The ride's controls: the progress pill and the music button along the top, the pause button beside the
 // timeline along the bottom. The app tells them what to show; they tell the app when they are tapped. Once the
-// ride is over, only the timeline comes back, under the finale's card.
+// ride is over, the timeline comes back under the finale's card, and the music button with it, since the music
+// plays on; the pill and the pause button stay away, with no stop left to count down to and nothing to pause.
 
 import { dismiss, reveal, setChildren, svgEl } from './dom.js';
 
@@ -35,7 +36,7 @@ const musicIcon = (on) => icon([
 
 /**
  * Wires the buttons in #topbar and #bottombar. They start hidden; `show` brings both bars in, `showTimeline` only
- * the timeline (the bottom bar without its pause button).
+ * the timeline and the music button (the bars without the progress pill and the pause button).
  * @param {{ onPauseToggle: () => void, onMusicToggle: () => void }} handlers
  * @returns {Controls}
  */
@@ -71,12 +72,15 @@ export function initControls({ onPauseToggle, onMusicToggle }) {
       if (pill.textContent !== text) pill.textContent = text;
     },
     show() {
+      pill.hidden = false;
       pause.hidden = false;
       reveal(topbar);
       reveal(bottombar);
     },
     showTimeline() {
-      pause.hidden = true; // nothing to pause once the ride is over
+      pill.hidden = true;  // no next stop once the ride is over
+      pause.hidden = true; // and nothing to pause
+      reveal(topbar);      // but the music plays on, so its button comes back
       reveal(bottombar);
     },
     hide() {

@@ -366,15 +366,16 @@ body {
 }
 
 /* The finale's card: his message over the evening station, the wish large and the signoff in italics. It sits
-   above the timeline like the stop card, so the two of them, the hearts and the fireworks stay in view over it;
-   the top bar is gone by then, so a long message may take the screen up to the top edge, and then the body
-   scrolls while "Ride again" stays put. It rises slowly, a beat after the fireworks begin. */
+   above the timeline like the stop card, so the two of them, the hearts and the fireworks stay in view over it,
+   and below the music button, which stays in the top bar while the music plays on: a long message takes the
+   screen up to there, and then the body scrolls while "Ride again" stays put. It rises slowly, a beat after the
+   fireworks begin. */
 #finale-card {
   left: calc(var(--safe-left) + var(--edge));
   right: calc(var(--safe-right) + var(--edge));
   bottom: calc(var(--safe-bottom) + var(--edge) + var(--bar) + var(--bar-gap));
   max-width: 440px;
-  max-height: calc(100% - var(--safe-top) - var(--safe-bottom) - 2 * var(--edge) - var(--bar) - var(--bar-gap));
+  max-height: calc(100% - var(--safe-top) - var(--safe-bottom) - 2 * (var(--edge) + var(--bar) + var(--bar-gap)));
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -532,6 +533,11 @@ body {
   align-items: center;
   justify-content: center;
   color: var(--rose-ink);
+}
+
+/* On the right, also when it is alone in the top bar (under the finale's card). */
+#music-toggle {
+  margin-left: auto;
 }
 
 #music-toggle svg,

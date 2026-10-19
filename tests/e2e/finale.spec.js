@@ -11,6 +11,10 @@ test('finale ends on the message card', async ({ page }) => {
   await expect(card).toContainText('Thank you for the best year of my life.');
   await expect(card).toContainText('— Sam');
   expect((await appState(page)).view).toBe('finale');
+  // The music plays on under the card, so its button is there to switch it off; there is nothing left to pause.
+  await expect(page.locator('#music-toggle')).toBeVisible();
+  await expect(page.locator('#pause-toggle')).toBeHidden();
+  await expect(page.locator('#progress-pill')).toBeHidden();
 });
 
 test('Ride again goes back to the start', async ({ page }) => {
@@ -22,6 +26,9 @@ test('Ride again goes back to the start', async ({ page }) => {
   const s = await appState(page);
   expect(s.distance).toBeLessThan(30);
   expect(s.view).toBe('cabin');
+  await expect(page.locator('#pause-toggle')).toBeVisible();
+  await expect(page.locator('#music-toggle')).toBeVisible();
+  await expect(page.locator('#progress-pill')).toBeVisible();
 });
 
 test('jumping from the finale to a moment', async ({ page }) => {
