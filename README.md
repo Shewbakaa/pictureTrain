@@ -138,12 +138,16 @@ open `http://192.168.1.23:8080` in the browser.
 
 Add `?stats=1` to the end of the address (`http://192.168.1.23:8080/?stats=1`) and a small line shows the
 frame rate, how much is being drawn, and the quality level the ride has chosen (`low`, `medium` or `high`).
-The ride starts at `medium` and moves up or down by itself to keep the motion smooth.
+The ride starts at a balanced setting, `medium`, and steps down by itself if the phone struggles to keep the
+motion smooth. (It can only step up to `high` on a screen that refreshes faster than the usual 60 times a
+second.)
 
 **A checklist for the real phone:**
 
 - The ride is smooth. Watch the `?stats=1` line: a steady 30 or more frames per second is good, and it is
   fine if the quality level steps down once or twice at the start.
+- Try it once in Low Power Mode (on an iPhone: Settings, Battery). The phone then draws at most 30 frames a
+  second, so the `?stats=1` line shows about 30, and the ride should still feel smooth.
 - The cards are readable and the Continue button is easy to reach with a thumb, including with your longest
   caption.
 - Music starts after you tap Begin.

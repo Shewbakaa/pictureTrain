@@ -79,6 +79,37 @@ test('one huge frame after the phone was locked does not step a steady phone dow
   assert.equal(g.tier, 'medium');
 });
 
+// A phone in Low Power Mode (or any screen capped at 30 Hz) hands out frames every 33.3 ms however idle the GPU
+// is: a steady cadence there is the cap, not a struggling phone.
+const feedPattern = (g, msPattern, seconds) => {
+  let changed = null;
+  for (let t = 0, i = 0; t < seconds; i += 1) {
+    const ms = msPattern[i % msPattern.length];
+    t += ms / 1000;
+    const c = g.sample(ms / 1000);
+    if (c) changed = c;
+  }
+  return changed;
+};
+
+test('a steady 30 fps cadence is a refresh cap and does not step down', () => {
+  const g = createQualityGovernor();
+  assert.equal(feed(g, 1000 / 30, 20), null);
+  assert.equal(g.tier, 'medium');
+  // Timestamps wobble a little either side of the cap; that is still the cap.
+  const wobbly = createQualityGovernor();
+  assert.equal(feedPattern(wobbly, [32.1, 34.6, 33.3, 31.9, 34.8, 33.1], 20), null);
+  assert.equal(wobbly.tier, 'medium');
+});
+
+test('a jittery 30-45 ms cadence is a struggling phone and steps down', () => {
+  const g = createQualityGovernor();
+  assert.equal(feedPattern(g, [30, 45, 36, 41, 31, 44, 38, 33], 4), 'low');
+  // Even when its average happens to land on 33.3 ms, it is the spread that gives it away.
+  const centred = createQualityGovernor();
+  assert.equal(feedPattern(centred, [26, 41, 28, 39, 30, 36], 4), 'low');
+});
+
 test('frames that are not a positive time are ignored', () => {
   const g = createQualityGovernor({ warmup: 0, window: 0.1 });
   for (const dt of [0, NaN, undefined, -1]) assert.equal(g.sample(dt), null);
