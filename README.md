@@ -176,11 +176,16 @@ not leave anything behind at the final address.
 Anyone with the link can open it. There is no password. Search engines are asked not to list it
 (`noindex`), but treat the link as the secret: only send it to her.
 
-**Option A: Netlify Drop** (the easiest, and it keeps your files private). Go to
+**Option A: Netlify Drop** (the easiest, and it keeps the rest of the project private). Go to
 [app.netlify.com/drop](https://app.netlify.com/drop) and drag the `site` folder onto the page. You get an
-address straight away. Netlify may ask you to sign up so that the site stays online. You can rename the
-address in its settings to something nicer. Only the `site` folder is uploaded, so nothing else of yours
-leaves your computer.
+address straight away. Only the `site` folder is uploaded, so the rest of the project (the tests, scripts
+and your git history) stays on your computer. Everything inside `site/`, your photos and `content.js`
+included, can be opened by anyone who has the link.
+
+A site dropped without an account may be taken down after a while, so sign up for Netlify (or log in) right
+away and make sure the site belongs to your account. Then open the address again the next day, to check that
+it still works, before you send it. You can also rename the address in the site's settings to something
+nicer.
 
 **Option B: GitHub Pages**, using the workflow already in this folder (`.github/workflows/pages.yml`).
 

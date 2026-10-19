@@ -7,9 +7,10 @@ const SITE_HOST = '127.0.0.1:4317';
 test('page metadata is private and preview-ready', async ({ page }) => {
   await page.goto('index.html');
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
-  await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', 'A little ride through our first year');
-  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', 'For [Her name]');
-  await expect(page.locator('meta[property="og:description"]')).toHaveAttribute('content', 'A little ride through our first year');
+  // The author is told to edit these three (README sections 2 and 8), so only check that each says something.
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /\S/);
+  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', /\S/);
+  await expect(page.locator('meta[property="og:description"]')).toHaveAttribute('content', /\S/);
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', 'og-image.jpg');
   await expect(page.locator('meta[property="og:type"]')).toHaveAttribute('content', 'website');
   await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary_large_image');
