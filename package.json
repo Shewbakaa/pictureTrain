@@ -1,0 +1,20 @@
+{
+  "name": "picture-train",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "vendor": "node scripts/vendor.mjs",
+    "test": "node --test \"tests/unit/**/*.test.js\"",
+    "test:e2e": "PW_DISABLE_TS_ESM=1 playwright test",
+    "serve": "python3 -m http.server 8080 --directory site",
+    "shot": "node scripts/shot.mjs",
+    "og-image": "node scripts/og-image.mjs"
+  },
+  "devDependencies": {
+    "@fontsource/cormorant-garamond": "5.3.0",
+    "@fontsource/nunito": "5.3.0",
+    "@playwright/test": "1.49.1",
+    "three": "0.170.0"
+  }
+}
