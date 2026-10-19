@@ -6,9 +6,10 @@
 // standing beside every other one, and the cabin she rides in.
 //
 // On top of it sits the ride UI: the intro card, a card at every stop, the timeline, the controls and the progress
-// pill, with the furthest moment she has reached remembered across reloads.
+// pill, with the furthest moment she has reached remembered across reloads. If the phone takes the GPU away
+// mid-ride, a toast offers a fresh start.
 //
-// Later tasks add to it: resilience (Task 12), music (Task 13) and the finale (Task 14).
+// Later tasks add to it: music (Task 13) and the finale (Task 14).
 
 import { DirectionalLight, Fog, Group, HemisphereLight, Matrix4, Vector3 } from './three.js';
 import { appState } from './state.js';
@@ -36,6 +37,7 @@ import { hideIntro, showIntro } from './ui/intro.js';
 import { hideStopCard, showStopCard } from './ui/stopCard.js';
 import { renderTimeline, timelineItems } from './ui/timeline.js';
 import { initControls } from './ui/controls.js';
+import { showToast } from './ui/toast.js';
 
 /**
  * The sun's shadow (high tier only): a square HALF metres either side of a point AHEAD metres along the track
@@ -76,7 +78,9 @@ const UP = new Vector3(0, 1, 0);
 
 /**
  * Starts the 3D ride in `#scene`. Resolves once the first frame is on screen, so the loading screen can stay up
- * until then (the first frame compiles the shaders, which can take a moment on a phone).
+ * until then (the first frame compiles the shaders, which can take a moment on a phone). If building the world or
+ * drawing that first frame fails, it rejects instead, having taken the canvas away again: the caller tells the
+ * story another way rather than lifting the loading screen off an empty canvas.
  * @param {{ content: import('./content/normalize.js').Content, debug: ReturnType<import('./debug.js').parseDebugParams>,
  *           assets?: import('./photos/photos.js').PhotoAsset[] }} options  `assets` are the moments' photos (photos.js)
  * @returns {Promise<App|null>}  null when the browser has no WebGL2
@@ -85,6 +89,28 @@ export async function startApp({ content, debug, assets = [] }) {
   const container = document.getElementById('scene');
   const stage = createStage(container, { antialias: true });
   if (!stage) return null;
+  // A locked phone or one short of memory can take the GPU away, and the ride stops drawing: offer a fresh start.
+  stage.onContextLost(() => {
+    showToast('The ride hiccuped.', { action: { label: 'Restart', onClick: () => location.reload() } });
+  });
+  const listening = new AbortController(); // ends the ride's page listeners if it cannot start
+  try {
+    return await buildRide({ stage, container, signal: listening.signal, content, debug, assets });
+  } catch (error) {
+    listening.abort();
+    stage.dispose();
+    throw error;
+  }
+}
+
+/**
+ * Builds the world and the ride on `stage`, draws the first frame and wires the UI (startApp's work).
+ * @param {{ stage: import('./render/stage.js').Stage, container: HTMLElement, signal: AbortSignal,
+ *           content: import('./content/normalize.js').Content, debug: ReturnType<import('./debug.js').parseDebugParams>,
+ *           assets: import('./photos/photos.js').PhotoAsset[] }} options  `signal` removes the page listeners it adds
+ * @returns {Promise<App>}
+ */
+async function buildRide({ stage, container, signal, content, debug, assets }) {
   const { renderer, scene, camera, rig } = stage;
 
   // The world.
@@ -189,14 +215,18 @@ export async function startApp({ content, debug, assets = [] }) {
     stage.resize();
     cabin.fit(camera);
   };
-  window.addEventListener('resize', resize);
-  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(resize).observe(container);
+  window.addEventListener('resize', resize, { signal });
+  if (typeof ResizeObserver !== 'undefined') {
+    const observer = new ResizeObserver(resize);
+    observer.observe(container);
+    signal.addEventListener('abort', () => observer.disconnect());
+  }
   let lastTime = null;
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) return;
     look.endDrag();  // a finger lifted while the page was away never sends its release
     lastTime = null; // the first frame back counts as no time at all
-  });
+  }, { signal });
   const stats = debug.stats ? document.getElementById('stats') : null;
   if (stats) stats.hidden = false;
   let statsTime = 0;
@@ -303,23 +333,28 @@ export async function startApp({ content, debug, assets = [] }) {
 
   // Three asks for the next frame only after this one returns, so an error escaping a frame (a ride event handler,
   // say) would stop the ride for good. Each frame is guarded instead, and each distinct error is reported once.
+  // Except the first: if that fails the ride cannot be drawn here at all, so the start fails with it.
   const reported = new Set();
-  let firstFrameDrawn;
-  const firstFrame = new Promise((resolve) => { firstFrameDrawn = resolve; });
+  let firstFrame = null; // settles the promise below with how the first frame went; null once it has
+  const firstFrameDrawn = new Promise((resolve, reject) => { firstFrame = { resolve, reject }; });
   renderer.setAnimationLoop((time) => {
     try {
       frame(time);
+      if (firstFrame) firstFrame.resolve();
     } catch (error) {
-      const message = String((error && error.message) || error);
-      if (!reported.has(message)) {
-        reported.add(message);
-        console.error('[app] A frame went wrong; the ride carries on.', error);
+      if (firstFrame) {
+        firstFrame.reject(error);
+      } else {
+        const message = String((error && error.message) || error);
+        if (!reported.has(message)) {
+          reported.add(message);
+          console.error('[app] A frame went wrong; the ride carries on.', error);
+        }
       }
-    } finally {
-      firstFrameDrawn(); // after the first frame this does nothing
     }
+    firstFrame = null;
   });
-  await firstFrame;
+  await firstFrameDrawn;
 
   // The ride UI. The layout's stops are the moments in ride order, so a stop's index is its moment's index.
   const total = content.moments.length;
@@ -419,6 +454,8 @@ export async function startApp({ content, debug, assets = [] }) {
     // The train waits at the Day 1 station under the intro card.
     appState.phase = 'intro';
     showIntro(content, { onBegin: () => app.begin() });
+    // ?ui=0 hides the intro with the rest of the UI, so there is nothing to tap: the ride begins by itself.
+    if (debug.hideUi) app.begin();
   }
   return app;
 }

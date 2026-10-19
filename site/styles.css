@@ -172,24 +172,25 @@ body {
   color: var(--rose-ink);
 }
 
-/* Primary buttons: a rose pill. The deeper rose sits under the words so the white reads well. */
+/* Primary buttons: a deep rose pill. White on every part of it is at least 4.5:1 (AA for 17 px bold), even
+   outdoors: --rose-ink is 5.5:1 and #c4486a 4.7:1, and every shade between them is darker than #c4486a. */
 .btn-primary {
   min-height: 48px;
   padding: 0 28px;
   border: 0;
   border-radius: 999px;
-  background: linear-gradient(135deg, var(--rose) 0%, var(--rose) 35%, var(--rose-2) 100%);
-  box-shadow: 0 6px 16px rgba(224, 96, 126, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  background: linear-gradient(135deg, var(--rose-ink) 0%, #c4486a 100%);
+  box-shadow: 0 6px 16px rgba(176, 68, 98, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.22);
   font: 700 17px/1.2 var(--font-ui);
   letter-spacing: 0.01em;
   color: #fff;
-  text-shadow: 0 1px 1px rgba(140, 36, 66, 0.3);
+  text-shadow: 0 1px 1px rgba(110, 30, 55, 0.3);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .btn-primary:active {
   transform: scale(0.97);
-  box-shadow: 0 3px 10px rgba(224, 96, 126, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  box-shadow: 0 3px 10px rgba(176, 68, 98, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 .btn-primary:disabled {
@@ -251,12 +252,15 @@ body {
   to { opacity: 1; visibility: visible; transform: translateY(-50%); }
 }
 
-/* The stop card: a sheet between the two bars, so the sign stays in view above it and the timeline below. */
+/* The stop card: a sheet between the two bars, so the sign stays in view above it and the timeline below. It is
+   never taller than the space between them (100% is the whole screen: #ui is fixed to it, and follows the phone's
+   toolbars as dvh would), so on a small phone, in landscape or under a long caption, Continue stays on screen and
+   the body scrolls instead. Wider screens get a centred sheet up to 560 px, as wide as the bottom bar. */
 #stop-card {
   left: calc(var(--safe-left) + var(--edge));
   right: calc(var(--safe-right) + var(--edge));
   bottom: calc(var(--safe-bottom) + var(--edge) + var(--bar) + var(--bar-gap));
-  max-width: 520px;
+  max-width: 560px;
   max-height: calc(100% - var(--safe-top) - var(--safe-bottom) - 2 * (var(--edge) + var(--bar) + var(--bar-gap)));
   margin: 0 auto;
   display: flex;
@@ -275,7 +279,8 @@ body {
   padding: 18px 20px 6px;
 }
 
-.stop-title {
+.stop-title,
+.fallback-title {
   margin: 2px 0 0;
   font: 600 30px/1.1 var(--font-display);
   font-variant-numeric: lining-nums;
@@ -324,7 +329,8 @@ body {
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23ffffff' d='M12 21s-7.4-4.5-9.5-9.1C1 8.6 3 5 6.5 5c2.1 0 3.6 1.2 4.6 2.6.4.5.6.5.9 0C13 6.2 14.4 5 16.5 5 20 5 22 8.6 20.5 11.9 18.4 16.5 12 21 12 21z'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
-.stop-caption {
+.stop-caption,
+.fallback-caption {
   margin: 14px 2px 6px;
   font-size: 16px;
   line-height: 1.55;
@@ -551,13 +557,204 @@ body {
   opacity: 1;
 }
 
+/* --- The toast ---------------------------------------------------------------------------------------------- */
+
+/* A short note under the top bar with its button beside it ("The ride hiccuped." · Restart), over everything but
+   the loading screen. */
+#toast {
+  position: absolute;
+  z-index: 60;
+  top: calc(var(--safe-top) + var(--edge) + var(--bar) + var(--bar-gap));
+  left: calc(var(--safe-left) + var(--edge));
+  right: calc(var(--safe-right) + var(--edge));
+  max-width: 380px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 8px 8px 8px 22px;
+  border-radius: 999px;
+  background: var(--cream);
+  box-shadow: var(--shadow-card);
+  animation: toast-in 0.35s var(--ease-out) backwards;
+}
+
+.toast-text {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--ink);
+}
+
+.toast-action {
+  flex: none;
+  min-height: 44px;
+  padding: 0 22px;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-12px); }
+}
+
+/* --- The 2D story, where the 3D ride cannot run ---------------------------------------------------------------- */
+
+/* A page of its own over the ride UI, scrolling inside itself (the page under it never scrolls). Blush paper with a
+   faint dot, like a scrapbook page; it stays put while the cards scroll over it. */
+#ui #fallback {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  background:
+    radial-gradient(circle, rgba(224, 96, 126, 0.12) 1.2px, transparent 1.8px) 0 0 / 22px 22px,
+    linear-gradient(180deg, #f8d3dc 0%, #fbe4da 40%, #fdf2e7 100%);
+}
+
+.fallback-page {
+  box-sizing: border-box;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: calc(var(--safe-top) + 28px) calc(var(--safe-right) + 18px) calc(var(--safe-bottom) + 56px) calc(var(--safe-left) + 18px);
+}
+
+.fallback-card {
+  position: relative;
+  box-sizing: border-box;
+  background: var(--cream);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(61, 43, 43, 0.14), 0 2px 6px rgba(61, 43, 43, 0.06);
+}
+
+.fallback-intro {
+  padding: 30px 24px 28px;
+  text-align: center;
+}
+
+.fallback-moments {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Every card after the intro hangs from a short length of track, so the story reads as a ride from one moment
+   to the next. */
+.fallback-moment,
+.fallback-finale {
+  margin-top: 52px;
+  padding: 20px 18px 22px;
+}
+
+.fallback-moment::before,
+.fallback-finale::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  width: 30px;
+  height: 52px;
+  margin-left: -15px;
+  background:
+    linear-gradient(90deg, transparent 6px, #c9919f 6px 8px, transparent 8px 22px, #c9919f 22px 24px, transparent 24px),
+    repeating-linear-gradient(180deg, transparent 0 5px, rgba(176, 122, 136, 0.45) 5px 9px);
+}
+
+/* The photo, whole, on the stop card's mount, tilted a little each way and held on with a strip of tape. */
+.fallback-moment .stop-photo {
+  position: relative;
+  margin: 0;
+  transform: rotate(-1deg);
+}
+
+.fallback-moment:nth-child(even) .stop-photo {
+  transform: rotate(1deg);
+}
+
+.fallback-moment .stop-photo::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: -10px;
+  left: 50%;
+  width: 84px;
+  height: 22px;
+  margin-left: -42px;
+  background: rgba(240, 141, 165, 0.5);
+  box-shadow: 0 1px 2px rgba(61, 43, 43, 0.08);
+  transform: rotate(-4deg);
+}
+
+.fallback-moment:nth-child(3n + 2) .stop-photo::before {
+  background: rgba(246, 210, 120, 0.55);
+  transform: rotate(3deg);
+}
+
+.fallback-moment:nth-child(3n) .stop-photo::before {
+  background: rgba(150, 212, 190, 0.55);
+  transform: rotate(-2deg);
+}
+
+.fallback-moment .stop-photo img {
+  max-height: 64vh;
+  max-height: 64dvh;
+}
+
+.fallback-moment .stop-photo-blank {
+  height: 44vh;
+  height: 44dvh;
+}
+
+.fallback-date {
+  margin-top: 18px;
+}
+
+.fallback-finale {
+  padding: 30px 24px 32px;
+  text-align: center;
+}
+
+.fallback-heart {
+  display: block;
+  width: 30px;
+  height: 30px;
+  margin: 0 auto 10px;
+  fill: var(--rose);
+}
+
+.fallback-wish {
+  margin: 6px 0 0;
+  font: 600 40px/1.08 var(--font-display);
+  font-variant-numeric: lining-nums;
+  overflow-wrap: anywhere;
+}
+
+.fallback-message {
+  margin: 16px 0 0;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--soft-ink);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.fallback-signoff {
+  margin: 18px 0 0;
+  font: italic 500 24px/1.3 var(--font-display);
+  font-variant-numeric: lining-nums;
+  color: var(--rose-ink);
+}
+
 /* --- Less motion when she has asked for it ------------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
   #intro,
   #stop-card,
   #topbar,
-  #bottombar {
+  #bottombar,
+  #toast {
     animation: none;
   }
 

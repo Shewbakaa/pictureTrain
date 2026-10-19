@@ -101,3 +101,33 @@ test('author text is never parsed as HTML', async ({ page }) => {
   expect(await page.locator('#stop-card .stop-title img').count()).toBe(0);
   expect(await page.evaluate(() => window.__xss)).toBeUndefined();
 });
+
+test('a returning visitor still stops at Moment 1 first', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('pictureTrain.progress.v1', JSON.stringify({ reachedMax: 3 })));
+  await begin(page);
+  await expect(page.locator('#stop-card')).toContainText('First coffee');
+  const state = await appState(page);
+  expect([state.stopIndex, state.reachedMax]).toEqual([0, 3]);
+  // The moments reached on the earlier visit stay open on the timeline.
+  await expect(page.locator('#timeline button').nth(3)).not.toHaveAttribute('aria-disabled', 'true');
+});
+
+test('?ui=0 begins the ride by itself, as the hidden intro cannot be tapped', async ({ page }) => {
+  await page.goto('index.html?ui=0&speed=25');
+  await expect.poll(async () => (await appState(page)).stopIndex).toBe(0);
+  await expect(page.locator('#ui')).toBeHidden();
+});
+
+test('a string under an on* name never becomes an inline handler', async ({ page }) => {
+  await page.goto('index.html');
+  const result = await page.evaluate(async () => {
+    const { el } = await import('./src/ui/dom.js');
+    const button = el('button', { onclick: 'window.__inline = 1', ONMOUSEOVER: 'window.__inline = 2', title: 'kept' });
+    document.body.appendChild(button);
+    button.click();
+    button.dispatchEvent(new MouseEvent('mouseover'));
+    button.remove();
+    return { inline: window.__inline, onclick: button.getAttribute('onclick'), title: button.getAttribute('title') };
+  });
+  expect(result).toEqual({ inline: undefined, onclick: null, title: 'kept' });
+});

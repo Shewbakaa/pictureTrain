@@ -6,12 +6,14 @@ import { placeholderPalette } from '../photos/photos.js';
 import { el, reveal, setChildren } from './dom.js';
 
 /**
- * The moment's photo, shown whole. A browser that would not give the photos a canvas leaves a placeholder
- * without a picture (`src` ''), which gets a pastel block in the placeholder's own colours instead of a broken image.
+ * The moment's photo, shown whole (the 2D story, fallback.js, shows it the same way). A browser that would not give
+ * the photos a canvas leaves a placeholder without a picture (`src` ''), which gets a pastel block in the
+ * placeholder's own colours instead of a broken image.
  * @param {import('../content/normalize.js').Moment} moment
  * @param {import('../photos/photos.js').PhotoAsset|null} asset
+ * @returns {HTMLElement}  a figure.stop-photo
  */
-function photo(moment, asset) {
+export function momentPhoto(moment, asset) {
   if (asset && asset.src) {
     return el('figure', { class: 'stop-photo' }, [
       el('img', { src: asset.src, alt: moment.title, width: asset.width, height: asset.height, decoding: 'async' }),
@@ -42,7 +44,7 @@ export function showStopCard(moment, asset, { total, onContinue }) {
     el('div', { class: 'stop-card-body' }, [
       moment.date ? el('p', { class: 'eyebrow stop-date' }, [moment.date]) : null,
       el('h2', { class: 'stop-title', id: 'stop-title' }, [moment.title]),
-      photo(moment, asset),
+      momentPhoto(moment, asset),
       moment.caption ? el('p', { class: 'stop-caption' }, [moment.caption]) : null,
     ]),
     el('div', { class: 'stop-card-footer' }, [

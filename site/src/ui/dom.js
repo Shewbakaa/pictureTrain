@@ -10,13 +10,14 @@ const LEAVE_MS = 200;
 
 /**
  * Sets `attrs` on `node`. `null`, `undefined` and `false` are left out, `true` sets an empty attribute, and a
- * function under an `on...` name becomes an event listener (`onClick` listens for 'click').
+ * function under an `on...` name becomes an event listener (`onClick` listens for 'click'). Anything else under an
+ * `on...` name, in any case, is left out too: as an attribute it would be an inline handler, and text would run as code.
  */
 function setAttributes(node, attrs) {
   for (const [name, value] of Object.entries(attrs)) {
     if (value === null || value === undefined || value === false) continue;
-    if (typeof value === 'function' && name.startsWith('on')) {
-      node.addEventListener(name.slice(2).toLowerCase(), value);
+    if (/^on/i.test(name)) {
+      if (typeof value === 'function') node.addEventListener(name.slice(2).toLowerCase(), value);
     } else {
       node.setAttribute(name, value === true ? '' : String(value));
     }

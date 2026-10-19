@@ -3,8 +3,8 @@
 
 import { el, reveal, setChildren, svgEl } from './dom.js';
 
-/** A hand-drawn wave under the title. */
-function squiggle() {
+/** A hand-drawn wave under the title (the 2D story, fallback.js, draws it under its title too). */
+export function squiggle() {
   return svgEl('svg', { class: 'squiggle', viewBox: '0 0 72 12', 'aria-hidden': 'true', focusable: 'false' }, [
     svgEl('path', { d: 'M2 6c5-5 9-5 14 0s9 5 14 0 9-5 14 0 9 5 14 0 9-5 12-2' }),
   ]);

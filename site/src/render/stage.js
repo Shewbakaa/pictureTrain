@@ -21,10 +21,12 @@ const FAR = 400;
  *   render: () => void,
  *   info: () => { drawCalls: number, triangles: number },
  *   onContextLost: (fn: () => void) => void,
+ *   dispose: () => void,
  * }} Stage
  *   `resize` fits the canvas and the camera to the container; it does nothing if the size has not changed, so
  *   it is cheap to call often. `info` counts what the last `render` drew (the shadow pass not included).
  *   `onContextLost` calls `fn` when the browser takes the GPU away (a locked phone, memory pressure).
+ *   `dispose` stops the animation loop, frees what the renderer holds on the GPU and takes the canvas off the page.
  */
 
 /**
@@ -98,6 +100,11 @@ export function createStage(container, { antialias = true } = {}) {
         event.preventDefault(); // lets the browser give the context back later
         fn();
       });
+    },
+    dispose() {
+      renderer.setAnimationLoop(null);
+      renderer.dispose();
+      canvas.remove();
     },
   };
 }
