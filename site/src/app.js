@@ -1,12 +1,16 @@
 // The 3D ride: builds the world, then runs the frame loop that moves the train along the track, turns her head
 // where she drags, and keeps the sky, fog and light in step with the scenery the train is passing through.
 //
-// Later tasks add to it: zone dressing (Task 9), the cabin, signs and figures (Task 10), the ride UI (Task 11),
-// resilience (Task 12), music (Task 13) and the finale (Task 14).
+// The world is the sky, the ground, the track, the two stations, the props of every zone, clouds and hot-air
+// balloons, and the ambient particles of the zone the train is in.
+//
+// Later tasks add to it: the cabin, signs and figures (Task 10), the ride UI (Task 11), resilience (Task 12),
+// music (Task 13) and the finale (Task 14).
 
 import { DirectionalLight, Fog, HemisphereLight, Matrix4, Vector3 } from './three.js';
 import { appState } from './state.js';
-import { createStage, MATERIALS } from './render/stage.js';
+import { createStage } from './render/stage.js';
+import { MATERIALS } from './render/materials.js';
 import { createQualityGovernor, effectivePixelRatio } from './perf/quality.js';
 import { buildLayout, EYE_HEIGHT } from './world/layout.js';
 import { createTrackPath, TRACK } from './world/trackPath.js';
@@ -14,6 +18,10 @@ import { envAt } from './world/environment.js';
 import { createSky } from './world/sky.js';
 import { createTerrain } from './world/terrain.js';
 import { createTrackMesh } from './world/trackMesh.js';
+import { createDressing } from './world/dressing.js';
+import { createStation, START_STATION_DISTANCE } from './world/stations.js';
+import { createSkyDecor } from './world/skyDecor.js';
+import { createAmbientParticles } from './world/particles.js';
 import { createRide } from './ride/rideController.js';
 import { attachPointerControls, createLook } from './ride/look.js';
 
@@ -23,6 +31,12 @@ import { attachPointerControls, createLook } from './ride/look.js';
  * sees DEPTH metres deep, plenty for the long shadows of a low evening sun.
  */
 const SHADOW = Object.freeze({ HALF: 25, MAP_SIZE: 1024, AHEAD: 12, DISTANCE: 80, DEPTH: 200 });
+
+/**
+ * Ambient particles at the high tier (the tier's `particles` share of them are drawn). They fill a box 40 m
+ * round her, and a portrait view only sees a few percent of it, so it takes this many for a snowfall to read.
+ */
+const AMBIENT_PARTICLES = 600;
 
 /** How often the ?stats=1 readout refreshes (s). */
 const STATS_EVERY = 0.5;
@@ -58,6 +72,14 @@ export async function startApp({ content, debug, assets = [] }) {
   const terrain = createTerrain(path, layout, { seed: TRACK.SEED });
   scene.add(sky.mesh, terrain.mesh, createTrackMesh(path, layout));
   if (terrain.water) scene.add(terrain.water);
+  scene.add(
+    createStation({ path, distance: START_STATION_DISTANCE, kind: 'start' }),
+    createStation({ path, distance: layout.finaleDistance, kind: 'finale' }),
+  );
+  const dressing = createDressing({ path, layout });
+  const skyDecor = createSkyDecor();
+  const particles = createAmbientParticles({ maxCount: AMBIENT_PARTICLES });
+  scene.add(dressing.group, skyDecor.group, particles.points);
 
   // Light and fog, set from the environment every frame.
   const hemi = new HemisphereLight();
@@ -95,6 +117,8 @@ export async function startApp({ content, debug, assets = [] }) {
   const onDensity = [];
   /** @type {Array<(particles: number) => void>} */
   const onParticles = [];
+  onDensity.push(dressing.setDensity);
+  onParticles.push(particles.setQuality);
   function applyTier() {
     const tier = governor.settings();
     stage.setPixelRatio(effectivePixelRatio(tier, window.devicePixelRatio));
@@ -120,6 +144,7 @@ export async function startApp({ content, debug, assets = [] }) {
   if (stats) stats.hidden = false;
   let statsTime = 0;
   let statsFrames = 0;
+  let elapsed = 0; // seconds of frames drawn, for things that sway and bob
 
   // Per-frame scratch.
   const side = new Vector3();
@@ -191,6 +216,7 @@ export async function startApp({ content, debug, assets = [] }) {
   function frame(time) {
     const dt = lastTime === null ? 0 : Math.max(0, (time - lastTime) / 1000);
     lastTime = time;
+    elapsed += dt;
     ride.update(dt);
     look.update(dt);
     if (governor.sample(dt)) applyTier();
@@ -201,7 +227,11 @@ export async function startApp({ content, debug, assets = [] }) {
     envAt(layout, d, env);
     applyEnvironment();
     placeSun(d);
-    sky.update(env, camera.getWorldPosition(eye));
+    camera.getWorldPosition(eye);
+    sky.update(env, eye);
+    skyDecor.update(dt, eye, env);
+    particles.update(dt, env, eye);
+    dressing.update(dt, elapsed);
     stage.render();
 
     appState.mode = '3d';

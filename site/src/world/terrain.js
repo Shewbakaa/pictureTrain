@@ -19,7 +19,7 @@ import { Color, Mesh, Vector3 } from '../three.js';
 import { clamp, lerp, smoothstep } from '../util/math.js';
 import { createRng } from '../util/rng.js';
 import { jitterColor, triangleSoup } from '../util/geo.js';
-import { MATERIALS } from '../render/stage.js';
+import { MATERIALS } from '../render/materials.js';
 import { envAt } from './environment.js';
 import { LAYOUT } from './layout.js';
 import { ZONES } from './zones.js';

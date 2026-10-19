@@ -1,28 +1,13 @@
-// The stage: the WebGL2 canvas and renderer, the scene, and the camera on its rig. Also the two materials that
-// everything built in code is drawn with.
+// The stage: the WebGL2 canvas and renderer, the scene, and the camera on its rig. The materials everything is
+// drawn with live in render/materials.js.
 //
 // The rig is what the app moves along the track (her seat); the camera sits on it at its origin and only
 // turns, so she can look around without leaving her seat. The cabin (Task 10) hangs on the rig too.
 //
-// Creating the materials touches no DOM, so this module can be imported by the world builders and by the Node
-// unit tests; only `createStage` needs a browser.
+// Importing this module touches no DOM; only `createStage` needs a browser.
 
-import {
-  MeshBasicMaterial, MeshLambertMaterial, NoToneMapping, Object3D, PCFShadowMap, PerspectiveCamera, Scene,
-  SRGBColorSpace, WebGLRenderer,
-} from '../three.js';
+import { NoToneMapping, Object3D, PCFShadowMap, PerspectiveCamera, Scene, SRGBColorSpace, WebGLRenderer } from '../three.js';
 import { fovForAspect } from '../ride/look.js';
-
-/**
- * The shared materials. `solid` is for every lit thing (terrain, track, props, cabin, figures); `glow` is for
- * what should look lit whatever the light (lamp glass, windows). Both take their colours from the geometry's
- * vertex colours, so one material serves every model and the shader is compiled once. The app sets
- * `needsUpdate` on both when shadows are switched on or off.
- */
-export const MATERIALS = Object.freeze({
-  solid: new MeshLambertMaterial({ vertexColors: true }),
-  glow: new MeshBasicMaterial({ vertexColors: true }),
-});
 
 /** Camera clipping distances (m). The sky sphere (350 m) sits inside the far plane. */
 const NEAR = 0.1;

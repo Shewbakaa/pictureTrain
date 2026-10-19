@@ -4,7 +4,7 @@ import { terrainHeight, TERRAIN, createTerrain } from '../../site/src/world/terr
 import { createTrackPath, TRACK } from '../../site/src/world/trackPath.js';
 import { buildLayout, EYE_HEIGHT } from '../../site/src/world/layout.js';
 import { SCATTER } from '../../site/src/world/scatter.js';
-import { MATERIALS } from '../../site/src/render/stage.js';
+import { MATERIALS } from '../../site/src/render/materials.js';
 import { normalizeContent } from '../../site/src/content/normalize.js';
 import { Vector3 } from '../../site/src/three.js';
 import fixture from '../fixtures/content.fixture.js';

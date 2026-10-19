@@ -4,7 +4,7 @@ import { createTrackMesh, TRACK_BED_HALF_WIDTH } from '../../site/src/world/trac
 import { createTrackPath, TRACK } from '../../site/src/world/trackPath.js';
 import { buildLayout, EYE_HEIGHT } from '../../site/src/world/layout.js';
 import { envAt } from '../../site/src/world/environment.js';
-import { MATERIALS } from '../../site/src/render/stage.js';
+import { MATERIALS } from '../../site/src/render/materials.js';
 import { normalizeContent } from '../../site/src/content/normalize.js';
 import { Matrix4, Vector3 } from '../../site/src/three.js';
 import fixture from '../fixtures/content.fixture.js';
@@ -38,6 +38,10 @@ test('the bed, rails and sleepers are drawn with the shared solid material', () 
   assert.deepEqual(track.children.map((m) => m.name), ['track-bed', 'track-rails', 'track-sleepers']);
   for (const mesh of track.children) assert.equal(mesh.material, MATERIALS.solid);
   assert.ok(sleepers.isInstancedMesh);
+});
+
+test('the bed, rails and sleepers all catch the shadows of the props (R24)', () => {
+  for (const mesh of track.children) assert.equal(mesh.receiveShadow, true, mesh.name);
 });
 
 test('the bed is 4.4 m wide, raised in the middle and sunk at its edges', () => {

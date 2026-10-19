@@ -13,7 +13,7 @@
 import { BoxGeometry, Color, Group, InstancedMesh, Matrix4, Mesh, Vector3 } from '../three.js';
 import { createRng, rngRange } from '../util/rng.js';
 import { mergeParts, part, triangleSoup } from '../util/geo.js';
-import { MATERIALS } from '../render/stage.js';
+import { MATERIALS } from '../render/materials.js';
 import { envAt } from './environment.js';
 
 /** Half the width of the track bed (m). Props keep clear of it (props.test.js). */
@@ -116,6 +116,7 @@ export function createTrackMesh(path, layout) {
   ]);
   const rails = new Mesh(sweep(path, from, to, bars, () => steel), MATERIALS.solid);
   rails.name = 'track-rails';
+  rails.receiveShadow = true;
 
   // The sleepers: one beam, laid across the track at every spot.
   const beam = mergeParts([part(new BoxGeometry(SLEEPER.LENGTH, SLEEPER.HEIGHT, SLEEPER.WIDTH), SLEEPER.COLOUR)]);
