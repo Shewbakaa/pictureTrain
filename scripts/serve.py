@@ -3,7 +3,7 @@
 # backlog of 5, parallel Playwright workers get connections reset (net::ERR_CONNECTION_RESET) and a page whose
 # module fails to load never starts.
 #
-#   python3 scripts/serve.py 4173 --bind 127.0.0.1
+#   python3 scripts/serve.py 4317 --bind 127.0.0.1
 import runpy
 import socketserver
 import sys
