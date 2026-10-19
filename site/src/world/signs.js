@@ -23,6 +23,7 @@ import {
 } from '../three.js';
 import { MATERIALS } from '../render/materials.js';
 import { clamp } from '../util/math.js';
+import { displayTextWidth, fillDisplayText } from '../util/canvasText.js';
 import { mergeParts, part } from '../util/geo.js';
 import { drawHeart } from '../photos/photos.js';
 import { COUPLE_HALF_WIDTH } from './figures.js';
@@ -180,20 +181,12 @@ function drawPlacard(date, width) {
     drawHeart(g, w / 2, h / 2, h * 0.16, COLOURS.heart);
     return canvas;
   }
-  const font = (px) => `600 ${px}px "Cormorant Garamond", Georgia, "Times New Roman", serif`;
   let size = Math.round(h * 0.58);
-  g.font = font(size);
   const room = w * 0.72;
-  const measured = g.measureText(date).width;
-  if (measured > room) {
-    size = Math.max(12, Math.floor((size * room) / measured));
-    g.font = font(size);
-  }
+  const measured = displayTextWidth(g, date, size);
+  if (measured > room) size = Math.max(12, Math.floor((size * room) / measured));
   g.fillStyle = COLOURS.ink;
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillText(date, w / 2, h * 0.53);
-  const textWidth = g.measureText(date).width;
+  const textWidth = fillDisplayText(g, date, w / 2, h * 0.5, size);
   for (const side of [-1, 1]) drawHeart(g, w / 2 + side * (textWidth / 2 + h * 0.22), h * 0.5, h * 0.11, COLOURS.heart);
   return canvas;
 }

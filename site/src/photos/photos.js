@@ -10,6 +10,7 @@
 // `fitWithin` and `placeholderPalette` are pure. `loadPhotos` needs a browser, and only touches the DOM once it
 // is called, so the Node unit tests can import this module.
 
+import { fillDisplayText } from '../util/canvasText.js';
 import { createRng, rngRange } from '../util/rng.js';
 
 /**
@@ -38,9 +39,6 @@ const PALETTES = Object.freeze([
   Object.freeze({ from: '#bde2f6', to: '#e6d0f4', ink: '#486a95' }), // powder blue to lilac
   Object.freeze({ from: '#fff0b9', to: '#f9c7dc', ink: '#9a5a48' }), // lemon to pink
 ]);
-
-/** The display font, as the station boards use it (main.js loads it before the photos). */
-const FONT_STACK = '"Cormorant Garamond", Georgia, "Times New Roman", serif';
 
 /**
  * The size of a `w` x `h` picture scaled down to fit `max` on its long side, keeping its shape. Never scales up,
@@ -174,11 +172,9 @@ function placeholderAsset(index) {
   g.lineWidth = 5;
   g.strokeRect(w * 0.06, w * 0.06, w * 0.88, h - w * 0.12);
 
+  // "Photo N" in the display font, as the station boards are written (main.js loads it before the photos).
   g.fillStyle = ink;
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.font = `600 ${Math.round(w * 0.15)}px ${FONT_STACK}`;
-  g.fillText(`Photo ${index + 1}`, w / 2, h * 0.47);
+  fillDisplayText(g, `Photo ${index + 1}`, w / 2, h * 0.47, Math.round(w * 0.15));
   drawHeart(g, w / 2, h * 0.58, w * 0.03, ink);
 
   return { index, canvas, width: w, height: h, aspect: w / h, src: canvas.toDataURL('image/jpeg', 0.92), isPlaceholder: true };

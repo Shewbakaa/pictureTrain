@@ -1,9 +1,10 @@
 // The two stations: `Day 1`, where the ride starts, and `Day 365`, where it ends and the finale plays out.
 //
 // Each has a platform on the right of the track, a canopy on green posts with a scalloped valance, a hanging
-// name board facing the arriving train (its name drawn on a canvas in Cormorant Garamond), a bench, flower
-// planters and an old street lamp. The finale station adds a little station house behind the platform, whose
-// door the boy comes out of in the finale (Task 14), more lamps and string lights between them.
+// name board facing the arriving train (its name drawn on a canvas in Cormorant Garamond, its digits in Nunito as
+// util/canvasText.js explains), a bench, flower planters and an old street lamp. The finale station adds a little
+// station house behind the platform, whose door the boy comes out of in the finale (Task 14), more lamps and string
+// lights between them.
 //
 // Both stations stand on straight track (app.js keeps the start and the finale straight), so each is built in
 // the frame of its centre: local +X is right of the track, +Y up and -Z ahead (further along the track). On the
@@ -26,6 +27,7 @@ import {
 } from '../three.js';
 import { MATERIALS } from '../render/materials.js';
 import { mergeParts, moveParts, part, triangleSoup } from '../util/geo.js';
+import { displayTextWidth, fillDisplayText } from '../util/canvasText.js';
 import { createPropGeometry } from './props.js';
 
 /** The platform: its top's height and how far its near and far edges are right of the centre line (m). */
@@ -327,19 +329,11 @@ function drawBoard(name) {
   g.globalAlpha = 1;
   // The name, as big as fits between two little hearts.
   let size = Math.round(h * 0.62);
-  const font = (px) => `600 ${px}px "Cormorant Garamond", Georgia, "Times New Roman", serif`;
-  g.font = font(size);
   const room = w * 0.66;
-  const measured = g.measureText(name).width;
-  if (measured > room) {
-    size = Math.floor((size * room) / measured);
-    g.font = font(size);
-  }
+  const measured = displayTextWidth(g, name, size);
+  if (measured > room) size = Math.floor((size * room) / measured);
   g.fillStyle = COLOURS.boardInk;
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillText(name, w / 2, h * 0.53);
-  const textWidth = g.measureText(name).width;
+  const textWidth = fillDisplayText(g, name, w / 2, h * 0.5, size);
   for (const side of [-1, 1]) heart(g, w / 2 + side * (textWidth / 2 + h * 0.2), h * 0.5, h * 0.14);
   return canvas;
 }
