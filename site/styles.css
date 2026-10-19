@@ -107,3 +107,462 @@ body {
   color: #fff;
   font: 12px/1.3 ui-monospace, Menlo, Consolas, monospace;
 }
+
+/* ---------------------------------------------------------------------------------------------------------------
+   The ride UI: the intro card, the stop card, the bars along the top and bottom, the timeline and the jump fade.
+   Everything stays inside the safe areas. #ui's padding already holds the insets, but absolutely placed children
+   are measured from its padding edge, so each one adds the inset it sits against.
+   --------------------------------------------------------------------------------------------------------------- */
+
+:root {
+  --rose-ink: #b04462;   /* the rose, deep enough for small writing on cream */
+  --soft-ink: #5c4646;   /* captions and notes: softer than --ink, still easy to read */
+  --glass: rgba(255, 250, 243, 0.88);
+  --shadow-card: 0 18px 44px rgba(61, 43, 43, 0.22), 0 2px 8px rgba(61, 43, 43, 0.08);
+  --shadow-soft: 0 4px 14px rgba(61, 43, 43, 0.16);
+  --edge: 12px;          /* from the screen edge (inside the safe area) to the bars and cards */
+  --bar: 52px;           /* the height of the top and bottom bars */
+  --bar-gap: 10px;       /* between a bar and a card */
+  --sheet-in: 0.28s;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* The loading screen keeps taps off the scene while it is up (but not while it fades away). */
+#ui #loading:not(.is-leaving) {
+  pointer-events: auto;
+}
+
+/* Panels that are leaving let taps through to whatever is behind them. */
+#ui .is-leaving,
+#ui .is-leaving * {
+  pointer-events: none;
+}
+
+/* Zero specificity (:where), so each kind of button below styles itself without fighting this. */
+:where(#ui) button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+#ui button:focus-visible {
+  outline: 3px solid rgba(224, 96, 126, 0.5);
+  outline-offset: 2px;
+}
+
+/* --- Cards ---------------------------------------------------------------------------------------------------- */
+
+#ui .card {
+  position: absolute;
+  z-index: 10;
+  box-sizing: border-box;
+  background: var(--cream);
+  color: var(--ink);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+
+/* Small italic serif line above a title: "Our first year", a moment's date. */
+.eyebrow {
+  margin: 0;
+  font: italic 500 20px/1.25 var(--font-display);
+  font-variant-numeric: lining-nums;
+  color: var(--rose-ink);
+}
+
+/* Primary buttons: a rose pill. The deeper rose sits under the words so the white reads well. */
+.btn-primary {
+  min-height: 48px;
+  padding: 0 28px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--rose) 0%, var(--rose) 35%, var(--rose-2) 100%);
+  box-shadow: 0 6px 16px rgba(224, 96, 126, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  font: 700 17px/1.2 var(--font-ui);
+  letter-spacing: 0.01em;
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(140, 36, 66, 0.3);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-primary:active {
+  transform: scale(0.97);
+  box-shadow: 0 3px 10px rgba(224, 96, 126, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.btn-primary:disabled {
+  cursor: default;
+}
+
+/* The intro: centred over the train waiting at the Day 1 station. */
+#intro {
+  top: 50%;
+  left: calc(var(--safe-left) + 20px);
+  right: calc(var(--safe-right) + 20px);
+  max-width: 360px;
+  max-height: calc(100% - var(--safe-top) - var(--safe-bottom) - 40px);
+  margin: 0 auto;
+  overflow-y: auto;
+  padding: 30px 26px 26px;
+  text-align: center;
+  transform: translateY(-50%);
+  /* It rises in as the loading screen fades away. */
+  animation: intro-in 0.6s var(--ease-out) 0.45s backwards;
+}
+
+.intro-title {
+  margin: 6px 0 0;
+  font: 600 46px/1.05 var(--font-display);
+  font-variant-numeric: lining-nums;
+  letter-spacing: -0.005em;
+  overflow-wrap: anywhere;
+}
+
+.squiggle {
+  display: block;
+  width: 64px;
+  height: 11px;
+  margin: 14px auto 0;
+  fill: none;
+  stroke: var(--rose-2);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+.intro-note {
+  margin: 16px 0 0;
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--soft-ink);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.intro-begin {
+  width: 100%;
+  min-height: 52px;
+  margin-top: 24px;
+}
+
+@keyframes intro-in {
+  from { opacity: 0; visibility: hidden; transform: translateY(calc(-50% + 18px)); }
+  to { opacity: 1; visibility: visible; transform: translateY(-50%); }
+}
+
+/* The stop card: a sheet between the two bars, so the sign stays in view above it and the timeline below. */
+#stop-card {
+  left: calc(var(--safe-left) + var(--edge));
+  right: calc(var(--safe-right) + var(--edge));
+  bottom: calc(var(--safe-bottom) + var(--edge) + var(--bar) + var(--bar-gap));
+  max-width: 520px;
+  max-height: calc(100% - var(--safe-top) - var(--safe-bottom) - 2 * (var(--edge) + var(--bar) + var(--bar-gap)));
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* A short beat after the train stops, so she sees her view turn to the sign before the card rises. */
+  animation: sheet-in var(--sheet-in) var(--ease-out) 0.6s backwards;
+}
+
+.stop-card-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 18px 20px 6px;
+}
+
+.stop-title {
+  margin: 2px 0 0;
+  font: 600 30px/1.1 var(--font-display);
+  font-variant-numeric: lining-nums;
+  overflow-wrap: anywhere;
+}
+
+/* The photo, whole and undistorted, on a soft mount. */
+.stop-photo {
+  display: flex;
+  justify-content: center;
+  margin: 14px 0 0;
+  padding: 8px;
+  border-radius: 16px;
+  background: linear-gradient(160deg, #f9eee6, #f4e1e3);
+}
+
+.stop-photo img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 38vh;
+  max-height: 38dvh;
+  object-fit: contain;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(61, 43, 43, 0.12);
+}
+
+/* Shown instead of the photo in the rare browser that left a placeholder without a picture: a pastel print. */
+.stop-photo-blank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30vh;
+  height: 30dvh;
+  aspect-ratio: 4 / 5;
+  max-width: 100%;
+  border-radius: 10px;
+}
+
+.stop-photo-blank::after {
+  content: '';
+  width: 30px;
+  height: 30px;
+  opacity: 0.85;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23ffffff' d='M12 21s-7.4-4.5-9.5-9.1C1 8.6 3 5 6.5 5c2.1 0 3.6 1.2 4.6 2.6.4.5.6.5.9 0C13 6.2 14.4 5 16.5 5 20 5 22 8.6 20.5 11.9 18.4 16.5 12 21 12 21z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.stop-caption {
+  margin: 14px 2px 6px;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--soft-ink);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.stop-card-footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px 14px 20px;
+  border-top: 1px solid rgba(138, 111, 106, 0.14);
+}
+
+.stop-count {
+  font-weight: 700;
+  font-size: 15px;
+  color: #7a605b; /* --muted, a shade deeper: 5.5:1 on cream (--muted is 4.4:1) */
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+@keyframes sheet-in {
+  from { opacity: 0; visibility: hidden; transform: translateY(48px); }
+  to { opacity: 1; visibility: visible; transform: none; }
+}
+
+/* --- The bars along the top and bottom -------------------------------------------------------------------------- */
+
+#topbar,
+#bottombar {
+  position: absolute;
+  z-index: 20;
+  left: calc(var(--safe-left) + var(--edge));
+  right: calc(var(--safe-right) + var(--edge));
+  height: var(--bar);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: bars-in 0.5s ease backwards;
+}
+
+#topbar {
+  top: calc(var(--safe-top) + var(--edge));
+  justify-content: space-between;
+}
+
+#bottombar {
+  bottom: calc(var(--safe-bottom) + var(--edge));
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+@keyframes bars-in {
+  from { opacity: 0; }
+}
+
+/* Frosted cream, so the bars sit lightly over the scenery. */
+#progress-pill,
+#music-toggle,
+#pause-toggle,
+#timeline {
+  background: var(--glass);
+  box-shadow: var(--shadow-soft);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  backdrop-filter: blur(10px) saturate(1.2);
+}
+
+#progress-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 16px 0 12px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1;
+  white-space: nowrap;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* A little heart before the words. */
+#progress-pill::before {
+  content: '';
+  flex: none;
+  width: 14px;
+  height: 14px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23e0607e' d='M12 21s-7.4-4.5-9.5-9.1C1 8.6 3 5 6.5 5c2.1 0 3.6 1.2 4.6 2.6.4.5.6.5.9 0C13 6.2 14.4 5 16.5 5 20 5 22 8.6 20.5 11.9 18.4 16.5 12 21 12 21z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+#music-toggle,
+#pause-toggle {
+  flex: none;
+  width: var(--bar);
+  height: var(--bar);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rose-ink);
+}
+
+#music-toggle svg,
+#pause-toggle svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+
+/* --- The timeline -------------------------------------------------------------------------------------------- */
+
+#timeline {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--bar);
+  border-radius: 999px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+#timeline::-webkit-scrollbar {
+  display: none;
+}
+
+.timeline-track {
+  position: relative;
+  display: flex;
+  width: max-content;
+  margin: 0 auto;
+  padding: 4px 6px;
+  list-style: none;
+}
+
+.timeline-track li {
+  display: block;
+}
+
+/* The line through the dots, rose up to the last one reached (44 px from one dot to the next). */
+.timeline-track::before,
+.timeline-track::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 28px;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+}
+
+.timeline-track::before {
+  right: 28px;
+  background: rgba(138, 111, 106, 0.22);
+}
+
+.timeline-track::after {
+  width: calc(var(--reached, 0) * 44px);
+  background: linear-gradient(90deg, var(--rose), var(--rose-2));
+}
+
+.timeline-dot {
+  position: relative;
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.timeline-dot::before {
+  content: '';
+  box-sizing: border-box;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--rose);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.timeline-dot.is-current::before {
+  box-shadow: 0 0 0 3px var(--cream), 0 0 0 5px var(--rose), 0 0 0 9px rgba(224, 96, 126, 0.18);
+}
+
+.timeline-dot.is-reached:active::before {
+  transform: scale(1.3);
+}
+
+.timeline-dot.is-locked {
+  cursor: default;
+}
+
+.timeline-dot.is-locked::before {
+  width: 10px;
+  height: 10px;
+  background: #f3e9e4;
+  border: 1.5px solid rgba(138, 111, 106, 0.3);
+}
+
+/* --- The blush that hides a jump ----------------------------------------------------------------------------- */
+
+#ui #fade {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: radial-gradient(circle at 50% 42%, #fff4ef 0%, #fbdde0 62%, #f6c9d3 100%);
+  opacity: 0;
+  transition: opacity var(--fade-ms, 350ms) ease;
+  pointer-events: auto; /* nothing underneath can be tapped while the screen is covered */
+}
+
+#ui #fade.is-on {
+  opacity: 1;
+}
+
+/* --- Less motion when she has asked for it ------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  #intro,
+  #stop-card,
+  #topbar,
+  #bottombar {
+    animation: none;
+  }
+
+  .btn-primary,
+  .timeline-dot::before {
+    transition: none;
+  }
+}

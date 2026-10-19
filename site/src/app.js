@@ -5,7 +5,10 @@
 // balloons, the ambient particles of the zone the train is in, a photo sign at every stop with the two of them
 // standing beside every other one, and the cabin she rides in.
 //
-// Later tasks add to it: the ride UI (Task 11), resilience (Task 12), music (Task 13) and the finale (Task 14).
+// On top of it sits the ride UI: the intro card, a card at every stop, the timeline, the controls and the progress
+// pill, with the furthest moment she has reached remembered across reloads.
+//
+// Later tasks add to it: resilience (Task 12), music (Task 13) and the finale (Task 14).
 
 import { DirectionalLight, Fog, Group, HemisphereLight, Matrix4, Vector3 } from './three.js';
 import { appState } from './state.js';
@@ -22,11 +25,17 @@ import { createDressing } from './world/dressing.js';
 import { createStation, START_STATION_DISTANCE } from './world/stations.js';
 import { createSkyDecor } from './world/skyDecor.js';
 import { createAmbientParticles } from './world/particles.js';
-import { createPhotoSign, placeCouple, placeSign } from './world/signs.js';
+import { createPhotoSign, placeCouple, placeSign, signLookYaw } from './world/signs.js';
 import { createCouple } from './world/figures.js';
 import { createCabin } from './train/cabin.js';
 import { createRide } from './ride/rideController.js';
 import { attachPointerControls, createLook } from './ride/look.js';
+import { loadProgress, saveProgress } from './progress.js';
+import { fadeThrough } from './ui/dom.js';
+import { hideIntro, showIntro } from './ui/intro.js';
+import { hideStopCard, showStopCard } from './ui/stopCard.js';
+import { renderTimeline, timelineItems } from './ui/timeline.js';
+import { initControls } from './ui/controls.js';
 
 /**
  * The sun's shadow (high tier only): a square HALF metres either side of a point AHEAD metres along the track
@@ -49,6 +58,12 @@ const SIGN_RANGE = 200;
 
 /** How often the ?stats=1 readout refreshes (s). */
 const STATS_EVERY = 0.5;
+
+/** How long the blush takes to cover the screen for a jump along the timeline, and again to lift (ms). */
+const JUMP_FADE_MS = 350;
+
+/** A frame long enough for the view to finish turning (s): a jump turns her head while the screen is covered. */
+const SETTLE_LOOK = 60;
 
 const UP = new Vector3(0, 1, 0);
 
@@ -134,10 +149,11 @@ export async function startApp({ content, debug, assets = [] }) {
   const env = envAt(layout, 0);
 
   // The ride. ?at= puts the train somewhere along the track and freezes it there, for looking at the scenery.
+  // The timeline opens every moment reached on an earlier visit too.
   const stops = layout.stops.map((stop) => stop.distance);
   const at = debug.at;
-  let reachedMax = -1;
-  if (at !== null) stops.forEach((distance, index) => { if (distance <= at) reachedMax = index; });
+  let { reachedMax } = loadProgress(undefined, { momentCount: stops.length });
+  if (at !== null) stops.forEach((distance, index) => { if (distance <= at) reachedMax = Math.max(reachedMax, index); });
   const ride = createRide({
     stops, finaleDistance: layout.finaleDistance, speedScale: debug.speed, startDistance: at ?? 0, reachedMax,
   });
@@ -305,24 +321,106 @@ export async function startApp({ content, debug, assets = [] }) {
   });
   await firstFrame;
 
-  return {
+  // The ride UI. The layout's stops are the moments in ride order, so a stop's index is its moment's index.
+  const total = content.moments.length;
+  const timeline = document.getElementById('timeline');
+  const controls = initControls({
+    onPauseToggle: () => app.togglePause(),
+    // Music arrives with Task 13; until then the button stays as it is, showing the music off.
+    onMusicToggle: () => controls.setMusic(appState.music),
+  });
+  let jumping = false; // a timeline jump is under way: further jumps wait until it has finished
+
+  function progressText() {
+    if (ride.state === 'stopped') return `${ride.stopIndex + 1} of ${total}`;
+    if (ride.nextStopIndex >= 0) return `Next stop · ${ride.nextStopIndex + 1} of ${total}`;
+    return 'Next stop · Day 365';
+  }
+
+  function refreshUi() {
+    controls.setProgress(progressText());
+    const items = timelineItems(content.moments, { reachedMax: ride.reachedMax, currentIndex: ride.stopIndex });
+    renderTimeline(timeline, items, { onJump: (index) => app.jumpTo(index) });
+  }
+
+  /** The ride is under way (after Begin, or straight away with ?at= or ?finale=): bring in the controls. */
+  function enterRide() {
+    appState.phase = ride.state === 'stopped' ? 'stopped' : 'riding';
+    controls.setPaused(ride.paused);
+    controls.setMusic(appState.music);
+    controls.show();
+    refreshUi();
+  }
+
+  ride.on('arrive', ({ index }) => {
+    const stop = layout.stops[index];
+    look.setRest(signLookYaw(stop.side));
+    showStopCard(content.moments[stop.index], assets.find((a) => a.index === stop.index) || null, {
+      total,
+      onContinue: () => app.continueRide(),
+    });
+    saveProgress({ reachedMax: ride.reachedMax });
+    appState.phase = 'stopped';
+    refreshUi();
+  });
+  ride.on('depart', () => {
+    appState.phase = 'riding';
+    refreshUi();
+  });
+  ride.on('finale', () => {
+    appState.phase = 'finale'; // Task 14 takes it from here
+  });
+
+  /** @type {App} */
+  const app = {
     begin() {
+      if (appState.phase !== 'intro') return;
+      hideIntro();
       ride.start();
+      enterRide();
     },
     continueRide() {
+      if (ride.state !== 'stopped') return;
+      hideStopCard();
+      // A train paused before (or at) the stop moves on when she taps Continue, rather than sitting frozen (R17).
+      ride.setPaused(false);
+      controls.setPaused(false);
+      look.setRest(0);
       ride.continue();
     },
     jumpTo(index) {
-      ride.jumpTo(index);
+      if (jumping || !(Number.isInteger(index) && index >= 0 && index <= ride.reachedMax)) return;
+      jumping = true;
+      fadeThrough(JUMP_FADE_MS, () => {
+        // Under the cover the train moves to the stop, and her head turns to its sign before the screen clears.
+        if (ride.jumpTo(index)) look.update(SETTLE_LOOK);
+      })
+        .catch((error) => console.error('[app] The jump went wrong.', error))
+        .finally(() => { jumping = false; });
     },
     togglePause() {
       ride.setPaused(!ride.paused);
+      controls.setPaused(ride.paused);
+      // ?at= leaves the train standing where it put it: resuming sets it off from there.
+      if (!ride.paused && ride.state === 'idle') ride.start();
     },
     rideAgain() {
       ride.restart();
       ride.start();
     },
   };
+
+  if (debug.hideUi) document.getElementById('ui').hidden = true;
+  if (at !== null || debug.finale) {
+    // Straight onto the track, no intro: ?at= stays frozen where it is, ?finale= rides (Task 14 takes it to the end).
+    if (at === null) ride.start();
+    enterRide();
+  } else {
+    // The train waits at the Day 1 station under the intro card.
+    appState.phase = 'intro';
+    showIntro(content, { onBegin: () => app.begin() });
+  }
+  return app;
 }
 
 /** Moves `point` along the unit vector `axis` to the nearest whole multiple of `step`. */

@@ -1,11 +1,12 @@
 // Screenshot helper for visual checks.
 //
-//   node scripts/shot.mjs <name> "<query>" [--size 390x844] [--wait 2500]
-//   npm run shot -- <name> "<query>" [--size 390x844] [--wait 2500]
+//   node scripts/shot.mjs <name> "<query>" [--size 390x844] [--wait 2500] [--click "Begin the ride"]
+//   npm run shot -- <name> "<query>" [--size 390x844] [--wait 2500] [--click "Begin the ride"]
 //
 // Serves the repo root on http://127.0.0.1:4174, opens /site/index.html?<query> in a phone-sized
 // Chromium (device pixel ratio 3, touch), waits for the app to report a mode (it gives up after 20 s
-// and carries on, so it never hangs), waits --wait ms more, and writes artifacts/shots/<name>.png.
+// and carries on, so it never hangs), taps the button named by --click once if one is given, waits
+// --wait ms more, and writes artifacts/shots/<name>.png.
 import { spawn } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
@@ -15,8 +16,9 @@ import { chromium } from '@playwright/test';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 4174;
 const MODE_TIMEOUT_MS = 20_000;
-const DEFAULTS = { size: '390x844', wait: '2500' };
-const USAGE = 'usage: node scripts/shot.mjs <name> "<query>" [--size 390x844] [--wait 2500]';
+const CLICK_TIMEOUT_MS = 20_000;
+const DEFAULTS = { size: '390x844', wait: '2500', click: '' };
+const USAGE = 'usage: node scripts/shot.mjs <name> "<query>" [--size 390x844] [--wait 2500] [--click "<button name>"]';
 
 function fail(message) {
   console.error(`${message}\n${USAGE}`);
@@ -50,6 +52,7 @@ function parseArgs(argv) {
     width: Number(size[1]),
     height: Number(size[2]),
     waitMs: Number(options.wait),
+    click: options.click,
   };
 }
 
@@ -69,7 +72,7 @@ async function waitForServer(url, server) {
   throw new Error(`Nothing answered at ${url} within 10 s.`);
 }
 
-const { name, query, width, height, waitMs } = parseArgs(process.argv.slice(2));
+const { name, query, width, height, waitMs, click } = parseArgs(process.argv.slice(2));
 const url = `http://127.0.0.1:${PORT}/site/index.html${query ? `?${query}` : ''}`;
 const outFile = join(root, 'artifacts', 'shots', `${name}.png`);
 
@@ -100,6 +103,7 @@ try {
   } catch {
     console.log(`note: app mode is still null after ${MODE_TIMEOUT_MS / 1000} s, taking the shot anyway`);
   }
+  if (click) await page.getByRole('button', { name: click }).click({ timeout: CLICK_TIMEOUT_MS });
   await page.waitForTimeout(waitMs);
 
   await mkdir(dirname(outFile), { recursive: true });

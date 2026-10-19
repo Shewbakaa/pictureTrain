@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { collectConsoleErrors, appState } from './helpers.js';
+import { collectConsoleErrors, appState, waitForPhase } from './helpers.js';
 
 test('page loads with loading screen and no console errors', async ({ page }) => {
   const errors = collectConsoleErrors(page);
@@ -15,9 +15,11 @@ test('page loads with loading screen and no console errors', async ({ page }) =>
   await page.goto('index.html');
   expect(await page.evaluate(() => window.__loadingShownAtStart)).toBe(true);
   expect(await page.evaluate(() => typeof window.__app?.state.phase)).toBe('string');
-  // Once the ride's first frame is on screen, the loading screen makes way for it.
+  // Once the ride's first frame is on screen, the loading screen fades away and leaves the intro card over it.
   await expect.poll(async () => (await appState(page)).mode).toBe('3d');
+  await waitForPhase(page, 'intro');
   await expect(page.locator('#loading')).toBeHidden();
+  await expect(page.locator('#intro')).toBeVisible();
   expect(errors).toEqual([]);
 });
 

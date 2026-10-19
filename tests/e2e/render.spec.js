@@ -4,6 +4,7 @@ import { collectConsoleErrors, appState, useFixture } from './helpers.js';
 test('3D mode renders and the train moves', async ({ page }) => {
   const errors = collectConsoleErrors(page);
   await page.goto('index.html?speed=10');
+  await page.getByRole('button', { name: 'Begin the ride' }).click();
   await expect.poll(async () => (await appState(page)).mode).toBe('3d');
   const d0 = (await appState(page)).distance;
   await page.waitForTimeout(2000);
