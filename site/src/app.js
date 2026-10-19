@@ -494,6 +494,11 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
         director.setSound(on);
         return director.sound;
       },
+      // A Live Photo she taps plays with its sound: the music fades out for it and comes back when it ends.
+      onLiveSound: (on) => {
+        appState.videoSound = on;
+        music.setDucked(on);
+      },
     });
     saveProgress({ reachedMax: ride.reachedMax });
     appState.phase = 'stopped';

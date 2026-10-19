@@ -113,6 +113,32 @@ Keep clips short (5 to 15 seconds is lovely) so they start quickly on her phone.
 shows a "Video 3" placeholder on its sign and a photo-style placeholder in the card, and the console names the
 file, as for photos.
 
+### Live Photos
+
+A Live Photo is a still picture plus about three seconds of motion, and the ride can show it the way her
+iPhone does. The card shows the still with a small LIVE badge; the motion plays once, silently, as the card
+comes up and then settles back to the still; and when she taps the picture it plays again with its sound (the
+music fades out for it). The sign beside the track shows the still.
+
+Browsers cannot open a Live Photo directly, so export its two halves and convert them:
+
+1. In Photos on your Mac, select the Live Photo and choose **File → Export → Export Unmodified Original**.
+   You get two files with the same name: `IMG_4100.HEIC` (the still) and `IMG_4100.MOV` (the motion).
+2. Convert the still with the `sips` command above, and the motion with `avconvert`:
+
+   ```sh
+   avconvert --source ~/Desktop/IMG_4100.MOV --preset Preset960x540 --output site/photos/04.mp4
+   ```
+
+3. Give the moment both, the still as `photo` and the motion as `live`:
+
+   ```js
+   photo: 'photos/04.jpg',
+   live: 'photos/04.mp4',
+   ```
+
+If the motion cannot be played, the moment simply shows its still, and the console names the file.
+
 ## 4. Add your song
 
 The ride makes a soft music-box tune by itself, so you do not need to do anything. To use your own song

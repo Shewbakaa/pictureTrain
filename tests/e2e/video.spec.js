@@ -69,3 +69,48 @@ test('a video that will not load becomes a placeholder, and the warning names it
   await expect(page.locator('#stop-card img')).toHaveAttribute('src', /^data:image/);
   expect(warnings.some((w) => w.includes('photos/broken.mp4') && w.includes('MP4'))).toBe(true);
 });
+
+// Live Photos: a still with its motion beside it (moment.live).
+
+async function liveFirst(page, browserName) {
+  const { default: base } = await import('../fixtures/content.fixture.js');
+  await useFixture(page, { moments: base.moments.map((m, i) => (i === 0 ? { ...m, photo: '../tests/fixtures/still.jpg', live: clip(browserName) } : m)) });
+}
+
+test('a Live Photo shows its still with a LIVE badge, plays once silently, and plays with sound when tapped', async ({ page, browserName }) => {
+  const errors = collectConsoleErrors(page);
+  await liveFirst(page, browserName);
+  await page.goto('index.html?speed=25');
+  await page.getByRole('button', { name: 'Begin the ride' }).click();
+
+  const live = page.locator('#stop-card .stop-photo-live');
+  await expect(live).toBeVisible();
+  await expect(live.locator('img')).toBeVisible();
+  await expect(live.locator('.live-badge')).toHaveText('LIVE');
+  const motion = live.locator('video');
+  expect(await motion.evaluate((v) => v.loop)).toBe(false);
+  await expect(live).toHaveClass(/is-playing/); // it played as the card came up
+  expect(await motion.evaluate((v) => v.muted)).toBe(true);
+  await expect(live).not.toHaveClass(/is-playing/, { timeout: 10_000 }); // and settled back to the still
+
+  await page.getByRole('button', { name: 'Play the Live Photo with its sound' }).click();
+  await expect(live).toHaveClass(/is-playing/);
+  expect(await motion.evaluate((v) => v.muted)).toBe(false);
+  await expect.poll(async () => (await appState(page)).videoSound).toBe(true);
+
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect.poll(async () => (await appState(page)).videoSound).toBe(false);
+  expect(await motion.evaluate((v) => v.paused && v.muted)).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('the 2D story shows a Live Photo as its still, played with a tap', async ({ page, browserName }) => {
+  await liveFirst(page, browserName);
+  await page.goto('index.html?fallback=1');
+  const live = page.locator('#fallback .stop-photo-live');
+  await expect(live.locator('img')).toBeVisible();
+  await page.waitForTimeout(500);
+  await expect(live).not.toHaveClass(/is-playing/);
+  await live.locator('button').click();
+  await expect(live).toHaveClass(/is-playing/);
+});

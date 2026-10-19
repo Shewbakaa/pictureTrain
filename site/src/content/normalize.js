@@ -7,10 +7,13 @@
 //
 // Pure and DOM-free, so the Node unit tests can import it.
 
+import { mediaKind } from '../photos/videos.js';
+
 /**
  * @typedef {'spring'|'summer'|'autumn'|'winter'|'evening'} ZoneId
  * @typedef {{ skin: string, hair: string, outfit: string }} Look  hex colours such as '#f2c9a5'
- * @typedef {{ index: number, photo: string, date: string, title: string, caption: string, zone: ZoneId }} Moment
+ * @typedef {{ index: number, photo: string, live: string, date: string, title: string, caption: string, zone: ZoneId }} Moment
+ *   `live` is a Live Photo's motion clip, shown with the still `photo` ('' for none)
  *   `index` is the 0-based place in the ride; `photo` is a path relative to site/ ('' = no photo).
  * @typedef {{
  *   herName: string, yourName: string,
@@ -144,9 +147,11 @@ function readMoments(value, zones, warnings, errors) {
     }
     const zone = readMomentZone(moment.zone, n, zones, previousZone, warnings, errors);
     previousZone = zone;
+    const photo = sitePath(moment.photo, `Moment ${n} photo`, warnings);
     moments.push({
       index: i,
-      photo: sitePath(moment.photo, `Moment ${n} photo`, warnings),
+      photo,
+      live: readLive(moment.live, photo, n, warnings),
       date: text(moment.date),
       title: text(moment.title, `Moment ${n}`),
       caption: text(moment.caption),
@@ -154,6 +159,23 @@ function readMoments(value, zones, warnings, errors) {
     });
   }
   return moments;
+}
+
+/**
+ * A moment's Live Photo motion: a video beside a still photo. Anything else is left out with a warning saying why.
+ */
+function readLive(value, photo, n, warnings) {
+  const live = sitePath(value, `Moment ${n} live`, warnings);
+  if (!live) return '';
+  if (mediaKind(live) !== 'video') {
+    warnings.push(`Moment ${n} live: ${show(live)} is not a video (.mp4, .m4v, .webm or .mov), so it was left out.`);
+    return '';
+  }
+  if (mediaKind(photo) !== 'image') {
+    warnings.push(`Moment ${n} live: a Live Photo needs its still picture in photo as well, so the live part was left out.`);
+    return '';
+  }
+  return live;
 }
 
 /** A '#rrggbb' colour, or `fallback` (with a warning when the author gave something else). */

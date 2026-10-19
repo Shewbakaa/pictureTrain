@@ -25,6 +25,7 @@ import { mediaKind } from './videos.js';
 /**
  * @typedef {{
  *   index: number, kind: 'image'|'video', canvas: HTMLCanvasElement|null, video: HTMLVideoElement|null,
+ *   live: HTMLVideoElement|null,
  *   width: number, height: number, aspect: number, src: string, isPlaceholder: boolean,
  * }} PhotoAsset
  *   The photo of moment `index`, drawn on `canvas` (`width` x `height` pixels, never more than MAX_SIZE on its
@@ -32,7 +33,8 @@ import { mediaKind } from './videos.js';
  *   for a placeholder a data: URL of its picture, so a page can show it in an <img> either way. In the rare
  *   browser that will not give a 2D canvas, `canvas` is null (the sign shows plain paper) and a placeholder's
  *   `src` is ''. For a video moment `kind` is 'video', `video` is its muted, looping, inline <video>, `width` x
- *   `height` and `aspect` are the clip's, and `canvas` is its "Video N" poster.
+ *   `height` and `aspect` are the clip's, and `canvas` is its "Video N" poster. A Live Photo is a photo whose
+ *   `live` is its motion clip: muted, inline, playing once (not looping) when the card shows it.
  */
 
 export const PHOTOS = Object.freeze({
@@ -100,31 +102,49 @@ export async function loadPhotos(moments, { onProgress, loadImage = loadImageEle
     for (const request of loading) request.abort();
   }, PHOTOS.TOTAL_MS);
 
-  /** One moment's asset: its photo if it loads in time, its placeholder otherwise. */
+  /** Loads `src` with `load`, giving up after its own TIMEOUT_MS or when the whole loading runs out of time. */
+  async function timed(load, src) {
+    if (expired) throw new Error('out of time');
+    const request = new AbortController();
+    const timer = setTimeout(() => request.abort(), PHOTOS.TIMEOUT_MS);
+    loading.add(request);
+    try {
+      const gaveUp = new Promise((_, reject) => {
+        request.signal.addEventListener('abort', () => reject(new Error('gave up')), { once: true });
+      });
+      return await Promise.race([new Promise((resolve) => resolve(load(src, request.signal))), gaveUp]);
+    } finally {
+      clearTimeout(timer);
+      loading.delete(request);
+    }
+  }
+
+  /**
+   * One moment's asset: its photo (or video) if it loads in time, its placeholder otherwise. A Live Photo's
+   * motion (moment.live) then loads beside its still; if it cannot, the still stands alone.
+   */
   async function assetFor(moment) {
     const kind = mediaKind(moment.photo);
     if (kind === 'none') return placeholderAsset(moment.index);
-    const load = kind === 'video' ? loadVideo : loadImage;
-    if (!expired) {
-      const request = new AbortController();
-      const timer = setTimeout(() => request.abort(), PHOTOS.TIMEOUT_MS);
-      loading.add(request);
+    let asset;
+    try {
+      const loaded = await timed(kind === 'video' ? loadVideo : loadImage, moment.photo);
+      asset = kind === 'video' ? videoAsset(moment.index, loaded, moment.photo) : photoAsset(moment.index, loaded, moment.photo);
+    } catch {
+      const advice = kind === 'video' ? 'Use MP4 (H.264) for videos, see the README.' : 'Use JPG or PNG.';
+      console.warn(`[photos] Could not load "${moment.photo}" — showing a placeholder. ${advice}`);
+      return placeholderAsset(moment.index);
+    }
+    if (moment.live && kind === 'image') {
       try {
-        const gaveUp = new Promise((_, reject) => {
-          request.signal.addEventListener('abort', () => reject(new Error('gave up')), { once: true });
-        });
-        const loaded = await Promise.race([new Promise((resolve) => resolve(load(moment.photo, request.signal))), gaveUp]);
-        return kind === 'video' ? videoAsset(moment.index, loaded, moment.photo) : photoAsset(moment.index, loaded, moment.photo);
+        const motion = await timed(loadVideo, moment.live);
+        motion.loop = false; // a Live Photo plays once, then settles back to its still
+        asset.live = motion;
       } catch {
-        // Falls through to the placeholder.
-      } finally {
-        clearTimeout(timer);
-        loading.delete(request);
+        console.warn(`[photos] Could not load the Live Photo motion "${moment.live}" — showing just the still. Use MP4 (H.264), see the README.`);
       }
     }
-    const advice = kind === 'video' ? 'Use MP4 (H.264) for videos, see the README.' : 'Use JPG or PNG.';
-    console.warn(`[photos] Could not load "${moment.photo}" — showing a placeholder. ${advice}`);
-    return placeholderAsset(moment.index);
+    return asset;
   }
 
   let next = 0;
@@ -245,7 +265,7 @@ function photoAsset(index, image, src) {
     made.g.imageSmoothingQuality = 'high';
     made.g.drawImage(image, 0, 0, width, height);
   }
-  return { index, kind: 'image', canvas: made ? made.canvas : null, video: null, width, height, aspect: w / h, src, isPlaceholder: false };
+  return { index, kind: 'image', canvas: made ? made.canvas : null, video: null, live: null, width, height, aspect: w / h, src, isPlaceholder: false };
 }
 
 /** A video moment: its <video>, and a "Video N" poster the clip's shape for its sign until the clip plays. */
@@ -260,13 +280,13 @@ function videoAsset(index, video, src) {
       // A plain poster: the clip replaces it as soon as it plays.
     }
   }
-  return { index, kind: 'video', canvas: made ? made.canvas : null, video, width: w, height: h, aspect: w / h, src, isPlaceholder: false };
+  return { index, kind: 'video', canvas: made ? made.canvas : null, video, live: null, width: w, height: h, aspect: w / h, src, isPlaceholder: false };
 }
 
 /** The soft placeholder of moment `index`: a portrait pastel gradient with "Photo N" and a small heart. */
 function placeholderAsset(index) {
   const { PLACEHOLDER_WIDTH: w, PLACEHOLDER_HEIGHT: h } = PHOTOS;
-  const plain = { index, kind: 'image', canvas: null, video: null, width: w, height: h, aspect: w / h, src: '', isPlaceholder: true };
+  const plain = { index, kind: 'image', canvas: null, video: null, live: null, width: w, height: h, aspect: w / h, src: '', isPlaceholder: true };
   const made = newCanvas(w, h);
   if (!made) return plain;
   try {

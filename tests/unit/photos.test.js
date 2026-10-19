@@ -187,3 +187,35 @@ test('a video that will not load becomes a placeholder, and the warning names it
   assert.equal(asset.kind, 'image');
   assert.ok(warnings.some((w) => w.includes('photos/broken.mov') && /MP4/.test(w)), warnings.join('\n'));
 });
+
+// Live Photos: the still loads as a photo, and its motion clip (moment.live) rides along on the same asset.
+
+test('a Live Photo loads its still as the photo and its motion beside it', async () => {
+  const fakeImage = { naturalWidth: 1200, naturalHeight: 900 };
+  const fakeMotion = { videoWidth: 1440, videoHeight: 1080 };
+  const asked = [];
+  const [live, plain] = await loadPhotos([
+    { index: 0, photo: 'photos/04.jpg', live: 'photos/04.mp4' },
+    { index: 1, photo: 'photos/05.jpg', live: '' },
+  ], {
+    loadImage: async () => fakeImage,
+    loadVideo: async (src) => { asked.push(src); return fakeMotion; },
+  });
+  assert.deepEqual(asked, ['photos/04.mp4']);
+  assert.equal(live.kind, 'image');
+  assert.equal(live.live, fakeMotion);
+  assert.ok(Math.abs(live.aspect - 1200 / 900) < 1e-12, 'shaped like the still');
+  assert.equal(plain.live, null);
+});
+
+test('a Live Photo whose motion will not load keeps its still, and the warning names the motion', async (t) => {
+  const warnings = [];
+  t.mock.method(console, 'warn', (message) => warnings.push(message));
+  const [asset] = await loadPhotos([{ index: 0, photo: 'photos/04.jpg', live: 'photos/04.mov' }], {
+    loadImage: async () => ({ naturalWidth: 800, naturalHeight: 600 }),
+    loadVideo: async () => { throw new Error('no'); },
+  });
+  assert.equal(asset.isPlaceholder, false);
+  assert.equal(asset.live, null);
+  assert.ok(warnings.some((w) => w.includes('photos/04.mov')), warnings.join('\n'));
+});

@@ -225,9 +225,9 @@ test('missing moment fields get their defaults, and a full moment is kept as wri
       { photo: ' photos/01.jpg ', date: 'Oct 2025', title: 'First coffee', caption: 'We met.', zone: 'spring' },
     ],
   });
-  assert.deepEqual(content.moments[0], { index: 0, photo: '', date: '', title: 'Moment 1', caption: '', zone: 'spring' });
+  assert.deepEqual(content.moments[0], { index: 0, photo: '', live: '', date: '', title: 'Moment 1', caption: '', zone: 'spring' });
   assert.deepEqual(content.moments[1], {
-    index: 1, photo: 'photos/01.jpg', date: 'Oct 2025', title: 'First coffee', caption: 'We met.', zone: 'spring',
+    index: 1, photo: 'photos/01.jpg', live: '', date: 'Oct 2025', title: 'First coffee', caption: 'We met.', zone: 'spring',
   });
 });
 
@@ -383,4 +383,26 @@ test('the e2e fixture is clean and gives the exact strings the e2e specs look fo
   assert.ok(content.moments.every((m) => m.photo === ''));
   // Later specs copy fixture moments and read .zone straight off them, so each must say it outright.
   assert.ok(fixture.moments.every((m) => typeof m.zone === 'string'));
+});
+
+// Live Photos: a moment's optional `live` motion clip beside its still `photo`.
+
+test('live: a motion clip beside a still photo is kept, its path cleaned like a photo\'s', () => {
+  const { content, warnings } = normalizeContent({ moments: [
+    { photo: 'photos/04.jpg', live: '  photos/04.mp4 ' },
+    { photo: 'photos/05.jpg', live: '/photos/05.MOV' },
+    { photo: 'photos/06.jpg' },
+  ] });
+  assert.deepEqual(content.moments.map((m) => m.live), ['photos/04.mp4', 'photos/05.MOV', '']);
+  assert.ok(warnings.some((w) => w.includes('Moment 2 live')), warnings.join('\n'));
+});
+
+test('live: left out, with a warning, when it is not a video or there is no still photo for it', () => {
+  const { content, warnings } = normalizeContent({ moments: [
+    { photo: 'photos/04.jpg', live: 'photos/04.jpg' },
+    { photo: '', live: 'photos/05.mp4' },
+    { photo: 'photos/06.mp4', live: 'photos/06b.mp4' },
+  ] });
+  assert.deepEqual(content.moments.map((m) => m.live), ['', '', '']);
+  for (const n of [1, 2, 3]) assert.ok(warnings.some((w) => w.includes(`Moment ${n} live`)), `Moment ${n}: ${warnings.join('\n')}`);
 });

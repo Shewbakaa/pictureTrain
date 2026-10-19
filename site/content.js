@@ -94,7 +94,7 @@ export default {
   //  after it) and paste it where you want it. To remove one, delete its block. The track
   //  gets longer or shorter to fit.
   //
-  //  Every moment has the same five fields:
+  //  Every moment has the same five fields (and an optional sixth, live):
   //
   //    photo    The picture for this stop. Put your pictures in the photos folder
   //             (site/photos/) and write the path here, like 'photos/01.jpg'. Use JPG or PNG.
@@ -102,6 +102,10 @@ export default {
   //             shrink them first (the README has a one-line command for that). Leave it as
   //             '' to show a soft placeholder picture instead. It can also be a short video,
   //             like 'photos/03.mp4' (README, "Videos"): it plays on the sign and in the card.
+  //    live     Optional, and not in the blocks below: add it to a moment to make its photo a
+  //             Live Photo. The photo is the still and this is its motion, like
+  //             live: 'photos/04.mp4' (README, "Live Photos"). It plays once when the train
+  //             stops, and again with its sound when she taps it.
   //    date     When it happened. It is just text, so write it however you like: 'Oct 2025',
   //             '14 Feb', 'Our first date'. Short is best, because it also appears on the
   //             photo sign.
