@@ -23,50 +23,50 @@
     }
     #loading[hidden] { display: none; }
 
-    .loading-scene { position: relative; width: 160px; height: 104px; }
-    .loading-scene *, .loading-scene *::before, .loading-scene *::after { position: absolute; box-sizing: border-box; }
-    .train { left: 0; bottom: 0; width: 160px; height: 62px; animation: chug 0.5s ease-in-out infinite; }
-    .train .car { left: 8px; bottom: 11px; width: 52px; height: 32px; border-radius: 8px; background: #fffaf3; border-top: 6px solid #f08da5; }
-    .train .car::before, .train .car::after { content: ''; top: 6px; width: 14px; height: 12px; border-radius: 4px; background: #bfe3f2; }
-    .train .car::before { left: 7px; }
-    .train .car::after { right: 7px; }
-    .train .link { left: 60px; bottom: 21px; width: 8px; height: 4px; background: #5b3342; }
-    .train .boiler { left: 66px; bottom: 11px; width: 66px; height: 28px; border-radius: 14px 8px 8px 14px; background: #e0607e; }
-    .train .cab { left: 66px; bottom: 11px; width: 28px; height: 44px; border-radius: 6px 6px 3px 3px; background: #f08da5; }
-    .train .cab::before { content: ''; left: -3px; top: -5px; width: 34px; height: 6px; border-radius: 4px; background: #5b3342; }
-    .train .cab::after { content: ''; left: 7px; top: 9px; width: 14px; height: 13px; border-radius: 4px; background: #fffaf3; }
-    .train .dome { left: 100px; bottom: 39px; width: 12px; height: 8px; border-radius: 6px 6px 0 0; background: #d9a441; }
-    .train .chimney { left: 117px; bottom: 39px; width: 10px; height: 14px; border-radius: 2px 2px 0 0; background: #5b3342; }
-    .train .chimney::before { content: ''; left: -2px; top: -3px; width: 14px; height: 4px; border-radius: 3px; background: #5b3342; }
-    .train .lamp { left: 128px; bottom: 25px; width: 6px; height: 6px; border-radius: 50%; background: #ffe08a; }
-    .train .wheel { bottom: 4px; width: 14px; height: 14px; border-radius: 50%; background: #5b3342; animation: spin 0.8s linear infinite; }
-    .train .wheel::after { content: ''; left: 5px; top: 2px; width: 4px; height: 4px; border-radius: 50%; background: #fffaf3; }
-    .train .w1 { left: 12px; } .train .w2 { left: 38px; } .train .w3 { left: 70px; } .train .w4 { left: 91px; } .train .w5 { left: 112px; }
-    .track { left: -6px; right: -6px; bottom: 0; height: 4px; border-radius: 2px; background: #5b3342; }
-    .ties { left: -6px; right: -6px; bottom: -8px; height: 5px; background: repeating-linear-gradient(90deg, #b07a88 0 6px, transparent 6px 16px); animation: ties 0.5s linear infinite; }
+    #loading .loading-scene { position: relative; width: 160px; height: 104px; }
+    #loading .loading-scene *, #loading .loading-scene *::before, #loading .loading-scene *::after { position: absolute; box-sizing: border-box; }
+    #loading .train { left: 0; bottom: 0; width: 160px; height: 62px; animation: loading-chug 0.5s ease-in-out infinite; }
+    #loading .train .car { left: 8px; bottom: 11px; width: 52px; height: 32px; border-radius: 8px; background: #fffaf3; border-top: 6px solid #f08da5; }
+    #loading .train .car::before, #loading .train .car::after { content: ''; top: 6px; width: 14px; height: 12px; border-radius: 4px; background: #bfe3f2; }
+    #loading .train .car::before { left: 7px; }
+    #loading .train .car::after { right: 7px; }
+    #loading .train .link { left: 60px; bottom: 21px; width: 8px; height: 4px; background: #5b3342; }
+    #loading .train .boiler { left: 66px; bottom: 11px; width: 66px; height: 28px; border-radius: 14px 8px 8px 14px; background: #e0607e; }
+    #loading .train .cab { left: 66px; bottom: 11px; width: 28px; height: 44px; border-radius: 6px 6px 3px 3px; background: #f08da5; }
+    #loading .train .cab::before { content: ''; left: -3px; top: -5px; width: 34px; height: 6px; border-radius: 4px; background: #5b3342; }
+    #loading .train .cab::after { content: ''; left: 7px; top: 9px; width: 14px; height: 13px; border-radius: 4px; background: #fffaf3; }
+    #loading .train .dome { left: 100px; bottom: 39px; width: 12px; height: 8px; border-radius: 6px 6px 0 0; background: #d9a441; }
+    #loading .train .chimney { left: 117px; bottom: 39px; width: 10px; height: 14px; border-radius: 2px 2px 0 0; background: #5b3342; }
+    #loading .train .chimney::before { content: ''; left: -2px; top: -3px; width: 14px; height: 4px; border-radius: 3px; background: #5b3342; }
+    #loading .train .lamp { left: 128px; bottom: 25px; width: 6px; height: 6px; border-radius: 50%; background: #ffe08a; }
+    #loading .train .wheel { bottom: 4px; width: 14px; height: 14px; border-radius: 50%; background: #5b3342; animation: loading-spin 0.8s linear infinite; }
+    #loading .train .wheel::after { content: ''; left: 5px; top: 2px; width: 4px; height: 4px; border-radius: 50%; background: #fffaf3; }
+    #loading .train .w1 { left: 12px; } #loading .train .w2 { left: 38px; } #loading .train .w3 { left: 70px; } #loading .train .w4 { left: 91px; } #loading .train .w5 { left: 112px; }
+    #loading .track { left: -6px; right: -6px; bottom: 0; height: 4px; border-radius: 2px; background: #5b3342; }
+    #loading .ties { left: -6px; right: -6px; bottom: -8px; height: 5px; background: repeating-linear-gradient(90deg, #b07a88 0 6px, transparent 6px 16px); animation: loading-ties 0.5s linear infinite; }
 
-    .puff { left: 118px; bottom: 56px; width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 255, 255, 0.9); opacity: 0.7; animation: puff 1.8s ease-out infinite; }
-    .puff.p2 { animation-delay: -0.6s; transform: translate(-9px, -13px) scale(0.85); }
-    .puff.p3 { animation-delay: -1.2s; transform: translate(-18px, -27px) scale(1.1); }
+    #loading .puff { left: 118px; bottom: 56px; width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 255, 255, 0.9); opacity: 0.7; animation: loading-puff 1.8s ease-out infinite; }
+    #loading .puff.p2 { animation-delay: -0.6s; transform: translate(-9px, -13px) scale(0.85); }
+    #loading .puff.p3 { animation-delay: -1.2s; transform: translate(-18px, -27px) scale(1.1); }
 
-    .heart { width: 14px; height: 14px; animation: float 3s ease-in-out infinite; }
-    .heart i { inset: 0; background: #e0607e; transform: rotate(-45deg); }
-    .heart i::before, .heart i::after { content: ''; width: 14px; height: 14px; border-radius: 50%; background: #e0607e; }
-    .heart i::before { top: -7px; left: 0; }
-    .heart i::after { top: 0; left: 7px; }
-    .heart.h1 { left: 26px; bottom: 66px; animation-delay: -0.8s; }
-    .heart.h2 { left: 134px; bottom: 60px; animation-delay: -2.2s; }
-    .heart.h2 i, .heart.h2 i::before, .heart.h2 i::after { background: #f08da5; }
+    #loading .heart { width: 14px; height: 14px; animation: loading-float 3s ease-in-out infinite; }
+    #loading .heart i { inset: 0; background: #e0607e; transform: rotate(-45deg); }
+    #loading .heart i::before, #loading .heart i::after { content: ''; width: 14px; height: 14px; border-radius: 50%; background: #e0607e; }
+    #loading .heart i::before { top: -7px; left: 0; }
+    #loading .heart i::after { top: 0; left: 7px; }
+    #loading .heart.h1 { left: 26px; bottom: 66px; animation-delay: -0.8s; }
+    #loading .heart.h2 { left: 134px; bottom: 60px; animation-delay: -2.2s; }
+    #loading .heart.h2 i, #loading .heart.h2 i::before, #loading .heart.h2 i::after { background: #f08da5; }
 
-    .loading-text { margin: 0; }
-    .loading-bar { width: min(60vw, 220px); height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.6); overflow: hidden; }
-    #loading-progress { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #f08da5, #e0607e); transition: width 0.3s ease; }
+    #loading .loading-text { margin: 0; }
+    #loading .loading-bar { width: min(60vw, 220px); height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.6); overflow: hidden; }
+    #loading #loading-progress { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #f08da5, #e0607e); transition: width 0.3s ease; }
 
-    @keyframes chug { 50% { transform: translateY(-2px); } }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @keyframes ties { to { background-position-x: -16px; } }
-    @keyframes puff { 0% { opacity: 0; transform: translate(0, 0) scale(0.4); } 20% { opacity: 0.9; } 100% { opacity: 0; transform: translate(-22px, -34px) scale(1.2); } }
-    @keyframes float { 0% { opacity: 0; transform: translateY(8px) scale(0.7); } 25% { opacity: 1; } 100% { opacity: 0; transform: translateY(-26px) scale(1); } }
+    @keyframes loading-chug { 50% { transform: translateY(-2px); } }
+    @keyframes loading-spin { to { transform: rotate(360deg); } }
+    @keyframes loading-ties { to { background-position-x: -16px; } }
+    @keyframes loading-puff { 0% { opacity: 0; transform: translate(0, 0) scale(0.4); } 20% { opacity: 0.9; } 100% { opacity: 0; transform: translate(-22px, -34px) scale(1.2); } }
+    @keyframes loading-float { 0% { opacity: 0; transform: translateY(8px) scale(0.7); } 25% { opacity: 1; } 100% { opacity: 0; transform: translateY(-26px) scale(1); } }
 
     @media (prefers-reduced-motion: reduce) {
       #loading *, #loading *::before, #loading *::after { animation: none !important; transition: none !important; }
