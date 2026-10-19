@@ -1,9 +1,10 @@
 // The photo signs: one beside the track at each moment's stop, showing its photo.
 //
 // A sign is a cream frame on two wooden posts with the photo in it, upright, a date placard below it (drawn on a
-// canvas in Cormorant Garamond, like the station boards) and a little heart on top. It stands SIGN.AHEAD metres
-// past its stop and SIGN.OUT metres out on the stop's side, turned toward the arriving train, so she can see the
-// photo coming and read it squarely once the train has stopped and her head has turned to it (`signLookYaw`).
+// canvas in Cormorant Garamond, like the station boards) and a little heart on top. It stands right beside its
+// stop, SIGN.OUT metres out on the stop's side, facing the track square-on: when the train stops her head turns a
+// quarter round to it (`signLookYaw`), so the photo sits in the middle of her view, face-on, clear of the cabin's
+// pillars (which frame the forward view).
 //
 // The frame takes the photo's shape within limits (`signDimensions`); a photo more extreme than that is cropped
 // to fill it from its middle (`coverUv`), so a panorama or a tall screenshot is never squashed.
@@ -28,18 +29,17 @@ import { mergeParts, part } from '../util/geo.js';
 import { COUPLE_HALF_WIDTH } from './figures.js';
 
 /**
- * Where a sign stands and its size (m): AHEAD past its stop, OUT from the centre line, its face turned TURN
- * (rad) from square-on to the track toward the arriving train. The photo is PHOTO_H tall with its bottom
- * PHOTO_BOTTOM above the ground, in a frame FRAME wide. The couple stands COUPLE_OUT further out than the sign.
+ * Where a sign stands and its size (m): AHEAD past its stop (0: right beside her seat), OUT from the centre line,
+ * facing the track square-on. The photo is PHOTO_H tall with its bottom PHOTO_BOTTOM above the ground, in a frame
+ * FRAME wide. The couple stands COUPLE_OUT further out than the sign, just ahead of it.
  */
 export const SIGN = Object.freeze({
-  AHEAD: 3.5,
+  AHEAD: 0,
   OUT: 3.4,
-  TURN: MathUtils.degToRad(35),
   PHOTO_H: 1.6,
   PHOTO_BOTTOM: 1.0,
   FRAME: 0.08,
-  COUPLE_OUT: 1.4,
+  COUPLE_OUT: 0.6,
 });
 
 /** The date placard (m): its height, its widest, and the gap between it and the frame above. */
@@ -59,8 +59,8 @@ const COLOURS = Object.freeze({
   heart: '#e8607e',
 });
 
-/** Turning her head this far (rad, + = left) looks at a stop's sign from her seat. */
-const LOOK_YAW = 0.75;
+/** Turning her head this far (rad, + = left) looks at a stop's sign from her seat: a quarter turn, to the side. */
+const LOOK_YAW = Math.PI / 2;
 
 /** The couple stands at least this far round (rad) from the sign's near edge, as she sees them from her seat. */
 const COUPLE_MARGIN = MathUtils.degToRad(0.6);
@@ -251,7 +251,7 @@ function face(object, facing) {
 
 /**
  * Stands a sign beside the track for `stop`: SIGN.AHEAD metres past it, SIGN.OUT metres out on its side, facing
- * the track turned SIGN.TURN toward the arriving train.
+ * the track square-on.
  * @param {import('../three.js').Object3D} sign
  * @param {import('./trackPath.js').TrackPath} path
  * @param {import('./layout.js').Stop} stop
@@ -260,29 +260,29 @@ export function placeSign(sign, path, stop) {
   const d = stop.distance + SIGN.AHEAD;
   const out = stop.side === 'right' ? 1 : -1;
   path.frameAt(d, SIGN.OUT * out, 0, sign.position);
-  const facing = path.sideAt(d).multiplyScalar(-out * Math.cos(SIGN.TURN))
-    .addScaledVector(path.tangentAt(d), -Math.sin(SIGN.TURN));
-  face(sign, facing);
+  face(sign, path.sideAt(d).multiplyScalar(-out));
 }
 
 /**
- * Stands the couple beside a stop's sign, SIGN.COUPLE_OUT metres further out than it, facing her seat. Seen from
- * her seat they stand just clear of the sign's nearer edge, so the sign never hides them; the wider the photo,
- * the further round that is.
+ * Stands the couple beside a stop's sign, just ahead of it and SIGN.COUPLE_OUT metres further out, facing her
+ * seat. Seen from her seat they stand just clear of the sign's front edge, so the sign never hides them; the wider
+ * the photo, the further ahead that is.
  * @param {import('../three.js').Object3D} couple  facing +Z, its middle on its origin (world/figures.js `createCouple`)
  * @param {import('./trackPath.js').TrackPath} path
  * @param {import('./layout.js').Stop} stop
  * @param {number} photoW  the width of the photo on the sign (`signDimensions`)
  */
 export function placeCouple(couple, path, stop, photoW) {
-  const { AHEAD, OUT, TURN, FRAME, COUPLE_OUT } = SIGN;
+  const { AHEAD, OUT, FRAME, COUPLE_OUT } = SIGN;
   const halfWidth = photoW / 2 + FRAME;
   // Bearings from her seat, round from straight ahead toward the sign's side. The track is straight enough over
   // these few metres to work them out on the flat.
-  const edge = Math.atan2(OUT + halfWidth * Math.sin(TURN), AHEAD - halfWidth * Math.cos(TURN));
+  const edge = Math.atan2(OUT, AHEAD + halfWidth);
   const out = OUT + COUPLE_OUT;
-  const distance = out / Math.sin(edge);
-  const bearing = edge + Math.atan2(COUPLE_HALF_WIDTH, distance) + COUPLE_MARGIN;
+  // Their own width takes up more of her view the nearer they are, and how near depends on where they stand:
+  // settle the two together (three rounds is plenty).
+  let bearing = edge;
+  for (let i = 0; i < 3; i++) bearing = edge - Math.atan2(COUPLE_HALF_WIDTH, out / Math.sin(bearing)) - COUPLE_MARGIN;
   const side = stop.side === 'right' ? 1 : -1;
   path.frameAt(stop.distance + out / Math.tan(bearing), out * side, 0, couple.position);
   face(couple, path.pointAt(stop.distance).sub(couple.position).setY(0).normalize());

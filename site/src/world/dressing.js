@@ -23,6 +23,7 @@ import { createRng } from '../util/rng.js';
 import { envAt } from './environment.js';
 import { createPropGeometry } from './props.js';
 import { scatterZone } from './scatter.js';
+import { SIGN } from './signs.js';
 import { START_STATION_DISTANCE } from './stations.js';
 import { terrainHeight, TERRAIN } from './terrain.js';
 import { ZONES } from './zones.js';
@@ -34,14 +35,14 @@ export const DRESSING = Object.freeze({
 });
 
 /**
- * The spots the props keep clear of: each photo sign (where Task 10 stands it, 3.5 m past its stop, 3.4 m out
- * on its side, with the couple beside some of them), the start station and the finale station with its house.
+ * The spots the props keep clear of: each photo sign (where signs.js `placeSign` stands it, with the couple just
+ * ahead of some of them), the start station and the finale station with its house.
  * @param {import('./layout.js').Layout} layout
  * @returns {import('./scatter.js').AvoidSpot[]}
  */
 export function avoidSpots(layout) {
   return [
-    ...layout.stops.map((stop) => ({ distance: stop.distance + 3.5, right: stop.side === 'right' ? 3.4 : -3.4, radius: 5 })),
+    ...layout.stops.map((stop) => ({ distance: stop.distance + SIGN.AHEAD, right: stop.side === 'right' ? SIGN.OUT : -SIGN.OUT, radius: 5 })),
     { distance: START_STATION_DISTANCE, right: 4, radius: 12 },
     { distance: layout.finaleDistance, right: 5, radius: 16 },
   ];

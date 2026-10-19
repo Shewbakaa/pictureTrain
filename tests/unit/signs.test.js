@@ -7,6 +7,7 @@ import { createTrackPath, TRACK } from '../../site/src/world/trackPath.js';
 import { buildLayout } from '../../site/src/world/layout.js';
 import { normalizeContent } from '../../site/src/content/normalize.js';
 import { fovForAspect } from '../../site/src/ride/look.js';
+import { cabinAnchors } from '../../site/src/train/cabin.js';
 import { Group, MathUtils, Vector3 } from '../../site/src/three.js';
 import fixture from '../fixtures/content.fixture.js';
 
@@ -26,8 +27,8 @@ test('cover crop centres the photo', () => {
 });
 
 test('look toward the sign side', () => {
-  assert.equal(signLookYaw('left'), 0.75);
-  assert.equal(signLookYaw('right'), -0.75);
+  assert.equal(signLookYaw('left'), Math.PI / 2);
+  assert.equal(signLookYaw('right'), -Math.PI / 2);
 });
 
 // Beyond the brief.
@@ -43,19 +44,17 @@ test('a photo without a usable size gets a square sign, and a broken crop shows 
   assert.deepEqual(coverUv(0, 1.2), { repeat: [1, 1], offset: [0, 0] });
 });
 
-test('each sign stands 3.5 m past its stop, 3.4 m out on its side, turned 35 degrees toward the arriving train', () => {
+test('each sign stands right beside its stop, 3.4 m out on its side, facing the track squarely', () => {
   for (const stop of [rightStop, leftStop]) {
     const sign = new Group();
     placeSign(sign, path, stop);
     sign.updateMatrixWorld(true);
     const out = stop.side === 'right' ? 1 : -1;
-    const d = stop.distance + 3.5;
+    const d = stop.distance;
     assert.ok(sign.position.distanceTo(path.frameAt(d, 3.4 * out, 0)) < 1e-9, stop.side);
     const facing = sign.getWorldDirection(new Vector3());
-    const back = path.tangentAt(d).negate();
     const towardTrack = path.sideAt(d).multiplyScalar(-out);
-    assert.ok(Math.abs(facing.dot(back) - Math.sin(MathUtils.degToRad(35))) < 1e-6, `${stop.side}: turned toward the arriving train`);
-    assert.ok(Math.abs(facing.dot(towardTrack) - Math.cos(MathUtils.degToRad(35))) < 1e-6, `${stop.side}: facing the track`);
+    assert.ok(facing.dot(towardTrack) > 1 - 1e-9, `${stop.side}: facing the track square-on`);
     assert.ok(Math.abs(new Vector3(0, 1, 0).applyQuaternion(sign.quaternion).dot(UP) - 1) < 1e-9, 'upright');
   }
 });
@@ -93,9 +92,26 @@ function trackOffset(point, near) {
   return { d: best, offset: point.clone().sub(path.pointAt(best)).dot(path.sideAt(best)) };
 }
 
-test('the couple stands 1.4 m further out than the sign, just clear of it in her view from the stop, facing her', () => {
-  const portrait = 390 / 844;
-  const halfHfov = Math.atan(Math.tan(MathUtils.degToRad(fovForAspect(portrait)) / 2) * portrait);
+/** Half the horizontal field of view (rad) on a screen of shape `aspect`. */
+const halfHfovFor = (aspect) => Math.atan(Math.tan(MathUtils.degToRad(fovForAspect(aspect)) / 2) * aspect);
+const PORTRAIT = 390 / 844, SQUARE = 1, LANDSCAPE = 16 / 9;
+
+test('stopped, the sign is straight ahead of where her head turns, and no cabin pillar is in the way', () => {
+  for (const stop of [leftStop, rightStop]) {
+    const sign = createPhotoSign({ index: stop.index, aspect: 0.8, width: 0, height: 0, canvas: null, src: '', isPlaceholder: true }, { date: 'Oct 2025' });
+    placeSign(sign, path, stop);
+    const span = bearings(worldVertices(sign), stop);
+    const middle = (Math.min(...span) + Math.max(...span)) / 2;
+    assert.ok(Math.abs(middle - Math.abs(signLookYaw(stop.side))) < MathUtils.degToRad(1), `${stop.side}: centred (${MathUtils.radToDeg(middle)} deg)`);
+    for (const aspect of [PORTRAIT, SQUARE, LANDSCAPE]) {
+      const { pillars } = cabinAnchors(fovForAspect(aspect), aspect);
+      const pillar = Math.atan2(pillars.x + pillars.radius, Math.abs(pillars.z));
+      assert.ok(Math.abs(signLookYaw(stop.side)) - pillar > halfHfovFor(aspect), `${stop.side}, aspect ${aspect.toFixed(2)}: the pillar is out of view`);
+    }
+  }
+});
+
+test('the couple stands beside the sign, toward the front, just clear of it in her view from the stop, facing her', () => {
   for (const stop of [leftStop, rightStop]) {
     for (const aspect of [0.8, 1, 4 / 3, 3]) {
       const sign = createPhotoSign({ index: stop.index, aspect, width: 0, height: 0, canvas: null, src: '', isPlaceholder: true }, { date: 'Oct 2025' });
@@ -104,15 +120,20 @@ test('the couple stands 1.4 m further out than the sign, just clear of it in her
       placeCouple(couple.group, path, stop, sign.userData.photoW);
       const label = `${stop.side}, photo aspect ${aspect}`;
 
-      const { offset } = trackOffset(couple.group.position, stop.distance + 3.5);
-      assert.ok(Math.abs(Math.abs(offset) - 4.8) < 0.01 && Math.sign(offset) === (stop.side === 'right' ? 1 : -1), `${label}: ${offset} m out`);
+      const { d, offset } = trackOffset(couple.group.position, stop.distance);
+      assert.ok(Math.abs(Math.abs(offset) - 4.0) < 0.01 && Math.sign(offset) === (stop.side === 'right' ? 1 : -1), `${label}: ${offset} m out`);
+      assert.ok(d > stop.distance, `${label}: ahead of the sign`);
 
       const signSpan = bearings(worldVertices(sign), stop);
       const coupleSpan = bearings(worldVertices(couple.group), stop);
-      assert.ok(Math.min(...coupleSpan) > Math.max(...signSpan), `${label}: the sign hides none of the couple`);
+      assert.ok(Math.max(...coupleSpan) < Math.min(...signSpan), `${label}: the sign hides none of the couple`);
       if (aspect === 0.8) {
-        // The placeholder's shape: from her seat, looking where the ride turns her head, she sees all of them.
-        assert.ok(Math.max(...coupleSpan) < Math.abs(signLookYaw(stop.side)) + halfHfov, `${label}: in the portrait stop view`);
+        // The placeholder's shape: from her seat, looking where the ride turns her head, she sees all of them on a
+        // wide screen and at least most of them on a tall phone.
+        const look = Math.abs(signLookYaw(stop.side));
+        assert.ok(Math.min(...coupleSpan) > look - halfHfovFor(LANDSCAPE), `${label}: in the landscape stop view`);
+        const middle = (Math.min(...coupleSpan) + Math.max(...coupleSpan)) / 2;
+        assert.ok(middle > look - halfHfovFor(PORTRAIT), `${label}: mostly in the portrait stop view`);
       }
 
       const toSeat = path.pointAt(stop.distance).sub(couple.group.position).setY(0).normalize();
