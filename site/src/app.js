@@ -9,7 +9,10 @@
 // pill, with the furthest moment she has reached remembered across reloads. If the phone takes the GPU away
 // mid-ride, a toast offers a fresh start. The music starts with her tap on Begin and has a button of its own.
 //
-// A later task adds the finale (Task 14).
+// At the Day 365 station the ride ends in the finale (finale/finale.js): under a blush fade her seat gives way to
+// the train seen from outside, the two of them meet on the platform, and his message comes up on a card with the
+// timeline below it. "Ride again" takes her back to the start; a moment on the timeline takes her back there.
+// The music plays on throughout.
 
 import { DirectionalLight, Fog, Group, HemisphereLight, Matrix4, Vector3 } from './three.js';
 import { appState } from './state.js';
@@ -29,12 +32,15 @@ import { createAmbientParticles } from './world/particles.js';
 import { createPhotoSign, placeCouple, placeSign, signLookYaw } from './world/signs.js';
 import { createCouple } from './world/figures.js';
 import { createCabin } from './train/cabin.js';
+import { createTrainExterior } from './train/exterior.js';
+import { createFinale } from './finale/finale.js';
 import { createRide } from './ride/rideController.js';
 import { attachPointerControls, createLook } from './ride/look.js';
 import { loadProgress, saveProgress } from './progress.js';
 import { fadeThrough } from './ui/dom.js';
 import { hideIntro, showIntro } from './ui/intro.js';
 import { hideStopCard, showStopCard } from './ui/stopCard.js';
+import { hideFinaleCard, showFinaleCard } from './ui/finaleCard.js';
 import { renderTimeline, timelineItems } from './ui/timeline.js';
 import { initControls } from './ui/controls.js';
 import { showToast } from './ui/toast.js';
@@ -67,6 +73,10 @@ const JUMP_FADE_MS = 350;
 
 /** A frame long enough for the view to finish turning (s): a jump turns her head while the screen is covered. */
 const SETTLE_LOOK = 60;
+
+/** The blush that hides the swap from her seat to the finale, and the one back to the start for "Ride again" (ms per half). */
+const FINALE_FADE_MS = 400;
+const RIDE_AGAIN_FADE_MS = 500;
 
 const UP = new Vector3(0, 1, 0);
 
@@ -161,6 +171,9 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   rig.add(cabin.group);
   cabin.fit(camera);
 
+  // The finale at the Day 365 station, with the train seen from outside. It waits, hidden, until the ride ends.
+  const finale = createFinale({ stage, path, layout, content, cabin, exterior: createTrainExterior() });
+
   // Light and fog, set from the environment every frame.
   const hemi = new HemisphereLight();
   const sun = new DirectionalLight();
@@ -175,14 +188,21 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   scene.fog = new Fog(0xffffff, 50, 150);
   const env = envAt(layout, 0);
 
-  // The ride. ?at= puts the train somewhere along the track and freezes it there, for looking at the scenery.
+  // The ride. ?at= puts the train somewhere along the track and freezes it there, for looking at the scenery;
+  // ?finale=1 puts it at the end, with every moment reached, so the finale plays straight away.
   // The timeline opens every moment reached on an earlier visit too.
   const stops = layout.stops.map((stop) => stop.distance);
   const at = debug.at;
+  const toFinale = debug.finale && at === null;
   let { reachedMax } = loadProgress(undefined, { momentCount: stops.length });
   if (at !== null) stops.forEach((distance, index) => { if (distance <= at) reachedMax = Math.max(reachedMax, index); });
+  if (toFinale) reachedMax = stops.length - 1;
   const ride = createRide({
-    stops, finaleDistance: layout.finaleDistance, speedScale: debug.speed, startDistance: at ?? 0, reachedMax,
+    stops,
+    finaleDistance: layout.finaleDistance,
+    speedScale: debug.speed,
+    startDistance: at ?? (toFinale ? layout.finaleDistance : 0),
+    reachedMax,
   });
   if (at !== null) ride.setPaused(true);
 
@@ -208,6 +228,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     for (const material of Object.values(MATERIALS)) material.needsUpdate = true;
     for (const fn of onDensity) fn(tier.density);
     for (const fn of onParticles) fn(tier.particles);
+    finale.setQuality(governor.tier);
   }
   applyTier();
 
@@ -285,6 +306,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     appState.reachedMax = ride.reachedMax;
     appState.paused = ride.paused;
     appState.yaw = look.yaw;
+    appState.finaleTime = finale.active ? finale.time : null;
     appState.quality = governor.tier;
     const { drawCalls, triangles } = stage.info();
     appState.drawCalls = drawCalls;
@@ -301,6 +323,9 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     statsFrames = 0;
   }
 
+  /** Hears the finale's events ('hearts', 'fireworks', 'card'); the ride UI sets it once it is up. */
+  let onFinaleEvent = () => {};
+
   function frame(time) {
     const dt = lastTime === null ? 0 : Math.max(0, (time - lastTime) / 1000);
     lastTime = time;
@@ -311,7 +336,12 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
 
     const d = ride.distance;
     placeRig(d);
-    camera.rotation.set(look.pitch, look.yaw, 0, 'YXZ');
+    if (finale.active) {
+      // The finale moves the camera itself.
+      for (const name of finale.update(dt)) onFinaleEvent(name);
+    } else {
+      camera.rotation.set(look.pitch, look.yaw, 0, 'YXZ');
+    }
     envAt(layout, d, env);
     applyEnvironment();
     placeSun(d);
@@ -375,7 +405,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     },
   });
   document.addEventListener('visibilitychange', () => music.setHidden(document.hidden), { signal });
-  let jumping = false; // a timeline jump is under way: further jumps wait until it has finished
+  let jumping = false; // a timeline jump (or "Ride again") is under way: further ones wait until it has finished
 
   function progressText() {
     if (ride.state === 'stopped') return `${ride.stopIndex + 1} of ${total}`;
@@ -389,14 +419,36 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     renderTimeline(timeline, items, { onJump: (index) => app.jumpTo(index) });
   }
 
-  /** The ride is under way (after Begin, or straight away with ?at= or ?finale=): bring in the controls. */
+  /**
+   * The ride is under way (after Begin, straight away with ?at= or ?finale=, or again after the finale): she is in
+   * her seat, and the controls come in with the progress pill and the timeline up to date.
+   */
   function enterRide() {
     appState.phase = ride.state === 'stopped' ? 'stopped' : 'riding';
+    appState.view = 'cabin';
     controls.setPaused(ride.paused);
     controls.setMusic(appState.music);
     controls.show();
     refreshUi();
   }
+
+  /** From the finale back to her seat (under a fade): the cabin, the camera on her seat, no card. */
+  function leaveFinale() {
+    finale.reset();
+    cabin.fit(camera);
+    hideFinaleCard();
+    appState.view = 'cabin';
+  }
+
+  // The finale's card comes up over the fireworks, with the timeline below it to go back to any moment.
+  onFinaleEvent = (name) => {
+    if (name !== 'card' || !finale.active) return;
+    appState.phase = 'done';
+    showFinaleCard(content, { onRideAgain: () => app.rideAgain() });
+    const items = timelineItems(content.moments, { reachedMax: ride.reachedMax, currentIndex: -1 });
+    renderTimeline(timeline, items, { onJump: (index) => app.jumpTo(index) });
+    controls.showTimeline();
+  };
 
   ride.on('arrive', ({ index }) => {
     const stop = layout.stops[index];
@@ -408,13 +460,27 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     saveProgress({ reachedMax: ride.reachedMax });
     appState.phase = 'stopped';
     refreshUi();
+    mirrorState(); // at once, not at the next frame, so the state agrees with the card that has just come up
   });
   ride.on('depart', () => {
     appState.phase = 'riding';
     refreshUi();
   });
   ride.on('finale', () => {
-    appState.phase = 'finale'; // Task 14 takes it from here
+    // The train has pulled in at the Day 365 station: under a blush, her seat gives way to the scene outside.
+    appState.phase = 'finale';
+    appState.view = 'finale';
+    hideStopCard();
+    controls.hide();
+    look.endDrag();
+    fadeThrough(FINALE_FADE_MS, () => {
+      finale.begin();
+      // ?ft= shows one instant of the finale, held still.
+      if (debug.ft !== null) {
+        finale.skipTo(debug.ft);
+        finale.freeze(true);
+      }
+    }).catch((error) => console.error('[app] The finale could not start.', error));
   });
 
   /** @type {App} */
@@ -436,9 +502,17 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       ride.continue();
     },
     jumpTo(index) {
-      if (jumping || !(Number.isInteger(index) && index >= 0 && index <= ride.reachedMax)) return;
+      if (jumping || appState.phase === 'finale') return;
+      if (!(Number.isInteger(index) && index >= 0 && index <= ride.reachedMax)) return;
       jumping = true;
+      const fromFinale = appState.phase === 'done';
       fadeThrough(JUMP_FADE_MS, () => {
+        // The train reached the end while the screen was covered: the finale goes on instead.
+        if (appState.phase === 'finale') return;
+        if (fromFinale) {
+          leaveFinale();
+          controls.show();
+        }
         // Under the cover the train moves to the stop, and her head turns to its sign before the screen clears.
         if (ride.jumpTo(index)) look.update(SETTLE_LOOK);
       })
@@ -452,14 +526,26 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       if (!ride.paused && ride.state === 'idle') ride.start();
     },
     rideAgain() {
-      ride.restart();
-      ride.start();
+      if (jumping || appState.phase !== 'done') return;
+      jumping = true;
+      fadeThrough(RIDE_AGAIN_FADE_MS, () => {
+        // Back to the Day 1 station under the cover, in her seat, looking ahead, and off again (R31).
+        leaveFinale();
+        ride.restart();
+        ride.setPaused(false);
+        ride.start();
+        look.setRest(0);
+        look.update(SETTLE_LOOK);
+        enterRide();
+      })
+        .catch((error) => console.error('[app] Riding again went wrong.', error))
+        .finally(() => { jumping = false; });
     },
   };
 
   if (debug.hideUi) document.getElementById('ui').hidden = true;
   if (at !== null || debug.finale) {
-    // Straight onto the track, no intro: ?at= stays frozen where it is, ?finale= rides (Task 14 takes it to the end).
+    // Straight onto the track, no intro: ?at= stays frozen where it is, ?finale= pulls in at the end at once.
     if (at === null) ride.start();
     enterRide();
   } else {

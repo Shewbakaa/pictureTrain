@@ -102,7 +102,7 @@ export function signLookYaw(side) {
 }
 
 /** A heart outline for ExtrudeGeometry, its lobes `r` across, its point at the bottom, centred on the origin. */
-function heartShape(r) {
+export function heartShape(r) {
   const shape = new Shape();
   shape.moveTo(0, -r * 1.15);
   shape.bezierCurveTo(-r * 1.9, r * 0.1, -r * 0.9, r * 1.4, 0, r * 0.45);
