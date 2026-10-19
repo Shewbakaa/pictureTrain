@@ -2,9 +2,10 @@
 //
 // A sign is a cream frame on two wooden posts with the photo in it, upright, a date placard below it (drawn on a
 // canvas in Cormorant Garamond, like the station boards) and a little heart on top. It stands right beside its
-// stop, SIGN.OUT metres out on the stop's side, facing the track square-on: when the train stops her head turns a
-// quarter round to it (`signLookYaw`), so the photo sits in the middle of her view, face-on, clear of the cabin's
-// pillars (which frame the forward view).
+// stop, SIGN.OUT metres out on the stop's side. While the train is coming it turns on its post toward her
+// (`signTurn`, `turnSign`), so she can see the photo from afar; it comes square-on to the track just as the train
+// stops beside it, when her head turns a quarter round to it (`signLookYaw`), so the photo sits in the middle of
+// her view, face-on, clear of the cabin's pillars (which frame the forward view).
 //
 // The frame takes the photo's shape within limits (`signDimensions`); a photo more extreme than that is cropped
 // to fill it from its middle (`coverUv`), so a panorama or a tall screenshot is never squashed.
@@ -30,12 +31,14 @@ import { COUPLE_HALF_WIDTH } from './figures.js';
 
 /**
  * Where a sign stands and its size (m): AHEAD past its stop (0: right beside her seat), OUT from the centre line,
- * facing the track square-on. The photo is PHOTO_H tall with its bottom PHOTO_BOTTOM above the ground, in a frame
- * FRAME wide. The couple stands COUPLE_OUT further out than the sign, just ahead of it.
+ * facing the track square-on once she is beside it and turned up to MAX_TURN (rad) toward her while she is
+ * coming. The photo is PHOTO_H tall with its bottom PHOTO_BOTTOM above the ground, in a frame FRAME wide. The
+ * couple stands COUPLE_OUT further out than the sign, just ahead of it.
  */
 export const SIGN = Object.freeze({
   AHEAD: 0,
   OUT: 3.4,
+  MAX_TURN: MathUtils.degToRad(70),
   PHOTO_H: 1.6,
   PHOTO_BOTTOM: 1.0,
   FRAME: 0.08,
@@ -243,15 +246,40 @@ export function createPhotoSign(asset, { date = '' } = {}) {
   return group;
 }
 
-/** Turns `object` upright with its front (+Z) along the horizontal unit vector `facing`. */
+const scratch = { x: new Vector3(), facing: new Vector3(), basis: new Matrix4() };
+
+/** Turns `object` upright with its front (+Z) along the horizontal unit vector `facing`. Allocates nothing. */
 function face(object, facing) {
-  const x = new Vector3().crossVectors(UP, facing);
-  object.quaternion.setFromRotationMatrix(new Matrix4().makeBasis(x, UP, facing));
+  scratch.x.crossVectors(UP, facing);
+  object.quaternion.setFromRotationMatrix(scratch.basis.makeBasis(scratch.x, UP, facing));
+}
+
+/**
+ * How far a sign is turned (rad) from square-on toward the arriving train when the train's seat is `ahead` metres
+ * short of it: toward her seat (so the photo faces her), but no more than SIGN.MAX_TURN, and square-on once she
+ * is beside it or past it. It never turns back while she comes nearer.
+ * @param {number} ahead  the sign's distance along the track less the train's (m)
+ */
+export function signTurn(ahead) {
+  if (!(ahead > 0)) return 0;
+  return Math.min(Math.atan2(ahead, SIGN.OUT), SIGN.MAX_TURN);
+}
+
+/**
+ * Turns a placed sign on its post `turn` radians from square-on toward the arriving train (`signTurn`).
+ * Allocates nothing, so it can run every frame.
+ * @param {import('../three.js').Object3D} sign  placed by `placeSign`
+ * @param {number} turn
+ */
+export function turnSign(sign, turn) {
+  const { towardTrack, back } = sign.userData.aim;
+  face(sign, scratch.facing.copy(towardTrack).multiplyScalar(Math.cos(turn)).addScaledVector(back, Math.sin(turn)));
+  sign.userData.turn = turn;
 }
 
 /**
  * Stands a sign beside the track for `stop`: SIGN.AHEAD metres past it, SIGN.OUT metres out on its side, facing
- * the track square-on.
+ * the track square-on (`turnSign` then turns it toward the arriving train).
  * @param {import('../three.js').Object3D} sign
  * @param {import('./trackPath.js').TrackPath} path
  * @param {import('./layout.js').Stop} stop
@@ -260,7 +288,8 @@ export function placeSign(sign, path, stop) {
   const d = stop.distance + SIGN.AHEAD;
   const out = stop.side === 'right' ? 1 : -1;
   path.frameAt(d, SIGN.OUT * out, 0, sign.position);
-  face(sign, path.sideAt(d).multiplyScalar(-out));
+  sign.userData.aim = { towardTrack: path.sideAt(d).multiplyScalar(-out), back: path.tangentAt(d).negate() };
+  turnSign(sign, 0);
 }
 
 /**

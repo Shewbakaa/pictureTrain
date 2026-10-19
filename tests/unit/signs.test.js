@@ -1,7 +1,7 @@
 // The photo signs beside the track (Task 10): their size, the photo's crop and where they stand.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { signDimensions, coverUv, signLookYaw, createPhotoSign, placeSign, placeCouple } from '../../site/src/world/signs.js';
+import { signDimensions, coverUv, signLookYaw, createPhotoSign, placeSign, placeCouple, signTurn, turnSign, SIGN } from '../../site/src/world/signs.js';
 import { createCouple } from '../../site/src/world/figures.js';
 import { createTrackPath, TRACK } from '../../site/src/world/trackPath.js';
 import { buildLayout } from '../../site/src/world/layout.js';
@@ -56,6 +56,55 @@ test('each sign stands right beside its stop, 3.4 m out on its side, facing the 
     const towardTrack = path.sideAt(d).multiplyScalar(-out);
     assert.ok(facing.dot(towardTrack) > 1 - 1e-9, `${stop.side}: facing the track square-on`);
     assert.ok(Math.abs(new Vector3(0, 1, 0).applyQuaternion(sign.quaternion).dot(UP) - 1) < 1e-9, 'upright');
+  }
+});
+
+test('a sign turns toward the arriving train, up to 70 degrees, and is square-on once she is beside it', () => {
+  assert.equal(signTurn(0), 0);
+  assert.equal(signTurn(-5), 0, 'square-on once the train has gone by');
+  assert.ok(Math.abs(signTurn(SIGN.OUT) - Math.PI / 4) < 1e-12, 'as far ahead as it is out: 45 degrees');
+  assert.equal(signTurn(1000), MathUtils.degToRad(70));
+  assert.equal(signTurn(NaN), 0);
+  let last = 0;
+  for (let ahead = 0; ahead <= 60; ahead += 0.5) {
+    const turn = signTurn(ahead);
+    assert.ok(turn >= last, `never turns back as she comes nearer (${ahead} m)`);
+    last = turn;
+  }
+});
+
+test('turnSign swings the sign about its post toward the arriving train, staying upright and in place', () => {
+  for (const stop of [rightStop, leftStop]) {
+    const sign = new Group();
+    placeSign(sign, path, stop);
+    const where = sign.position.clone();
+    const out = stop.side === 'right' ? 1 : -1;
+    const towardTrack = path.sideAt(stop.distance).multiplyScalar(-out);
+    const back = path.tangentAt(stop.distance).negate();
+    for (const turn of [0, 0.3, MathUtils.degToRad(70)]) {
+      turnSign(sign, turn);
+      sign.updateMatrixWorld(true);
+      const facing = sign.getWorldDirection(new Vector3());
+      assert.ok(Math.abs(facing.dot(towardTrack) - Math.cos(turn)) < 1e-9, `${stop.side} ${turn}: toward the track`);
+      assert.ok(Math.abs(facing.dot(back) - Math.sin(turn)) < 1e-9, `${stop.side} ${turn}: toward the arriving train`);
+      assert.ok(Math.abs(new Vector3(0, 1, 0).applyQuaternion(sign.quaternion).dot(UP) - 1) < 1e-9, 'upright');
+      assert.ok(sign.position.equals(where), 'in place');
+    }
+  }
+});
+
+test('as the train comes in, each sign faces close to her seat, so she can see the photo from afar', () => {
+  for (const stop of [rightStop, leftStop]) {
+    const sign = new Group();
+    placeSign(sign, path, stop);
+    for (const ahead of [2, 5, 9, 15, 30, 60]) {
+      turnSign(sign, signTurn(ahead));
+      sign.updateMatrixWorld(true);
+      const seat = path.pointAt(stop.distance - ahead);
+      const toSeat = seat.sub(sign.position).setY(0).normalize();
+      const off = Math.acos(Math.min(1, sign.getWorldDirection(new Vector3()).dot(toSeat)));
+      assert.ok(off < MathUtils.degToRad(20), `${stop.side}, ${ahead} m out: ${MathUtils.radToDeg(off).toFixed(1)} deg off her`);
+    }
   }
 });
 

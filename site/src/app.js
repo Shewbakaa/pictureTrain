@@ -29,7 +29,7 @@ import { createDressing } from './world/dressing.js';
 import { createStation, START_STATION_DISTANCE } from './world/stations.js';
 import { createSkyDecor } from './world/skyDecor.js';
 import { createAmbientParticles } from './world/particles.js';
-import { createPhotoSign, placeCouple, placeSign, signLookYaw } from './world/signs.js';
+import { createPhotoSign, placeCouple, placeSign, SIGN, signLookYaw, signTurn, turnSign } from './world/signs.js';
 import { createCouple } from './world/figures.js';
 import { createCabin } from './train/cabin.js';
 import { createTrainExterior } from './train/exterior.js';
@@ -64,6 +64,8 @@ const AMBIENT_PARTICLES = 600;
  * The fog has swallowed them long before (it ends 160 m out at most), and each sign costs four draw calls.
  */
 const SIGN_RANGE = 200;
+/** Smallest change in a sign's turn (rad) worth re-aiming it for. */
+const SIGN_TURN_EPSILON = 1e-4;
 
 /** How often the ?stats=1 readout refreshes (s). */
 const STATS_EVERY = 0.5;
@@ -145,7 +147,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   // A photo sign at every stop, and the two of them beside every other one.
   const signs = new Group();
   signs.name = 'signs';
-  /** @type {Array<{ distance: number, group: Group, couple: ReturnType<typeof createCouple>|null }>} */
+  /** @type {Array<{ distance: number, group: Group, sign: Group, couple: ReturnType<typeof createCouple>|null }>} */
   const roadside = [];
   for (const stop of layout.stops) {
     const asset = assets.find((a) => a.index === stop.index) || null;
@@ -160,7 +162,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       group.add(couple.group);
     }
     signs.add(group);
-    roadside.push({ distance: stop.distance, group, couple });
+    roadside.push({ distance: stop.distance, group, sign, couple });
   }
   scene.add(signs);
   // The photos go to the GPU now rather than as each sign comes into view, which would stutter the ride.
@@ -359,7 +361,11 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     cabin.update(dt, ride.speed, elapsed);
     for (const spot of roadside) {
       spot.group.visible = Math.abs(spot.distance - d) < SIGN_RANGE;
-      if (spot.couple && spot.group.visible) spot.couple.update(elapsed);
+      if (!spot.group.visible) continue;
+      // Each sign keeps turning toward her as she comes, and is square-on when she stops beside it.
+      const turn = signTurn(spot.distance + SIGN.AHEAD - d);
+      if (Math.abs(turn - spot.sign.userData.turn) > SIGN_TURN_EPSILON) turnSign(spot.sign, turn);
+      if (spot.couple) spot.couple.update(elapsed);
     }
     stage.render();
 
