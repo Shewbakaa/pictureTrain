@@ -7,9 +7,9 @@
 //
 // On top of it sits the ride UI: the intro card, a card at every stop, the timeline, the controls and the progress
 // pill, with the furthest moment she has reached remembered across reloads. If the phone takes the GPU away
-// mid-ride, a toast offers a fresh start.
+// mid-ride, a toast offers a fresh start. The music starts with her tap on Begin and has a button of its own.
 //
-// Later tasks add to it: music (Task 13) and the finale (Task 14).
+// A later task adds the finale (Task 14).
 
 import { DirectionalLight, Fog, Group, HemisphereLight, Matrix4, Vector3 } from './three.js';
 import { appState } from './state.js';
@@ -38,6 +38,7 @@ import { hideStopCard, showStopCard } from './ui/stopCard.js';
 import { renderTimeline, timelineItems } from './ui/timeline.js';
 import { initControls } from './ui/controls.js';
 import { showToast } from './ui/toast.js';
+import { createMusic } from './audio/music.js';
 
 /**
  * The sun's shadow (high tier only): a square HALF metres either side of a point AHEAD metres along the track
@@ -361,9 +362,19 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   const timeline = document.getElementById('timeline');
   const controls = initControls({
     onPauseToggle: () => app.togglePause(),
-    // Music arrives with Task 13; until then the button stays as it is, showing the music off.
-    onMusicToggle: () => controls.setMusic(appState.music),
+    onMusicToggle: () => music.toggle(),
   });
+  // Her song if content.js names one, the built-in tune otherwise. It is held while the page is in the background.
+  const music = createMusic({
+    src: content.music,
+    onChange: () => {
+      appState.music = music.state;
+      appState.musicSource = music.source;
+      appState.audioSuspended = music.suspended;
+      controls.setMusic(music.state);
+    },
+  });
+  document.addEventListener('visibilitychange', () => music.setHidden(document.hidden), { signal });
   let jumping = false; // a timeline jump is under way: further jumps wait until it has finished
 
   function progressText() {
@@ -410,6 +421,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   const app = {
     begin() {
       if (appState.phase !== 'intro') return;
+      music.start(); // first, while her tap is still being handled: phones only let sound start from a tap
       hideIntro();
       ride.start();
       enterRide();
