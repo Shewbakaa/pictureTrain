@@ -66,8 +66,10 @@ async function boot() {
     ({ default: rawContent } = await import('../content.js'));
   } catch (error) {
     const typo = error instanceof SyntaxError || error instanceof ReferenceError;
+    // Safari says which line it got confused on; Chrome only names the word.
+    const where = typo && Number.isInteger(error.line) && error.line > 0 ? ` (line ${error.line})` : '';
     console.error(typo
-      ? '[content.js] has a typo, so the ride cannot start. Look just before what the browser names here (often a missing comma, quote or bracket):'
+      ? `[content.js] has a typo, so the ride cannot start. Look just before what the browser names here${where}; it is often a missing comma, quote or bracket:`
       : '[content.js] could not be loaded, so the ride cannot start:', error);
     cannotStart(`content.js ${typo ? 'has a typo' : 'could not be loaded'} — open the browser console for details`);
     return;

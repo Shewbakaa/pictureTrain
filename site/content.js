@@ -16,8 +16,8 @@
 //  If something looks off, open the browser console (right-click the page, choose
 //  Inspect, then Console). Messages that start with "[content.js]" say what to change.
 //  If the page never gets past the loading screen, a quote or a comma is probably
-//  missing in this file. The console names the line where the page got confused, so look
-//  at that line and the one just above it.
+//  missing in this file. The console names the word (and, in Safari, the line) where the
+//  page got confused, so look just before it, on that line or the one above.
 // =============================================================================
 
 export default {

@@ -41,7 +41,8 @@ Two things to know about that file:
   apostrophe (it's, Maya's), put the text in double quotes instead: `"Maya's laugh, all afternoon."`
 - If something is wrong, open the browser console (right-click the page, Inspect, Console). Messages that
   start with `[content.js]` say what to fix. If the page never gets past the loading screen, a quote or a
-  comma is probably missing; the console names the line.
+  comma is probably missing; the console names the word (and, in Safari, the line) where it got confused,
+  so look just before it.
 
 Then open `site/index.html` and change two things near the top:
 

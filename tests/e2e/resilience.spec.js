@@ -186,7 +186,7 @@ test('Restart on the context-loss toast reloads the page', async ({ page }) => {
   await expect(page.locator('#toast')).toBeHidden();
 });
 
-test('a typo in content.js shows a friendly message instead of loading forever', async ({ page }) => {
+test('a typo in content.js shows a friendly message instead of loading forever', async ({ page, browserName }) => {
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   await page.route('**/site/content.js', (r) => r.fulfill({
@@ -198,6 +198,10 @@ test('a typo in content.js shows a friendly message instead of loading forever',
   await expect(page.locator('#loading .loading-bar')).toBeHidden();
   expect(errors.some((e) => e.startsWith('[content.js]'))).toBe(true);
   expect((await appState(page)).phase).toBe('error');
+  // Safari's error says where it got confused (the line after the missing comma); Chrome's only names the word.
+  const typo = errors.find((e) => e.startsWith('[content.js] has a typo'));
+  if (browserName === 'webkit') expect(typo).toContain('names here (line 3)');
+  else expect(typo).not.toContain('(line');
 });
 
 test('a first frame that throws falls back to the 2D story', async ({ page }) => {
