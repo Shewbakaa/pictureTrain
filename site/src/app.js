@@ -2,12 +2,12 @@
 // where she drags, and keeps the sky, fog and light in step with the scenery the train is passing through.
 //
 // The world is the sky, the ground, the track, the two stations, the props of every zone, clouds and hot-air
-// balloons, and the ambient particles of the zone the train is in.
+// balloons, the ambient particles of the zone the train is in, a photo sign at every stop with the two of them
+// standing beside every other one, and the cabin she rides in.
 //
-// Later tasks add to it: the cabin, signs and figures (Task 10), the ride UI (Task 11), resilience (Task 12),
-// music (Task 13) and the finale (Task 14).
+// Later tasks add to it: the ride UI (Task 11), resilience (Task 12), music (Task 13) and the finale (Task 14).
 
-import { DirectionalLight, Fog, HemisphereLight, Matrix4, Vector3 } from './three.js';
+import { DirectionalLight, Fog, Group, HemisphereLight, Matrix4, Vector3 } from './three.js';
 import { appState } from './state.js';
 import { createStage } from './render/stage.js';
 import { MATERIALS } from './render/materials.js';
@@ -22,6 +22,9 @@ import { createDressing } from './world/dressing.js';
 import { createStation, START_STATION_DISTANCE } from './world/stations.js';
 import { createSkyDecor } from './world/skyDecor.js';
 import { createAmbientParticles } from './world/particles.js';
+import { createPhotoSign, placeCouple, placeSign } from './world/signs.js';
+import { createCouple } from './world/figures.js';
+import { createCabin } from './train/cabin.js';
 import { createRide } from './ride/rideController.js';
 import { attachPointerControls, createLook } from './ride/look.js';
 
@@ -37,6 +40,12 @@ const SHADOW = Object.freeze({ HALF: 25, MAP_SIZE: 1024, AHEAD: 12, DISTANCE: 80
  * round her, and a portrait view only sees a few percent of it, so it takes this many for a snowfall to read.
  */
 const AMBIENT_PARTICLES = 600;
+
+/**
+ * Photo signs (and the couples beside them) further than this along the track from the train are not drawn (m).
+ * The fog has swallowed them long before (it ends 160 m out at most), and each sign costs four draw calls.
+ */
+const SIGN_RANGE = 200;
 
 /** How often the ?stats=1 readout refreshes (s). */
 const STATS_EVERY = 0.5;
@@ -54,7 +63,7 @@ const UP = new Vector3(0, 1, 0);
  * Starts the 3D ride in `#scene`. Resolves once the first frame is on screen, so the loading screen can stay up
  * until then (the first frame compiles the shaders, which can take a moment on a phone).
  * @param {{ content: import('./content/normalize.js').Content, debug: ReturnType<import('./debug.js').parseDebugParams>,
- *           assets?: object[] }} options  `assets` are the loaded photos (Task 10)
+ *           assets?: import('./photos/photos.js').PhotoAsset[] }} options  `assets` are the moments' photos (photos.js)
  * @returns {Promise<App|null>}  null when the browser has no WebGL2
  */
 export async function startApp({ content, debug, assets = [] }) {
@@ -80,6 +89,35 @@ export async function startApp({ content, debug, assets = [] }) {
   const skyDecor = createSkyDecor();
   const particles = createAmbientParticles({ maxCount: AMBIENT_PARTICLES });
   scene.add(dressing.group, skyDecor.group, particles.points);
+
+  // A photo sign at every stop, and the two of them beside every other one.
+  const signs = new Group();
+  signs.name = 'signs';
+  /** @type {Array<{ distance: number, group: Group, couple: ReturnType<typeof createCouple>|null }>} */
+  const roadside = [];
+  for (const stop of layout.stops) {
+    const asset = assets.find((a) => a.index === stop.index) || null;
+    const sign = createPhotoSign(asset, { date: content.moments[stop.index].date });
+    placeSign(sign, path, stop);
+    const group = new Group();
+    group.add(sign);
+    let couple = null;
+    if (stop.index % 2 === 1) {
+      couple = createCouple(content.characters);
+      placeCouple(couple.group, path, stop, sign.userData.photoW);
+      group.add(couple.group);
+    }
+    signs.add(group);
+    roadside.push({ distance: stop.distance, group, couple });
+  }
+  scene.add(signs);
+  // The photos go to the GPU now rather than as each sign comes into view, which would stutter the ride.
+  signs.traverse((o) => { if (o.material && o.material.map) renderer.initTexture(o.material.map); });
+
+  // Her seat: the cabin rides on the rig, laid out for the screen.
+  const cabin = createCabin();
+  rig.add(cabin.group);
+  cabin.fit(camera);
 
   // Light and fog, set from the environment every frame.
   const hemi = new HemisphereLight();
@@ -131,7 +169,10 @@ export async function startApp({ content, debug, assets = [] }) {
   applyTier();
 
   // The page around the canvas.
-  const resize = () => stage.resize();
+  const resize = () => {
+    stage.resize();
+    cabin.fit(camera);
+  };
   window.addEventListener('resize', resize);
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(resize).observe(container);
   let lastTime = null;
@@ -232,6 +273,11 @@ export async function startApp({ content, debug, assets = [] }) {
     skyDecor.update(dt, eye, env);
     particles.update(dt, env, eye);
     dressing.update(dt, elapsed);
+    cabin.update(dt, ride.speed, elapsed);
+    for (const spot of roadside) {
+      spot.group.visible = Math.abs(spot.distance - d) < SIGN_RANGE;
+      if (spot.couple && spot.group.visible) spot.couple.update(elapsed);
+    }
     stage.render();
 
     appState.mode = '3d';
