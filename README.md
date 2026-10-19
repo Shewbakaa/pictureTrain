@@ -1,0 +1,275 @@
+# A ride through our first year
+
+## 1. What this is
+
+A little website you send as a link. She taps "Begin the ride" and a cosy cartoon train takes her through
+five scenes (spring, summer, autumn, winter and an evening town). It slows down beside a photo sign for each
+moment you chose (ten to start with), and a card slides up with the photo, the date and your words. The
+last stop is the Day 365 station, where your message to her appears. It is built for phones held upright,
+plays a soft music-box tune (or your own song), and works on a computer too.
+
+It is a plain folder of files: no accounts, no server and no tracking. Nothing is fetched from anywhere
+else when she opens it.
+
+**The short version:**
+
+1. Fill in `site/content.js` and the title in `site/index.html` (section 2).
+2. Add your photos to `site/photos/` (section 3), and optionally a song (section 4).
+3. Look at it on your computer (section 5) and then on a real phone (section 6).
+4. Put it online (section 7), set up the link preview (section 8), and send her the link.
+
+Nothing is sent or published by anything in this folder until you do it yourself.
+
+**What is in the folder:**
+
+- `site/` is the website. This is the only folder that gets published.
+- `site/content.js` is the one file you edit to make it yours.
+- `site/photos/` and `site/music/` are where your photos and song go.
+- `scripts/`, `tests/` and `package.json` are tools for checking the site and making the link-preview
+  picture. She never sees them.
+
+## 2. Make it yours
+
+Open `site/content.js` in any text editor. Every field is explained in the notes inside the file. Replace
+everything that is in `[square brackets]`, brackets included: her name, your name, the note on the first
+screen, your message at the end, and the date, title and caption of each of the ten moments. You can add
+moments, remove moments or reorder the seasons. The notes in the file say how.
+
+Two things to know about that file:
+
+- Keep every piece of text inside its quotes and keep the comma at the end of the line. If your text has an
+  apostrophe (it's, Maya's), put the text in double quotes instead: `"Maya's laugh, all afternoon."`
+- If something is wrong, open the browser console (right-click the page, Inspect, Console). Messages that
+  start with `[content.js]` say what to fix. If the page never gets past the loading screen, a quote or a
+  comma is probably missing; the console names the line.
+
+Then open `site/index.html` and change two things near the top:
+
+- `<title>For you</title>`: for example `<title>For Maya</title>`.
+- `<meta property="og:title" content="For [Her name]">`: for example `content="For Maya"`.
+
+The ride sets its own page title from `content.js`, but chat apps read the link preview from `index.html`
+itself, so this is the place that decides what the link says when you send it (section 8). While you are
+there you can also reword the description line (`A little ride through our first year`) in both places it
+appears.
+
+## 3. Add photos
+
+Put your pictures in `site/photos/` and point each moment at its file in `content.js`:
+
+```js
+photo: 'photos/01.jpg',
+```
+
+Phone photos are big (12 megapixels) and iPhone photos are often HEIC, a format browsers cannot show. This
+Mac command shrinks them and turns them into JPEGs in one go. Change `~/Desktop/our-photos/` to the folder
+you keep your chosen pictures in:
+
+```sh
+mkdir -p site/photos && sips -s format jpeg -s formatOptions 82 -Z 1600 ~/Desktop/our-photos/* --out site/photos/
+```
+
+Then check what came out with `ls site/photos`. Three things to watch for:
+
+- **The file names are copied from the originals.** `IMG_4021.HEIC` becomes `IMG_4021.jpg`, but a file
+  that was already `IMG_4022.JPG` stays `.JPG` with capital letters. Your Mac does not care about capitals,
+  but once the site is online `photos/IMG_4022.jpg` is not the same file as `photos/IMG_4022.JPG`. Write
+  the names in `content.js` exactly as `ls` shows them. Renaming them to `01.jpg`, `02.jpg`, ... keeps it
+  simple.
+- **Size matters.** The ride loads up to three photos at a time. Each one has 15 seconds, and the whole set
+  has 45 seconds, before the loading screen gives up on stragglers and shows a placeholder instead. After
+  the command above each photo should be a few hundred KB, which is plenty.
+- **Any shape works.** A wide panorama or a tall screenshot shows whole, without stretching, on the card,
+  and the sign beside the track crops it to fit.
+
+If a moment has no photo (`photo: ''`), or a photo cannot be shown (a misspelt name, or a HEIC file that was
+not converted), the ride shows a soft pastel placeholder reading "Photo 3" and so on, and the browser
+console warns with the name of the file. So if you see a placeholder you did not expect, open the console
+and the message tells you which file to fix.
+
+## 4. Add your song
+
+The ride makes a soft music-box tune by itself, so you do not need to do anything. To use your own song
+instead, put an mp3 at `site/music/our-song.mp3` and set this in `content.js`:
+
+```js
+music: 'music/our-song.mp3',
+```
+
+It starts when she taps "Begin the ride", loops, and she can switch it off and on with the music button at
+the top. If the file is missing or will not play, the built-in tune plays instead and the console says why.
+Keep the file to a few MB (a 128 kbps mp3 is about 1 MB per minute).
+
+Her song is played at a little over half volume on Android and computers, but iPhones ignore the page's
+volume setting, so on an iPhone it plays at whatever the phone's volume is. Check how loud it is on a real
+phone (section 6).
+
+To hear the built-in tune without a phone, open the site and tap Begin. On the computer this was built on
+there is also a one-loop recording of it at `artifacts/music-loop-preview.wav`. That folder is not part of
+the repository, so you will not find it in a fresh download.
+
+## 5. Preview it on your computer
+
+```sh
+npm run serve
+```
+
+Then open `http://localhost:8080` in your browser. (This only needs Python 3, which comes with macOS. You
+do not need to run `npm install` for it.) Leave the terminal window open while you look; press Ctrl-C to
+stop.
+
+Do not double-click `index.html` to open it. Browsers refuse to load photos into the 3D scene from a file
+opened that way, so the ride would show placeholders or not start.
+
+## 6. Try it on a phone first
+
+It was made for phones, and a real phone is the only way to know how it feels. With the phone on the same
+Wi-Fi as your Mac:
+
+```sh
+python3 -m http.server 8080 --directory site --bind 0.0.0.0
+ipconfig getifaddr en0
+```
+
+The first command serves the site to your network (stop it with Ctrl-C when you are done; run it in one
+terminal window and the second command in another). The second prints your Mac's address, something like
+`192.168.1.23`. If it prints nothing, find the address under System Settings, Wi-Fi, Details. On the phone,
+open `http://192.168.1.23:8080` in the browser.
+
+Add `?stats=1` to the end of the address (`http://192.168.1.23:8080/?stats=1`) and a small line shows the
+frame rate, how much is being drawn, and the quality level the ride has chosen (`low`, `medium` or `high`).
+The ride starts at `medium` and moves up or down by itself to keep the motion smooth.
+
+**A checklist for the real phone:**
+
+- The ride is smooth. Watch the `?stats=1` line: a steady 30 or more frames per second is good, and it is
+  fine if the quality level steps down once or twice at the start.
+- The cards are readable and the Continue button is easy to reach with a thumb, including with your longest
+  caption.
+- Music starts after you tap Begin.
+- On iPhones before iOS 17, the silent switch mutes the built-in tune. Test with the switch on and off. If
+  she keeps hers on, tell her to flip it off (or give her your own song, which normally still plays).
+- Her own song plays at the phone's volume on iPhones (see section 4).
+- After the phone is locked and unlocked again, the music may need one tap on the music button to come back.
+- A phone call or a Siri interruption can leave the music button showing the wrong state until you tap it.
+- The finale plays: the train pulls into the Day 365 station, fireworks go off, and your message appears.
+- Try it inside the app you will send the link with. Instagram and WhatsApp open links in their own small
+  browser, which can behave a little differently. iMessage opens Safari, so that one is the same as above.
+
+**Do your testing in a private window, or clear the site's data afterwards.** The ride remembers which
+moments you have reached (in the browser's local storage, under the name `pictureTrain.progress.v1`), so on
+a later visit the timeline along the bottom already has those moments unlocked. That is a nice touch when
+she comes back to it, but it would spoil the surprise on her phone if you had tested there. So:
+
+- Test in a private (incognito) tab where you can, or
+- If you test on her phone, or on a browser she will use, clear the data afterwards. On an iPhone, go to
+  Settings, Safari (under Apps on newer iOS), Advanced, Website Data, find the address and delete it (or
+  choose "Clear History and Website Data"). On Android Chrome, tap the icon next to the address, open the
+  site's settings and choose Clear data. On a computer, open the console and run
+  `localStorage.removeItem('pictureTrain.progress.v1')`, then reload.
+
+Local storage belongs to one address on one browser, so testing on your own phone at `192.168.1.23` does
+not leave anything behind at the final address.
+
+## 7. Share it
+
+Anyone with the link can open it. There is no password. Search engines are asked not to list it
+(`noindex`), but treat the link as the secret: only send it to her.
+
+**Option A: Netlify Drop** (the easiest, and it keeps your files private). Go to
+[app.netlify.com/drop](https://app.netlify.com/drop) and drag the `site` folder onto the page. You get an
+address straight away. Netlify may ask you to sign up so that the site stays online. You can rename the
+address in its settings to something nicer. Only the `site` folder is uploaded, so nothing else of yours
+leaves your computer.
+
+**Option B: GitHub Pages**, using the workflow already in this folder (`.github/workflows/pages.yml`).
+
+1. Create a repository on GitHub and push this project to it.
+2. In the repository, open Settings, Pages, and set Source to **GitHub Actions**.
+3. Merge your work into the `main` branch. Every push to `main` publishes the `site` folder. You can also
+   start it by hand from the Actions tab (Deploy to GitHub Pages, Run workflow). The first run takes a
+   minute or two.
+4. Your address is `https://<your-username>.github.io/<repository-name>/`.
+
+On a free GitHub plan, Pages only works for public repositories. That means the whole repository is public,
+and so are your photos and your message in `site/`, for anyone who goes looking. If that is not what you
+want, use Option A.
+
+Whichever you pick, open the final address on a phone and ride all the way to the end once before you
+send it. Then clear that browser's site data (section 6) so her first ride is a surprise.
+
+## 8. The link preview
+
+When you paste the link into WhatsApp, iMessage or Instagram, the app shows a small card with a picture, a
+title and a line of text. Those come from the top of `site/index.html` (the title, `og:title`,
+`description`) and from `site/og-image.jpg`.
+
+1. After you have filled in `content.js`, run this to take a fresh picture of the first screen, with her
+   name and your note on it:
+
+   ```sh
+   npm run og-image
+   ```
+
+   It writes `site/og-image.jpg` (1200 by 630). The first time on a new computer, run `npm install` and
+   `npx playwright install chromium` first. Open the picture and have a look. Anyone who sees the link
+   preview sees this picture, her name and your note included, so look at it before you send the link.
+2. After you have deployed, open `site/index.html` and change the image line to the full address, for
+   example:
+
+   ```html
+   <meta property="og:image" content="https://you.github.io/repo/og-image.jpg">
+   ```
+
+   Chat apps need the whole address, which is why it is not filled in yet. Deploy again afterwards.
+3. Send the link to yourself first. Chat apps remember a preview once they have made it, so if you change
+   the picture or title after sending, the old one may stick. Adding something to the end of the link,
+   like `?v=2`, makes the app look again.
+
+## 9. For tinkering
+
+**Debug options.** Add these to the end of the address (`?speed=4&at=120`). They are harmless if left in.
+
+| Option | What it does |
+| --- | --- |
+| `speed=N` | Ride speed multiplier, from 1 to 50. |
+| `at=M` | Start M metres along the track (frozen there). |
+| `look=DEG` | Initial look direction in degrees (positive is left). |
+| `quality=low` | Force a quality level: `low`, `medium` or `high`. |
+| `fallback=1` | Show the plain 2D version of the story. |
+| `finale=1` | Jump straight to the finale. |
+| `ft=S` | Freeze the finale at S seconds. |
+| `stats=1` | Show the frame rate, draw calls, triangles and quality level. |
+| `ui=0` | Hide the buttons and cards. |
+
+**Ride pace.** The train cruises at 6.5 metres per second, which is about 17 seconds between stops and a
+bit over three and a half minutes for the whole ride. If you want it faster or slower, change `RIDE.CRUISE`
+in `site/src/ride/rideController.js`.
+
+**Tests.** Setup once: `npm install`, then `npx playwright install` (it downloads the browsers the tests
+use). Use a recent Node (22 or newer).
+
+```sh
+npm test            # unit tests, a few seconds
+npm run test:e2e    # in-browser tests on an iPhone-sized WebKit and a Pixel-sized Chromium
+npm run shot -- name "?at=120"    # screenshot into artifacts/shots/name.png
+```
+
+The in-browser tests ride the whole way through the ride once, on Chromium only. On WebKit that one test is
+skipped on purpose (one full ride is enough); everything else runs on both.
+
+`npm run vendor` re-copies Three.js and the fonts from `node_modules` into `site/`, if you ever need it.
+
+## Credits
+
+Made with:
+
+- [Three.js](https://threejs.org), the 3D engine, copy in `site/vendor/`. MIT licence, in
+  `site/vendor/THREE_LICENSE.txt`.
+- [Cormorant Garamond](https://github.com/CatharsisFonts/Cormorant) for the display text. SIL Open Font
+  Licence 1.1, in `site/fonts/LICENSE-cormorant-garamond.txt`.
+- [Nunito](https://github.com/googlefonts/nunito) for the body text and numbers. SIL Open Font Licence 1.1,
+  in `site/fonts/LICENSE-nunito.txt`.
+
+The world, the train, the figures and the music are all drawn and composed in code. There are no model
+files and no audio files.
