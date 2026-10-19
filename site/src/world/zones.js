@@ -5,6 +5,8 @@
 //
 // Colours are '#rrggbb' sRGB hex, converted by whoever uses them (THREE.Color). Distances are metres.
 //
+// ZONES is deeply frozen (changing anything in it throws): copy what you take from it before sorting or changing it.
+//
 // Light is in Three's physically based units and is applied as it stands: a white light of intensity PI
 // (about 3.14) shows a surface that faces it in its own colour. Each zone's sun and hemisphere are balanced so
 // that level ground catches about that much by day, which makes it look like its hex colour (a little warmer

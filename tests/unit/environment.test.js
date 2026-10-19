@@ -4,6 +4,7 @@ import { ZONES } from '../../site/src/world/zones.js';
 import { envAt } from '../../site/src/world/environment.js';
 import { buildLayout, zoneAt, LAYOUT } from '../../site/src/world/layout.js';
 import { normalizeContent, ZONE_IDS } from '../../site/src/content/normalize.js';
+import { PROP_TYPES } from '../../site/src/world/props.js';
 import fixture from '../fixtures/content.fixture.js';
 import * as THREE from '../../site/src/three.js';
 
@@ -83,14 +84,6 @@ const SCALARS = {
 const sunOf = (z) => new THREE.Vector3(...z.sun.dir).normalize();
 const lerp = (a, b, t) => a + (b - a) * t;
 
-// The prop library's names (PROP_TYPES in props.js, Task 7). A typo in a rule would otherwise only
-// show up when the scenery is built.
-const PROP_TYPES = [
-  'tree_round', 'tree_autumn', 'pine', 'pine_snowy', 'palm', 'bush', 'bush_autumn', 'rock', 'rock_snowy',
-  'flower_patch', 'grass_tuft', 'balloon_cluster', 'beach_ball', 'umbrella', 'pumpkin', 'hay_bale',
-  'snowman', 'house', 'lamp_post', 'bench', 'fence',
-];
-
 // Two zones back to back, so the boundary between them is at 100 m. Any pair, in either order.
 const pairLayout = (a, b) => ({
   zones: [{ id: a, start: 0, end: 100, momentIndices: [] }, { id: b, start: 100, end: 200, momentIndices: [] }],
@@ -120,6 +113,7 @@ test('the numbers in every zone make sense', () => {
     else assert.ok(p.size > 0 && p.density > 0, `${id} particles are visible`);
 
     for (const r of z.props) {
+      // Checked against the prop library, so a typo in a rule shows up here and not when the scenery is built.
       assert.ok(PROP_TYPES.includes(r.type), `${id}: ${r.type} is not a prop`);
       assert.ok(r.perMeter > 0, `${id} ${r.type} perMeter`);
       assert.ok(r.minOffset > 0 && r.maxOffset > r.minOffset, `${id} ${r.type} offsets`);
