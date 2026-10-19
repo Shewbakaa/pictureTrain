@@ -2,7 +2,7 @@
 // or a first frame that fails), and with ?fallback=1. It is the ride told as a little scrapbook she scrolls through:
 // the intro, then every moment in order on a cream card with its photo whole, its date, title and caption, and at
 // the end the wish, the message and the signoff. Same cards, fonts and photos as the ride, so it never reads as an
-// error page.
+// error page. A video moment's clip plays here with the browser's own controls.
 
 import { appState } from '../state.js';
 import { el, setChildren, svgEl } from './dom.js';
@@ -32,7 +32,7 @@ export function showFallback(content, assets) {
       intro.note ? el('p', { class: 'intro-note' }, [intro.note]) : null,
     ]),
     el('ol', { class: 'fallback-moments' }, moments.map((moment) => el('li', { class: 'fallback-card fallback-moment' }, [
-      momentPhoto(moment, assets.find((asset) => asset.index === moment.index) || null),
+      momentPhoto(moment, assets.find((asset) => asset.index === moment.index) || null, { controls: true }),
       moment.date ? el('p', { class: 'eyebrow fallback-date' }, [moment.date]) : null,
       el('h2', { class: 'fallback-title' }, [moment.title]),
       moment.caption ? el('p', { class: 'fallback-caption' }, [moment.caption]) : null,

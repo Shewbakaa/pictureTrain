@@ -152,3 +152,38 @@ test('a loader that throws, or a picture that cannot be drawn, still gives every
   const { width, height, aspect, src } = assets[1];
   assert.deepEqual({ width, height, aspect, src }, { width: 768, height: 1024, aspect: 0.75, src: 'ok' });
 });
+
+// Video moments (a photo field ending in .mp4, .m4v, .webm or .mov).
+
+test('a video moment loads as a video, shaped like the clip, alongside photos', async () => {
+  const fakeImage = { naturalWidth: 1200, naturalHeight: 900 };
+  const fakeVideo = { videoWidth: 540, videoHeight: 960 };
+  const loadedVideos = [];
+  const assets = await loadPhotos([
+    { index: 0, photo: 'photos/01.jpg' },
+    { index: 1, photo: 'photos/02.mp4' },
+    { index: 2, photo: '' },
+  ], {
+    loadImage: async () => fakeImage,
+    loadVideo: async (src) => { loadedVideos.push(src); return fakeVideo; },
+  });
+  assert.deepEqual(loadedVideos, ['photos/02.mp4'], 'only the video goes to the video loader');
+  assert.deepEqual(assets.map((a) => a.kind), ['image', 'video', 'image']);
+  const video = assets[1];
+  assert.equal(video.video, fakeVideo);
+  assert.equal(video.src, 'photos/02.mp4');
+  assert.equal(video.isPlaceholder, false);
+  assert.ok(Math.abs(video.aspect - 540 / 960) < 1e-12);
+  assert.equal(assets[0].video, null);
+});
+
+test('a video that will not load becomes a placeholder, and the warning names it', async (t) => {
+  const warnings = [];
+  t.mock.method(console, 'warn', (message) => warnings.push(message));
+  const [asset] = await loadPhotos([{ index: 0, photo: 'photos/broken.mov' }], {
+    loadVideo: async () => { throw new Error('no'); },
+  });
+  assert.equal(asset.isPlaceholder, true);
+  assert.equal(asset.kind, 'image');
+  assert.ok(warnings.some((w) => w.includes('photos/broken.mov') && /MP4/.test(w)), warnings.join('\n'));
+});

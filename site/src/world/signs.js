@@ -14,14 +14,14 @@
 // frame round the photo: lit, a sign in the shade turned it the grey-green of the ground's bounced light.
 //
 // Each sign is four draw calls: the wood and the frame merged into one mesh, the frame's front, the photo and the
-// placard.
+// placard. A video moment's photo is its clip, playing (photos/videos.js says which one plays).
 //
 // DOM-free at import time: `createPhotoSign` draws the placard on a canvas only when there is a document, and a
 // photo without a canvas leaves the frame plain, so the Node unit tests can build signs.
 
 import {
   BoxGeometry, CanvasTexture, Color, ExtrudeGeometry, Group, MathUtils, Matrix4, Mesh, MeshBasicMaterial,
-  PlaneGeometry, SRGBColorSpace, Shape, Vector3,
+  PlaneGeometry, SRGBColorSpace, Shape, Vector3, VideoTexture,
 } from '../three.js';
 import { MATERIALS } from '../render/materials.js';
 import { clamp } from '../util/math.js';
@@ -234,6 +234,7 @@ export function createPhotoSign(asset, { date = '' } = {}) {
     photo.material.map.repeat.set(...repeat);
     photo.material.map.offset.set(...offset);
   }
+  if (asset && asset.kind === 'video' && asset.video) showClipWhenItPlays(photo, asset.video, aspect, photoW / photoH);
 
   // The paper stands clear of its board for the same reason as the frame's front.
   const placard = picture(placardW, PLACARD.HEIGHT, [0, placardY, 0.015], drawPlacard(date, placardW), COLOURS.paper);
@@ -247,6 +248,33 @@ export function createPhotoSign(asset, { date = '' } = {}) {
 }
 
 const scratch = { x: new Vector3(), facing: new Vector3(), basis: new Matrix4() };
+
+/**
+ * A video moment's sign shows its poster until the clip has a picture to show, then the clip itself (cropped to
+ * the frame like a photo), which keeps showing its last picture while paused.
+ */
+function showClipWhenItPlays(photo, video, aspect, frameAspect) {
+  if (typeof video.addEventListener !== 'function') return; // the Node unit tests' stand-ins
+  const swap = () => {
+    video.removeEventListener('loadeddata', swap);
+    video.removeEventListener('playing', swap);
+    const clip = new VideoTexture(video);
+    clip.colorSpace = SRGBColorSpace;
+    const { repeat, offset } = coverUv(aspect, frameAspect);
+    clip.repeat.set(...repeat);
+    clip.offset.set(...offset);
+    const poster = photo.material.map;
+    photo.material.map = clip;
+    photo.material.color.set(0xffffff);
+    photo.material.needsUpdate = true;
+    if (poster) poster.dispose();
+  };
+  if (video.readyState >= 2) swap(); // HAVE_CURRENT_DATA: it already has a picture
+  else {
+    video.addEventListener('loadeddata', swap);
+    video.addEventListener('playing', swap);
+  }
+}
 
 /** Turns `object` upright with its front (+Z) along the horizontal unit vector `facing`. Allocates nothing. */
 function face(object, facing) {

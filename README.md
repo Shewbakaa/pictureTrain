@@ -88,6 +88,31 @@ not converted), the ride shows a soft pastel placeholder reading "Photo 3" and s
 console warns with the name of the file. So if you see a placeholder you did not expect, open the console
 and the message tells you which file to fix.
 
+### Videos
+
+A moment can be a short video instead of a photo. Put it in `site/photos/` and point the moment at it the
+same way; the ride knows it is a video from its ending (`.mp4`, `.m4v`, `.webm` or `.mov`):
+
+```js
+photo: 'photos/03.mp4',
+```
+
+The clip plays on the moment's sign as the train comes in, and again from the start in the card when the
+train stops. It plays silently and loops; she taps the round speaker on the card to hear it, and the music
+fades out while it plays and comes back when she taps Continue. Only one clip plays at a time.
+
+iPhone videos are large, and Android phones cannot play every iPhone video, so convert each clip before you
+add it. This command comes with every Mac. It makes a phone-sized MP4 that plays everywhere, and
+`--duration 15` keeps the first 15 seconds (use `--start 4` as well to start 4 seconds in):
+
+```sh
+avconvert --source ~/Desktop/our-videos/IMG_4100.MOV --preset Preset960x540 --output site/photos/03.mp4 --duration 15
+```
+
+Keep clips short (5 to 15 seconds is lovely) so they start quickly on her phone. A clip that cannot be played
+shows a "Video 3" placeholder on its sign and a photo-style placeholder in the card, and the console names the
+file, as for photos.
+
 ## 4. Add your song
 
 The ride makes a soft music-box tune by itself, so you do not need to do anything. To use your own song
@@ -128,7 +153,7 @@ It was made for phones, and a real phone is the only way to know how it feels. W
 Wi-Fi as your Mac:
 
 ```sh
-python3 -m http.server 8080 --directory site --bind 0.0.0.0
+python3 scripts/serve.py 8080 --directory site --bind 0.0.0.0
 ipconfig getifaddr en0
 ```
 

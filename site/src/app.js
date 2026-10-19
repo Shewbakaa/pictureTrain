@@ -45,6 +45,7 @@ import { renderTimeline, timelineItems } from './ui/timeline.js';
 import { initControls } from './ui/controls.js';
 import { showToast } from './ui/toast.js';
 import { createMusic } from './audio/music.js';
+import { createVideoDirector, videoToPlay } from './photos/videos.js';
 
 /**
  * The sun's shadow (high tier only): a square HALF metres either side of a point AHEAD metres along the track
@@ -214,6 +215,17 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   look.update(60);
   attachPointerControls(renderer.domElement, look);
 
+  // Video moments: one clip plays at a time, the one at the stop or the nearest coming up (photos/videos.js).
+  // Her tap on its speaker in the stop card turns its sound on, and the music fades out for it (wired below).
+  const clips = layout.stops.map((stop) => {
+    const asset = assets.find((a) => a.index === stop.index);
+    return asset && asset.kind === 'video' && asset.video ? asset.video : null;
+  });
+  let onVideoSound = () => {};
+  const director = createVideoDirector(clips, { onChange: () => onVideoSound() });
+  const clipWhere = { stops: layout.stops.map((stop) => stop.distance), isVideo: clips.map(Boolean), distance: 0, stoppedIndex: -1 };
+  document.addEventListener('visibilitychange', () => director.setHidden(document.hidden), { signal });
+
   // Quality. Things that thin out on a slow phone register here (Task 9) and hear the new share at every change.
   const governor = createQualityGovernor({ forced: debug.quality });
   /** @type {Array<(density: number) => void>} */
@@ -367,6 +379,9 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       if (Math.abs(turn - spot.sign.userData.turn) > SIGN_TURN_EPSILON) turnSign(spot.sign, turn);
       if (spot.couple) spot.couple.update(elapsed);
     }
+    clipWhere.distance = d;
+    clipWhere.stoppedIndex = ride.state === 'stopped' ? ride.stopIndex : -1;
+    director.play(videoToPlay(clipWhere));
     stage.render();
 
     appState.mode = '3d';
@@ -417,6 +432,10 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     },
   });
   document.addEventListener('visibilitychange', () => music.setHidden(document.hidden), { signal });
+  onVideoSound = () => {
+    appState.videoSound = director.sound;
+    music.setDucked(director.sound);
+  };
   let jumping = false; // a timeline jump (or "Ride again") is under way: further ones wait until it has finished
 
   function progressText() {
@@ -465,9 +484,16 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   ride.on('arrive', ({ index }) => {
     const stop = layout.stops[index];
     look.setRest(signLookYaw(stop.side));
+    // A video moment's clip starts again from the top as the card comes up (it may have been playing on the way in).
+    director.play(clips[index] ? index : -1);
+    director.restart();
     showStopCard(content.moments[stop.index], assets.find((a) => a.index === stop.index) || null, {
       total,
       onContinue: () => app.continueRide(),
+      onSound: (on) => {
+        director.setSound(on);
+        return director.sound;
+      },
     });
     saveProgress({ reachedMax: ride.reachedMax });
     appState.phase = 'stopped';
@@ -475,6 +501,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     mirrorState(); // at once, not at the next frame, so the state agrees with the card that has just come up
   });
   ride.on('depart', () => {
+    director.setSound(false);
     appState.phase = 'riding';
     refreshUi();
   });
@@ -482,6 +509,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     // The train has pulled in at the Day 365 station: under a blush, her seat gives way to the scene outside.
     appState.phase = 'finale';
     appState.view = 'finale';
+    director.play(-1);
     hideStopCard();
     controls.hide();
     look.endDrag();

@@ -7,7 +7,7 @@
     "vendor": "node scripts/vendor.mjs",
     "test": "node --test \"tests/unit/**/*.test.js\"",
     "test:e2e": "playwright test",
-    "serve": "python3 -m http.server 8080 --directory site",
+    "serve": "python3 scripts/serve.py 8080 --directory site",
     "shot": "node scripts/shot.mjs",
     "og-image": "node scripts/og-image.mjs"
   },

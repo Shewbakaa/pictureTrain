@@ -7,6 +7,10 @@
 // with "Photo N" and a little heart, so the ride still looks finished. A photo that fails is named in a console
 // warning, so the author can see which file to fix.
 //
+// A moment's "photo" can also be a short video (videos.js `mediaKind`). Only its size is loaded here (the clip itself
+// streams when it plays, so ten clips never hold up the loading screen), into a muted, looping, inline <video>, and
+// it gets a soft "Video N" poster the shape of the clip, which its sign shows until the clip starts playing.
+//
 // Photos load a few at a time (CONCURRENCY), so each has the connection to itself rather than a share of it, and
 // each gets TIMEOUT_MS from when its own request starts. However many hang, the loading as a whole gives up after
 // TOTAL_MS, so the loading screen never waits longer than that.
@@ -16,17 +20,19 @@
 
 import { drawHeart, fillDisplayText } from '../util/canvasText.js';
 import { createRng, rngRange } from '../util/rng.js';
+import { mediaKind } from './videos.js';
 
 /**
  * @typedef {{
- *   index: number, canvas: HTMLCanvasElement, width: number, height: number, aspect: number,
- *   src: string, isPlaceholder: boolean,
+ *   index: number, kind: 'image'|'video', canvas: HTMLCanvasElement|null, video: HTMLVideoElement|null,
+ *   width: number, height: number, aspect: number, src: string, isPlaceholder: boolean,
  * }} PhotoAsset
  *   The photo of moment `index`, drawn on `canvas` (`width` x `height` pixels, never more than MAX_SIZE on its
  *   long side). `aspect` is the photo's own width / height. `src` is the photo's URL as content.js gives it, or
  *   for a placeholder a data: URL of its picture, so a page can show it in an <img> either way. In the rare
  *   browser that will not give a 2D canvas, `canvas` is null (the sign shows plain paper) and a placeholder's
- *   `src` is ''.
+ *   `src` is ''. For a video moment `kind` is 'video', `video` is its muted, looping, inline <video>, `width` x
+ *   `height` and `aspect` are the clip's, and `canvas` is its "Video N" poster.
  */
 
 export const PHOTOS = Object.freeze({
@@ -71,17 +77,20 @@ export function placeholderPalette(index) {
 }
 
 /** @typedef {CanvasImageSource & { naturalWidth: number, naturalHeight: number }} LoadedImage  a decoded photo */
+/** @typedef {{ videoWidth: number, videoHeight: number }} LoadedVideo  a <video> whose size is known */
 
 /**
  * Loads every moment's photo, CONCURRENCY at a time, in the moments' order.
  * @param {import('../content/normalize.js').Moment[]} moments
  * @param {{ onProgress?: (done: number, total: number) => void,
- *           loadImage?: (src: string, signal: AbortSignal) => Promise<LoadedImage> }} [options]
+ *           loadImage?: (src: string, signal: AbortSignal) => Promise<LoadedImage>,
+ *           loadVideo?: (src: string, signal: AbortSignal) => Promise<LoadedVideo> }} [options]
  *   `onProgress` hears each moment as its photo finishes (or falls back to its placeholder). `loadImage` fetches
- *   and decodes one photo, giving up when `signal` aborts; the default loads it into an <img> (tests pass their own).
+ *   and decodes one photo, giving up when `signal` aborts; the default loads it into an <img>. `loadVideo` does the
+ *   same for a video's size, into a <video>. Tests pass their own.
  * @returns {Promise<PhotoAsset[]>}  in the moments' order; never rejects for a photo that fails
  */
-export async function loadPhotos(moments, { onProgress, loadImage = loadImageElement } = {}) {
+export async function loadPhotos(moments, { onProgress, loadImage = loadImageElement, loadVideo = loadVideoElement } = {}) {
   const total = moments.length;
   const assets = new Array(total);
   const loading = new Set(); // the AbortControllers of the requests in flight
@@ -93,7 +102,9 @@ export async function loadPhotos(moments, { onProgress, loadImage = loadImageEle
 
   /** One moment's asset: its photo if it loads in time, its placeholder otherwise. */
   async function assetFor(moment) {
-    if (!moment.photo) return placeholderAsset(moment.index);
+    const kind = mediaKind(moment.photo);
+    if (kind === 'none') return placeholderAsset(moment.index);
+    const load = kind === 'video' ? loadVideo : loadImage;
     if (!expired) {
       const request = new AbortController();
       const timer = setTimeout(() => request.abort(), PHOTOS.TIMEOUT_MS);
@@ -102,8 +113,8 @@ export async function loadPhotos(moments, { onProgress, loadImage = loadImageEle
         const gaveUp = new Promise((_, reject) => {
           request.signal.addEventListener('abort', () => reject(new Error('gave up')), { once: true });
         });
-        const image = await Promise.race([new Promise((resolve) => resolve(loadImage(moment.photo, request.signal))), gaveUp]);
-        return photoAsset(moment.index, image, moment.photo);
+        const loaded = await Promise.race([new Promise((resolve) => resolve(load(moment.photo, request.signal))), gaveUp]);
+        return kind === 'video' ? videoAsset(moment.index, loaded, moment.photo) : photoAsset(moment.index, loaded, moment.photo);
       } catch {
         // Falls through to the placeholder.
       } finally {
@@ -111,7 +122,8 @@ export async function loadPhotos(moments, { onProgress, loadImage = loadImageEle
         loading.delete(request);
       }
     }
-    console.warn(`[photos] Could not load "${moment.photo}" — showing a placeholder. Use JPG or PNG.`);
+    const advice = kind === 'video' ? 'Use MP4 (H.264) for videos, see the README.' : 'Use JPG or PNG.';
+    console.warn(`[photos] Could not load "${moment.photo}" — showing a placeholder. ${advice}`);
     return placeholderAsset(moment.index);
   }
 
@@ -173,6 +185,46 @@ function loadImageElement(src, signal) {
   });
 }
 
+/**
+ * Loads just the size of the video at `src` into a muted, looping, inline <video> (all three, so phones let it
+ * play on its own later). Rejects when it fails, has no picture, or `signal` aborts (which also stops the load).
+ */
+function loadVideoElement(src, signal) {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.muted = true;
+    video.defaultMuted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.setAttribute('muted', '');
+    video.setAttribute('playsinline', '');
+    video.setAttribute('webkit-playsinline', '');
+    video.preload = 'metadata';
+    const stop = () => {
+      video.onloadedmetadata = null;
+      video.onerror = null;
+      signal.removeEventListener('abort', onAbort);
+    };
+    function onAbort() {
+      stop();
+      video.removeAttribute('src');
+      video.load(); // stops a load that is still going
+      reject(new Error('gave up'));
+    }
+    signal.addEventListener('abort', onAbort);
+    video.onloadedmetadata = () => {
+      stop();
+      if (video.videoWidth > 0 && video.videoHeight > 0) resolve(video);
+      else reject(new Error('no picture'));
+    };
+    video.onerror = () => {
+      stop();
+      reject(new Error('failed to load'));
+    };
+    video.src = src;
+  });
+}
+
 /** A canvas of the given size and its 2D context, or null where there is none (Node, or a browser out of memory). */
 function newCanvas(width, height) {
   if (typeof document === 'undefined') return null;
@@ -193,13 +245,28 @@ function photoAsset(index, image, src) {
     made.g.imageSmoothingQuality = 'high';
     made.g.drawImage(image, 0, 0, width, height);
   }
-  return { index, canvas: made ? made.canvas : null, width, height, aspect: w / h, src, isPlaceholder: false };
+  return { index, kind: 'image', canvas: made ? made.canvas : null, video: null, width, height, aspect: w / h, src, isPlaceholder: false };
+}
+
+/** A video moment: its <video>, and a "Video N" poster the clip's shape for its sign until the clip plays. */
+function videoAsset(index, video, src) {
+  const { videoWidth: w, videoHeight: h } = video;
+  const poster = fitWithin(w, h, PHOTOS.PLACEHOLDER_HEIGHT);
+  const made = newCanvas(poster.width, poster.height);
+  if (made) {
+    try {
+      drawPlaceholder(made.g, poster.width, poster.height, index, 'Video');
+    } catch {
+      // A plain poster: the clip replaces it as soon as it plays.
+    }
+  }
+  return { index, kind: 'video', canvas: made ? made.canvas : null, video, width: w, height: h, aspect: w / h, src, isPlaceholder: false };
 }
 
 /** The soft placeholder of moment `index`: a portrait pastel gradient with "Photo N" and a small heart. */
 function placeholderAsset(index) {
   const { PLACEHOLDER_WIDTH: w, PLACEHOLDER_HEIGHT: h } = PHOTOS;
-  const plain = { index, canvas: null, width: w, height: h, aspect: w / h, src: '', isPlaceholder: true };
+  const plain = { index, kind: 'image', canvas: null, video: null, width: w, height: h, aspect: w / h, src: '', isPlaceholder: true };
   const made = newCanvas(w, h);
   if (!made) return plain;
   try {
@@ -210,8 +277,8 @@ function placeholderAsset(index) {
   }
 }
 
-/** Paints placeholder `index` onto `g`, `w` x `h`. */
-function drawPlaceholder(g, w, h, index) {
+/** Paints placeholder `index` onto `g`, `w` x `h`: "Photo N" (or `label` N) with a heart, or a play mark for a video. */
+function drawPlaceholder(g, w, h, index, label = 'Photo') {
   const { from, to, ink } = placeholderPalette(index);
 
   const wash = g.createLinearGradient(0, 0, w * 0.6, h);
@@ -244,7 +311,28 @@ function drawPlaceholder(g, w, h, index) {
   g.strokeRect(w * 0.06, w * 0.06, w * 0.88, h - w * 0.12);
 
   // "Photo N" in the display font, as the station boards are written (main.js loads it before the photos).
+  const unit = Math.min(w, h);
   g.fillStyle = ink;
-  fillDisplayText(g, `Photo ${index + 1}`, w / 2, h * 0.47, Math.round(w * 0.15));
-  drawHeart(g, w / 2, h * 0.58, w * 0.03, ink);
+  fillDisplayText(g, `${label} ${index + 1}`, w / 2, h * 0.47, Math.round(unit * 0.15));
+  if (label === 'Video') playMark(g, w / 2, h * 0.47 + unit * 0.14, unit * 0.06, ink);
+  else drawHeart(g, w / 2, h * 0.58, w * 0.03, ink);
+}
+
+/** A soft round play mark, `r` across the middle, centred on (x, y). */
+function playMark(g, x, y, r, colour) {
+  g.save();
+  g.globalAlpha = 0.85;
+  g.lineWidth = Math.max(2, r * 0.18);
+  g.strokeStyle = colour;
+  g.beginPath();
+  g.arc(x, y, r, 0, Math.PI * 2);
+  g.stroke();
+  g.fillStyle = colour;
+  g.beginPath();
+  g.moveTo(x - r * 0.32, y - r * 0.45);
+  g.lineTo(x + r * 0.5, y);
+  g.lineTo(x - r * 0.32, y + r * 0.45);
+  g.closePath();
+  g.fill();
+  g.restore();
 }

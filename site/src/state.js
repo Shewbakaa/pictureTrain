@@ -20,6 +20,7 @@ export const appState = {
   music: 'off',
   musicSource: null,
   audioSuspended: false,
+  videoSound: false,
   finaleTime: null,
   view: 'cabin',
 };

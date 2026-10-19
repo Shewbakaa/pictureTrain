@@ -100,7 +100,8 @@ export default {
   //             (site/photos/) and write the path here, like 'photos/01.jpg'. Use JPG or PNG.
   //             iPhone photos are often HEIC, which browsers cannot show, so convert and
   //             shrink them first (the README has a one-line command for that). Leave it as
-  //             '' to show a soft placeholder picture instead.
+  //             '' to show a soft placeholder picture instead. It can also be a short video,
+  //             like 'photos/03.mp4' (README, "Videos"): it plays on the sign and in the card.
   //    date     When it happened. It is just text, so write it however you like: 'Oct 2025',
   //             '14 Feb', 'Our first date'. Short is best, because it also appears on the
   //             photo sign.
@@ -120,7 +121,7 @@ export default {
   moments: [
     // Moment 1
     {
-      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
+      // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
       photo: '',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
@@ -134,7 +135,7 @@ export default {
 
     // Moment 2
     {
-      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
+      // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
       photo: '',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
@@ -148,7 +149,7 @@ export default {
 
     // Moment 3
     {
-      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
+      // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
       photo: '',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
@@ -162,7 +163,7 @@ export default {
 
     // Moment 4
     {
-      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
+      // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
       photo: '',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
@@ -176,7 +177,7 @@ export default {
 
     // Moment 5
     {
-      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
+      // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
       photo: '',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
@@ -190,7 +191,7 @@ export default {
 
     // Moment 6
     {
-      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
+      // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
       photo: '',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
@@ -204,7 +205,7 @@ export default {
 
     // Moment 7
     {
-      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
+      // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
       photo: '',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
@@ -218,7 +219,7 @@ export default {
 
     // Moment 8
     {
-      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
+      // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
       photo: '',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
@@ -232,7 +233,7 @@ export default {
 
     // Moment 9
     {
-      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
+      // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
       photo: '',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
@@ -246,7 +247,7 @@ export default {
 
     // Moment 10
     {
-      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
+      // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
       photo: '',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',

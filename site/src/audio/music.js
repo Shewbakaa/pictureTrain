@@ -61,7 +61,8 @@ const RESUME_WAIT_MS = 2000;
 
 /**
  * @typedef {{ state: 'off'|'playing'|'blocked', source: 'generated'|'file', suspended: boolean,
- *             start: () => Promise<void>, toggle: () => Promise<void>, setHidden: (hidden: boolean) => void }} Music
+ *             start: () => Promise<void>, toggle: () => Promise<void>, setHidden: (hidden: boolean) => void,
+ *             setDucked: (ducked: boolean) => void }} Music
  */
 
 /**
@@ -76,6 +77,7 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
   let source = src ? 'file' : 'generated';
   let started = false;
   let hidden = false;
+  let ducked = false; // a video's sound is on: the music fades out for it and comes back after
   let wanted = false; // she wants music: true from start(), then flipped by the music button
   let heard = false; // the music has played at least once
   let request = 0; // counts the requests to sound or to fall quiet: a late answer to an older one is ignored
@@ -239,6 +241,7 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
       sound(fade);
       setState('playing');
       if (hidden) hold();
+      else if (ducked) quiet(TOGGLE_FADE);
     }).catch((error) => {
       console.warn('[music] The music could not play.', error);
       setState('off');
@@ -286,8 +289,17 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
       hidden = next;
       if (!started) return;
       if (hidden && wanted) hold();
-      else if (!hidden && wanted && state !== 'blocked') turnOn(TOGGLE_FADE);
+      else if (!hidden && !ducked && wanted && state !== 'blocked') turnOn(TOGGLE_FADE);
       onChange();
+    },
+    /** A video's sound is on (true) or off again: the music fades out for it, and back in after, if she wants it. */
+    setDucked(value) {
+      const next = Boolean(value);
+      if (next === ducked) return;
+      ducked = next;
+      if (!started || hidden || !wanted || state === 'blocked') return;
+      if (ducked) quiet(TOGGLE_FADE);
+      else turnOn(TOGGLE_FADE);
     },
   };
   return music;
