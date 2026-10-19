@@ -9,6 +9,8 @@
 //    - Keep the comma at the end of every line.
 //    - If your text has an apostrophe (it's, don't, Maya's), wrap that text in double
 //      quotes instead:   caption: "Maya's laugh, all afternoon.",
+//    - Keep each piece of text on one line. To start a new line inside your final message,
+//      type \n where the new line should begin.
 //    - Lines that start with // are notes to you. The ride ignores them.
 //
 //  If something looks off, open the browser console (right-click the page, choose
@@ -92,6 +94,23 @@ export default {
   //  after it) and paste it where you want it. To remove one, delete its block. The track
   //  gets longer or shorter to fit.
   //
+  //  Every moment has the same five fields:
+  //
+  //    photo    The picture for this stop. Put your pictures in the photos folder
+  //             (site/photos/) and write the path here, like 'photos/01.jpg'. Use JPG or PNG.
+  //             iPhone photos are often HEIC, which browsers cannot show, so convert and
+  //             shrink them first (the README has a one-line command for that). Leave it as
+  //             '' to show a soft placeholder picture instead.
+  //    date     When it happened. It is just text, so write it however you like: 'Oct 2025',
+  //             '14 Feb', 'Our first date'. Short is best, because it also appears on the
+  //             photo sign.
+  //    title    A short title for the moment, just a few words.
+  //    caption  What made this moment special, in your own words. Write as much as you like:
+  //             a long note scrolls inside the card.
+  //    zone     Which scene the train is in at this stop: 'spring', 'summer', 'autumn',
+  //             'winter' or 'evening'. It has to be one of the names in zones above, and
+  //             moments must follow the zone order (see the rule below).
+  //
   //  The one rule: moments must go in the same order as the zones above. All the moments for
   //  the first zone come first, then the second zone's, and so on, ending in 'evening'.
   //  (Two per zone is the starting plan. A zone with no moments is just a short stretch of
@@ -99,109 +118,143 @@ export default {
   //  in the same zone as the moment before it and shows a "zone order" error in the console.
   // ---------------------------------------------------------------------------
   moments: [
-    // Moment 1. The five fields are explained here once; every moment has the same five.
+    // Moment 1
     {
-      // The photo for this stop. Put your pictures in the photos folder (site/photos/) and
-      // write the path here, like 'photos/01.jpg'. Use JPG or PNG. iPhone photos are often
-      // HEIC, which browsers cannot show, so convert and shrink them first (the README has a
-      // one-line command for that). Leave it as '' to show a soft placeholder picture instead.
+      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
       photo: '',
-
-      // When it happened. It is just text, so write it however you like: 'Oct 2025', '14 Feb',
-      // 'Our first date'. Short is best, because it also appears on the photo sign.
+      // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
-
-      // A short title for the moment, just a few words.
+      // A short title, just a few words.
       title: '[Moment 1 title]',
-
-      // What made this moment special, in your own words. Write as much as you like: a long
-      // note scrolls inside the card.
+      // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
-
-      // Which scene the train is in at this stop: 'spring', 'summer', 'autumn', 'winter' or
-      // 'evening'. It has to be one of the names in zones above, and moments must follow the
-      // zone order (see the note above the moments).
+      // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'spring',
     },
 
     // Moment 2
     {
+      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
       photo: '',
+      // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
+      // A short title, just a few words.
       title: '[Moment 2 title]',
+      // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
+      // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'spring',
     },
 
     // Moment 3
     {
+      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
       photo: '',
+      // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
+      // A short title, just a few words.
       title: '[Moment 3 title]',
+      // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
+      // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'summer',
     },
 
     // Moment 4
     {
+      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
       photo: '',
+      // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
+      // A short title, just a few words.
       title: '[Moment 4 title]',
+      // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
+      // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'summer',
     },
 
     // Moment 5
     {
+      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
       photo: '',
+      // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
+      // A short title, just a few words.
       title: '[Moment 5 title]',
+      // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
+      // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'autumn',
     },
 
     // Moment 6
     {
+      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
       photo: '',
+      // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
+      // A short title, just a few words.
       title: '[Moment 6 title]',
+      // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
+      // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'autumn',
     },
 
     // Moment 7
     {
+      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
       photo: '',
+      // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
+      // A short title, just a few words.
       title: '[Moment 7 title]',
+      // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
+      // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'winter',
     },
 
     // Moment 8
     {
+      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
       photo: '',
+      // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
+      // A short title, just a few words.
       title: '[Moment 8 title]',
+      // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
+      // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'winter',
     },
 
     // Moment 9
     {
+      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
       photo: '',
+      // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
+      // A short title, just a few words.
       title: '[Moment 9 title]',
+      // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
+      // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'evening',
     },
 
     // Moment 10
     {
+      // Photo file in site/photos/, like 'photos/01.jpg', or '' for a soft placeholder.
       photo: '',
+      // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
       date: '[Date]',
+      // A short title, just a few words.
       title: '[Moment 10 title]',
+      // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
+      // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'evening',
     },
   ],
