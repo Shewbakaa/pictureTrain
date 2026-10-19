@@ -487,15 +487,15 @@ body {
   from { opacity: 0; }
 }
 
-/* Frosted cream, so the bars sit lightly over the scenery. */
+/* Near-opaque cream, so the bars sit lightly over the scenery. No backdrop blur: the canvas behind them changes
+   every frame, and blurring it again for four bars each frame costs a phone's GPU for a difference too faint to
+   see through 88% cream. */
 #progress-pill,
 #music-toggle,
 #pause-toggle,
 #timeline {
   background: var(--glass);
   box-shadow: var(--shadow-soft);
-  -webkit-backdrop-filter: blur(10px) saturate(1.2);
-  backdrop-filter: blur(10px) saturate(1.2);
 }
 
 #progress-pill {
