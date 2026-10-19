@@ -16,10 +16,14 @@ const FONTS = [
   ['nunito', 'nunito-latin-700-normal.woff2'],
 ];
 
+// The fonts are under the SIL Open Font License, which asks for its text to travel with the font files.
+const FONT_PACKAGES = [...new Set(FONTS.map(([pkg]) => pkg))];
+
 const copies = [
   [fromModules('three', 'build', 'three.module.min.js'), toSite('vendor', 'three.module.min.js')],
   [fromModules('three', 'LICENSE'), toSite('vendor', 'THREE_LICENSE.txt')],
   ...FONTS.map(([pkg, file]) => [fromModules('@fontsource', pkg, 'files', file), toSite('fonts', file)]),
+  ...FONT_PACKAGES.map((pkg) => [fromModules('@fontsource', pkg, 'LICENSE'), toSite('fonts', `LICENSE-${pkg}.txt`)]),
 ];
 
 for (const [from, to] of copies) {
