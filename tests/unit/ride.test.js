@@ -135,6 +135,8 @@ test('brakes along a steady-deceleration curve into the stop', () => {
   const r = createRide({ stops, finaleDistance });
   const dt = 1 / 60;
   const speedAt = {};
+  // Far enough out that the train is still cruising: two metres before braking from CRUISE begins (20 m at 6.5 m/s).
+  const notBrakingYet = Math.ceil(RIDE.CRUISE ** 2 / (2 * RIDE.BRAKE)) + 2;
   r.start();
   for (let i = 0; i < 20000 && r.state === 'moving'; i++) {
     r.update(dt);
@@ -143,10 +145,10 @@ test('brakes along a steady-deceleration curve into the stop', () => {
     assert.ok(left > RIDE.ARRIVE_EPS);       // closer than that and it would already have arrived
     // The speed never exceeded what can still be braked away in the distance that was left before the step.
     assert.ok(r.speed <= Math.sqrt(2 * RIDE.BRAKE * (left + r.speed * dt)) + 1e-9);
-    for (const mark of [20, 10, 5]) if (left <= mark && !(mark in speedAt)) speedAt[mark] = r.speed;
+    for (const mark of [notBrakingYet, 10, 5]) if (left <= mark && !(mark in speedAt)) speedAt[mark] = r.speed;
   }
   assert.equal(r.state, 'stopped');
-  assert.equal(speedAt[20], RIDE.CRUISE);                                       // not braking yet
+  assert.equal(speedAt[notBrakingYet], RIDE.CRUISE);
   assert.ok(Math.abs(speedAt[10] - Math.sqrt(2 * RIDE.BRAKE * 10)) < 0.1);      // about 4.9 m/s
   assert.ok(Math.abs(speedAt[5] - Math.sqrt(2 * RIDE.BRAKE * 5)) < 0.1);        // about 3.5 m/s
 });
@@ -376,7 +378,7 @@ test('restart from the finale gives a fresh ride that keeps what she has reached
 
 test('restart from mid-ride or from a stop comes to rest at the start', () => {
   const cruising = createRide({ stops, finaleDistance });
-  cruising.start(); run(cruising, 8);
+  cruising.start(); run(cruising, RIDE.CRUISE / RIDE.ACCEL + 1);   // a second past reaching cruise
   assert.equal(cruising.speed, RIDE.CRUISE);
   for (const r of [cruising, stoppedAt(1)]) {
     r.restart();
