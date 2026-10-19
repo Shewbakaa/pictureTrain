@@ -10,9 +10,7 @@
 //
 // The app calls `update(dt)` once per animation frame with real seconds, mirrors the getters into
 // `appState`, and reacts to the events. The state is always up to date before an event fires, so a
-// handler may call `continue()` (or any other method) straight away. The one exception is a handler of
-// the `arrive` that `jumpTo` fires: `jumpTo` always leaves the train parked, so a `continue()` there is
-// ignored.
+// handler may call `continue()` (or any other method) straight away.
 //
 // Pure and DOM-free, so the Node unit tests can import it.
 
@@ -45,12 +43,11 @@ export const RIDE = Object.freeze({
  * @property {number} reachedMax    the highest stop it has stood at, -1 for none; `restart` keeps it
  * @property {boolean} paused       what `setPaused` last asked for (the train may still be easing to a halt)
  * @property {() => void} start     idle -> moving; no-op in any other state
- * @property {() => void} continue
- *   stopped -> moving, emitting `depart`; no-op in any other state (and while a jump's `arrive` is being delivered)
+ * @property {() => void} continue  stopped -> moving, emitting `depart`; no-op in any other state
  * @property {(paused: boolean) => void} setPaused
  * @property {(index: number) => boolean} jumpTo
- *   Put the train on stop `index`, from any state, if `0 <= index <= reachedMax`; emits `arrive` with `jumped: true`.
- *   When it returns true the train is `stopped` on that stop, even if a handler tried to `continue()` meanwhile.
+ *   Put the train on stop `index`, from any state, if `0 <= index <= reachedMax` (otherwise it does nothing and
+ *   returns false); emits `arrive` with `jumped: true`.
  * @property {() => void} restart   back to distance 0 and `idle`, keeping `reachedMax` and the handlers
  * @property {(frameSeconds: number) => void} update
  * @property {(event: 'arrive'|'depart'|'finale', handler: (payload: ArriveEvent|DepartEvent|FinaleEvent) => void) => () => void} on
@@ -86,7 +83,6 @@ export function createRide({ stops, finaleDistance, speedScale = 1, startDistanc
   let stopIndex = -1;
   let nextStopIndex = firstStopAhead(startDistance);
   let reached = Math.min(reachedMax, lastStop);
-  let jumping = false;      // true while a jump's `arrive` event is being delivered
 
   function emit(event, payload) {
     for (const entry of listeners.get(event).slice()) {
@@ -140,7 +136,7 @@ export function createRide({ stops, finaleDistance, speedScale = 1, startDistanc
   }
 
   function continueRide() {
-    if (state !== 'stopped' || jumping) return;
+    if (state !== 'stopped') return;
     const index = stopIndex;
     state = 'moving';
     stopIndex = -1;
@@ -153,16 +149,7 @@ export function createRide({ stops, finaleDistance, speedScale = 1, startDistanc
 
   function jumpTo(index) {
     if (!Number.isInteger(index) || index < 0 || index > reached) return false;
-    // Once `jumpTo` returns true the train is parked on the stop, whatever its handlers do: a handler that
-    // calls `continue()` while the jump's `arrive` is being delivered is ignored. (Arrivals by motion are
-    // different: there a handler's `continue()` sets the train going again.)
-    const wasJumping = jumping;
-    jumping = true;
-    try {
-      settleAtStop(index, true);
-    } finally {
-      jumping = wasJumping;
-    }
+    settleAtStop(index, true);
     return true;
   }
 

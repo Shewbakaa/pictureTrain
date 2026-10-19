@@ -96,7 +96,7 @@ test('jumpTo only reaches stops already reached', () => {
 
 test('jumpTo works from the finale', () => {
   const r = createRide({ stops, finaleDistance, speedScale: 50 });
-  r.on('arrive', () => r.continue());
+  r.on('arrive', (e) => { if (!e.jumped) r.continue(); });
   r.start();
   runUntil(r, () => r.state === 'finale');
   assert.equal(r.jumpTo(2), true);
@@ -236,25 +236,26 @@ test('jumpTo from mid-leg stops the train on that stop and the ride carries on f
   assert.equal(r.distance, 155);
 });
 
-test('jumpTo leaves the train parked on the stop even if a handler tries to continue()', () => {
+test('a handler may continue() from a jumped arrival too, and the train departs', () => {
   const r = stoppedAt(1);
   const events = [];
-  r.on('arrive', () => { events.push(['arrive', r.state]); r.continue(); });
+  r.on('arrive', ({ jumped }) => { events.push(['arrive', jumped, r.state]); if (jumped) r.continue(); });
   r.on('depart', (e) => events.push(['depart', e]));
   assert.equal(r.jumpTo(0), true);
-  assert.equal(r.state, 'stopped');
-  assert.equal(r.stopIndex, 0);
-  assert.deepEqual(events, [['arrive', 'stopped']]);   // the handler saw the new state; no departure
-  r.continue();                                        // an ordinary Continue afterwards works as usual
+  assert.deepEqual(events, [['arrive', true, 'stopped'], ['depart', { index: 0 }]]);   // it saw the new state first
   assert.equal(r.state, 'moving');
-  assert.deepEqual(events, [['arrive', 'stopped'], ['depart', { index: 0 }]]);
+  assert.equal(r.stopIndex, -1);
+  assert.equal(r.distance, 85);
+  runUntil(r, () => r.state === 'stopped');                                            // and the ride carries on
+  assert.equal(r.stopIndex, 1);
+  assert.equal(r.distance, 155);
 });
 
-test('a handler that throws during a jump does not leave continue() disabled', () => {
+test('a handler that throws during a jump leaves the ride stopped on that stop and usable', () => {
   const r = stoppedAt(1);
   const off = r.on('arrive', () => { throw new Error('boom'); });
   assert.throws(() => r.jumpTo(0), /boom/);
-  assert.equal(r.state, 'stopped');                    // the state was already settled
+  assert.equal(r.state, 'stopped');                    // the state was already settled before the event
   assert.equal(r.stopIndex, 0);
   off();
   r.continue();
