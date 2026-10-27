@@ -298,3 +298,57 @@ test('backgrounding suspends and restores audio', async ({ page }) => {
   expect((await appState(page)).music).toBe('playing');
   await playing(page, 'spring');
 });
+
+/** Sends the page into the background (true) or back (false), as a phone does. */
+const background = (page, hidden) => page.evaluate((h) => {
+  Object.defineProperty(document, 'hidden', { value: h, configurable: true });
+  Object.defineProperty(document, 'visibilityState', { value: h ? 'hidden' : 'visible', configurable: true });
+  document.dispatchEvent(new Event('visibilitychange'));
+}, hidden);
+
+test('the page hidden moments after Sound off: the scene\'s piece pauses there and then, not when the fade\'s timer comes', async ({ page }) => {
+  await trackAudio(page);
+  await useFixture(page);
+  await begin(page);
+  await playing(page, 'spring');
+  // Sound off, then into the background before its 0.4 s fade is over: a background page's timers may never run.
+  const paused = await page.evaluate(() => {
+    document.getElementById('music-toggle').click();
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    return [...window.__audio.media].filter((m) => m.src.includes('/music/zones/')).map((m) => m.paused);
+  });
+  expect(paused.length).toBeGreaterThan(0);
+  expect(paused.every(Boolean)).toBe(true);
+  expect((await appState(page)).music).toBe('off');
+});
+
+test('sound first made outside a tap (the Begin tap could not make it) still gives each scene its own piece', async ({ page }) => {
+  const errors = collectConsoleErrors(page);
+  // The first AudioContext this page asks for is refused, as an odd webview might.
+  await page.addInitScript(() => {
+    const Base = window.AudioContext;
+    let refused = false;
+    window.AudioContext = class extends Base {
+      constructor(...args) {
+        if (!refused) {
+          refused = true;
+          throw new Error('not now');
+        }
+        super(...args);
+      }
+    };
+  });
+  await trackAudio(page);
+  await useFixture(page);
+  await begin(page);
+  await expect.poll(async () => (await appState(page)).music).toBe('off');
+  // Coming back to the page turns the sound on without a tap, and this time the context can be made.
+  await background(page, true);
+  await background(page, false);
+  await expect.poll(async () => (await appState(page)).music).toBe('playing');
+  await expect.poll(async () => (await appState(page)).musicPiece).toBe('spring');
+  await playing(page, 'spring');
+  expect(errors).toEqual([]);
+});

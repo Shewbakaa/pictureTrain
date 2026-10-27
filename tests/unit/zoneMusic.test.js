@@ -85,7 +85,7 @@ test('at every zone boundary the two pieces dip: never both loud, never louder t
   }
 });
 
-test('the carol takes over from the tune exactly as before: the same dip, the tune gone by the middle', () => {
+test('the carol takes over from the tune exactly as before: the same dip, the tune gone by t 0.55 (MIX_OVERLAP)', () => {
   // Autumn's recording missing: autumn plays the tune, so this is the tune giving way to the carol.
   for (let w = 0; w <= 1.0001; w += 0.05) {
     const shares = pieceShares({ autumn: 1 - w, winter: w }, {}, {});

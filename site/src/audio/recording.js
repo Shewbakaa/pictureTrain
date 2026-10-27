@@ -84,9 +84,9 @@ export function createRecording(ctx, name, { file, trim }, { makeElement = () =>
    * holds it back, and anything else fails it.
    */
   function refused(error) {
-    const name = error && error.name;
-    if (name === 'AbortError') return;
-    if (name === 'NotAllowedError') block();
+    const reason = error && error.name;
+    if (reason === 'AbortError') return;
+    if (reason === 'NotAllowedError') block();
     else fail();
   }
 

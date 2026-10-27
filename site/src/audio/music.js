@@ -45,8 +45,6 @@ const TOGGLE_FADE = 0.4;
 /** How long the sound takes to fall silent when the page goes into the background (s). */
 const HIDE_FADE = 0.04;
 
-
-
 /**
  * Her song's volume: 0.37, a third down on the 0.55 it had before the train's sounds joined it, like the built-in
  * music. iPhones ignore it: there the song plays at the phone's own volume.
@@ -237,6 +235,9 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
     if (source === 'file') {
       fadeVolume(FILE_VOLUME, fade);
     } else {
+      // Made here too, in case the context could only be made now, outside a tap (coming back to the page, say): the
+      // scenes still get their pieces, any the browser holds back until a tap played by the tune meanwhile.
+      makeRecordings();
       if (!soundtrack) soundtrack = createSoundtrack(ctx, mixer.music, { recordings: recordings || {} });
       soundtrack.setZones(weights);
       soundtrack.play();
@@ -367,6 +368,9 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
       hidden = next;
       if (!started) return;
       if (hidden && wanted) hold();
+      // Sound off moments ago and still fading: the scenes' music is held now, not when the fade's timer comes (a
+      // background page's timers may never run).
+      else if (hidden && soundtrack) soundtrack.pause();
       else if (!hidden && !ducked && wanted && state !== 'blocked') turnOn(TOGGLE_FADE);
       onChange();
     },
