@@ -5,63 +5,7 @@ import assert from 'node:assert/strict';
 import { createSfx, createKit } from '../../site/src/audio/sfx.js';
 import { createMixer } from '../../site/src/audio/mixer.js';
 import { RIDE } from '../../site/src/ride/rideController.js';
-
-/** A stand-in for an AudioContext: enough of the API for the mixer and the train's sounds, logging every start. */
-function stubContext() {
-  const starts = []; // { type: 'noise'|'osc', at }
-  const sources = [];
-  const param = (value = 0) => ({
-    value,
-    setValueAtTime() { return this; },
-    linearRampToValueAtTime() { return this; },
-    exponentialRampToValueAtTime() { return this; },
-    cancelScheduledValues() { return this; },
-  });
-  const node = (extra) => ({
-    disconnected: false,
-    connect(target) { return target; },
-    disconnect() { this.disconnected = true; },
-    ...extra,
-  });
-  const source = (type, extra) => {
-    const n = node({
-      onended: null,
-      stopAt: Infinity,
-      start(at) { starts.push({ type, at }); },
-      stop(at) { this.stopAt = at; },
-      ...extra,
-    });
-    sources.push(n);
-    return n;
-  };
-  const ctx = {
-    currentTime: 0,
-    state: 'suspended',
-    sampleRate: 8000,
-    destination: node({}),
-    createGain: () => node({ gain: param(1) }),
-    createDynamicsCompressor: () => node({ threshold: param(), knee: param(), ratio: param(), attack: param(), release: param() }),
-    createBiquadFilter: () => node({ type: 'lowpass', frequency: param(350), Q: param(1) }),
-    createBufferSource: () => source('noise', { buffer: null, loop: false }),
-    createOscillator: () => source('osc', { type: 'sine', frequency: param(440), detune: param() }),
-    createBuffer: (channels, length, rate) => {
-      const data = new Float32Array(length);
-      return { duration: length / rate, getChannelData: () => data };
-    },
-  };
-  /** Moves the clock on to `t`, ending every source that has stopped by then. */
-  const advance = (t) => {
-    ctx.currentTime = t;
-    for (const s of sources) {
-      if (s.stopAt <= t && s.onended) {
-        const ended = s.onended;
-        s.onended = null;
-        ended();
-      }
-    }
-  };
-  return { ctx, starts, advance };
-}
+import { stubContext } from './audioStub.js';
 
 /** A fake music player: the sound starts off and silent; tests switch it on. */
 function setup() {

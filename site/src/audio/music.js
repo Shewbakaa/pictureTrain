@@ -1,6 +1,7 @@
 // The soundtrack and the switch for every sound in the ride: her song when content.js names one, otherwise the
 // built-in tune (compose.js) played live with Web Audio, a soft music-box bell with a little echo over a warm pad
-// and bass, quiet behind the ride.
+// and bass, quiet behind the ride. In the winter hills the built-in tune gives way to Silent Night (carol.js) on the
+// same instruments, crossfading with the scenery (setWinter); her own song carries on through winter instead.
 //
 // It owns the ride's one AudioContext and its master chain (mixer.js). The built-in tune plays into the chain's
 // music bus; the train's sounds and the ambience (sfx.js) play into its other buses. The Sound button, a video's
@@ -19,6 +20,7 @@
 // button.
 
 import { composeLoop, midiToFreq } from './compose.js';
+import { CAROL, carolMix, composeCarol } from './carol.js';
 import { createFader, createMixer } from './mixer.js';
 
 /**
@@ -57,6 +59,18 @@ const FLAT_Q = -3;
 const TICK_MS = 50;
 const LOOKAHEAD = 0.25;
 
+/** The schedulers' timer: every TICK_MS. The unit tests and offline renders tick by hand instead. */
+const INTERVAL = Object.freeze({ start: (tick) => setInterval(tick, TICK_MS), stop: (id) => clearInterval(id) });
+
+/**
+ * How quickly the tune and the carol follow the winter blend (s, a time constant), so a jump along the timeline
+ * into or out of winter eases across rather than clicks.
+ */
+const CROSSFADE_EASE = 0.12;
+
+/** The smallest change in a piece's share of the music worth moving its gain for. */
+const SHARE_STEP = 0.01;
+
 /**
  * Her song's volume: 0.37, a third down on the 0.55 it had before the train's sounds joined it, like the built-in
  * tune. iPhones ignore it: there the song plays at the phone's own volume.
@@ -69,8 +83,9 @@ const RESUME_WAIT_MS = 2000;
 /**
  * @typedef {{ state: 'off'|'playing'|'blocked', source: 'generated'|'file', suspended: boolean,
  *             mixer: import('./mixer.js').Mixer|null, audible: boolean, waking: boolean,
- *             start: () => Promise<void>, toggle: () => Promise<void>, setHidden: (hidden: boolean) => void,
- *             setDucked: (ducked: boolean) => void }} Music
+ *             carol: number, start: () => Promise<void>, toggle: () => Promise<void>,
+ *             setHidden: (hidden: boolean) => void, setDucked: (ducked: boolean) => void,
+ *             setWinter: (weight: number) => void }} Music
  */
 
 /**
@@ -81,7 +96,7 @@ const RESUME_WAIT_MS = 2000;
  *   button tries again. `suspended` is true while the page is in the background, holding the sound. `mixer` is the
  *   master chain, null until start() has made the AudioContext. `audible` is true while sound is on and may be heard
  *   (not held for the background or ducked for a video); `waking` while the browser is still answering a request
- *   to turn it on.
+ *   to turn it on. `carol` is how much of the built-in music is the winter carol (0 to 1).
  */
 export function createMusic({ src = '', onChange = () => {} } = {}) {
   let state = 'off';
@@ -98,8 +113,9 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
   let ctx = null;
   /** @type {import('./mixer.js').Mixer|null} */
   let mixer = null;
-  let synth = null;
-  let scheduler = null;
+  /** @type {Soundtrack|null} */
+  let soundtrack = null; // the built-in tune and the carol, made the first time the built-in music plays
+  let winter = 0; // how much of the winter hills the train is in (0 to 1): the carol's share of the built-in music
   let quietTimer = 0;
 
   /** @type {HTMLAudioElement|null} */
@@ -146,7 +162,7 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
   function idleContext(delay) {
     clearTimeout(quietTimer);
     quietTimer = setTimeout(() => {
-      if (scheduler) scheduler.stop();
+      if (soundtrack) soundtrack.pause();
       if (ctx) ctx.suspend().catch(() => {});
     }, delay * 1000 + 30);
   }
@@ -216,12 +232,10 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
     if (source === 'file') {
       fadeVolume(FILE_VOLUME, fade);
     } else {
-      if (!synth) {
-        synth = createSynth(ctx, mixer.music);
-        scheduler = createScheduler(ctx, synth, composeLoop());
-      }
-      scheduler.start();
-      synth.fade(true, fade);
+      if (!soundtrack) soundtrack = createSoundtrack(ctx, mixer.music);
+      soundtrack.setWinter(winter);
+      soundtrack.play();
+      soundtrack.fade(true, fade);
     }
     if (mixer) mixer.fade(true, first ? FIRST_FADE : Math.min(fade, TOGGLE_FADE));
   }
@@ -304,6 +318,9 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
     get waking() {
       return waking;
     },
+    get carol() {
+      return soundtrack ? soundtrack.shares.carol : 0;
+    },
     /** Call it inside the tap that starts the ride. */
     start() {
       if (started) return Promise.resolve();
@@ -338,6 +355,14 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
       if (!started || hidden || !wanted || state === 'blocked') return;
       if (ducked) quiet(TOGGLE_FADE);
       else turnOn(TOGGLE_FADE);
+    },
+    /**
+     * Every frame: how much of the winter hills the train is in (the winter zone's weight, 0 to 1). The built-in
+     * tune gives way to the carol there; her own song plays on.
+     */
+    setWinter(weight) {
+      winter = weight;
+      if (soundtrack) soundtrack.setWinter(weight);
     },
   };
   return music;
@@ -472,12 +497,104 @@ export function createSynth(ctx, out) {
 }
 
 /**
- * Plays `loop` round and round on `synth`: every TICK_MS it books the notes starting in the next LOOKAHEAD seconds
- * of the context's clock. While the context is suspended its clock stands still, so the tune picks up where it left
- * off. A note whose moment has already passed (the page stalled) is skipped rather than played late.
+ * @typedef {{ play: () => void, pause: () => void, fade: (on: boolean, seconds: number) => void,
+ *             setWinter: (weight: number) => void, readonly shares: { tune: number, carol: number } }} Soundtrack
  */
-function createScheduler(ctx, synth, loop) {
-  let timer = 0;
+
+/**
+ * The built-in music on `ctx`, into `out` (the mixer's music bus): the tune (compose.js) and, in the winter hills,
+ * Silent Night in its place (carol.js), each on instruments of its own (createSynth) behind a gain that follows the
+ * winter blend (carolMix). A piece whose share is 0 books no notes, and one that comes back after being silent
+ * begins again from its top: the carol from "Silent night" as the train rolls into winter, the tune from its
+ * opening as it rolls out. The carol is written out and given its instruments the first time winter comes near.
+ *
+ * `play()` and `pause()` run and stop the booking of notes (pause once the sound has faded out); `fade` swells the
+ * instruments in (the tune's first 3 s) or out; `setWinter` takes the winter zone's weight, every frame. `shares`
+ * is how much of each piece is playing (0 to 1, where its gain is heading; the carol's gain is CAROL.LEVEL at
+ * most). Exported so the unit tests and offline renders can drive it with their own `timer` ({ start(tick) → id,
+ * stop(id) }).
+ * @param {BaseAudioContext} ctx
+ * @param {AudioNode} out
+ * @param {{ start: (tick: () => void) => unknown, stop: (id: unknown) => void }} [timer]
+ * @returns {Soundtrack}
+ */
+export function createSoundtrack(ctx, out, timer = INTERVAL) {
+  const shares = { tune: 0, carol: 0 };
+  const piece = (name, loop, level) => {
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    gain.connect(out);
+    const synth = createSynth(ctx, gain);
+    return { name, level, gain, synth, scheduler: createScheduler(ctx, synth, loop, timer), share: 0, fromTop: true };
+  };
+  const tune = piece('tune', composeLoop(), 1);
+  let carol = null;
+  const mix = carolMix(0);
+  let playing = false;
+  let first = true; // until the first winter weight, shares are set at once; after it they ease
+
+  /** Books the piece's notes while the music plays and the piece is heard; from its top if it was silent. */
+  function run(p) {
+    if (playing && p.share > 0) {
+      p.scheduler.start(p.fromTop);
+      p.fromTop = false;
+    } else {
+      p.scheduler.stop();
+      if (p.share === 0) p.fromTop = true;
+    }
+  }
+
+  function setShare(p, share) {
+    const change = Math.abs(share - p.share);
+    if (change === 0 || (change < SHARE_STEP && share > 0 && share < 1)) return;
+    p.share = share;
+    shares[p.name] = share;
+    if (first) p.gain.gain.value = share * p.level;
+    else p.gain.gain.setTargetAtTime(share * p.level, ctx.currentTime, CROSSFADE_EASE);
+    run(p);
+  }
+
+  const soundtrack = {
+    get shares() {
+      return shares;
+    },
+    play() {
+      playing = true;
+      run(tune);
+      if (carol) run(carol);
+    },
+    pause() {
+      playing = false;
+      run(tune);
+      if (carol) run(carol);
+    },
+    fade(on, seconds) {
+      tune.synth.fade(on, seconds);
+      if (carol) carol.synth.fade(on, seconds);
+    },
+    setWinter(weight) {
+      carolMix(weight, mix);
+      if (mix.carol > 0 && !carol) {
+        carol = piece('carol', composeCarol(), CAROL.LEVEL);
+        carol.synth.fade(true, 0.01); // it swells in on its share of the crossfade instead
+      }
+      setShare(tune, mix.tune);
+      if (carol) setShare(carol, mix.carol);
+      first = false;
+    },
+  };
+  setShare(tune, 1); // the tune until it hears otherwise; the first winter weight it hears is set at once too
+  return soundtrack;
+}
+
+/**
+ * Plays `loop` round and round on `synth`: every TICK_MS (on `timer`) it books the notes starting in the next
+ * LOOKAHEAD seconds of the context's clock. While the context is suspended its clock stands still, so the tune
+ * picks up where it left off; `start(true)` begins it again from the top instead. A note whose moment has already
+ * passed (the page stalled) is skipped rather than played late.
+ */
+function createScheduler(ctx, synth, loop, timer) {
+  let running = null;
   let index = 0; // the next note to book
   let loopStart = -1; // the context time the current pass of the loop began at
   const tick = () => {
@@ -495,15 +612,19 @@ function createScheduler(ctx, synth, loop) {
     }
   };
   return {
-    start() {
-      if (timer) return;
-      if (loopStart < 0) loopStart = ctx.currentTime + 0.05;
+    start(fromTop = false) {
+      if (running !== null) return;
+      if (fromTop || loopStart < 0) {
+        loopStart = ctx.currentTime + 0.05;
+        index = 0;
+      }
       tick();
-      timer = setInterval(tick, TICK_MS);
+      running = timer.start(tick);
     },
     stop() {
-      clearInterval(timer);
-      timer = 0;
+      if (running === null) return;
+      timer.stop(running);
+      running = null;
     },
   };
 }

@@ -139,3 +139,62 @@ test('the train outside: locomotive ahead, carriage round her seat, an open door
   assert.equal(drawn, 3);
   assert.ok(triangles <= 6000, `${triangles} triangles`);
 });
+
+// The fireworks' sound keeps time with their blooms (audio/cueSounds.js plays a pop for each).
+
+import { FIREWORKS, fireworkBlooms } from '../../site/src/finale/finale.js';
+
+/**
+ * Runs the finale for `seconds` of 60 fps frames, and for each frame lists the bursts whose sparks came out in it,
+ * read from what the finale draws (each burst's age in its shader passing the shell's rise), and those
+ * fireworkBlooms reports for the same stretch of the finale's clock.
+ */
+function bloomsSeen(tier, seconds) {
+  const { scene, finale } = finaleOnStage();
+  finale.setQuality(tier);
+  finale.begin();
+  const ages = scene.getObjectByName('finale-fireworks').material.uniforms.uAge.value;
+  const before = ages.slice();
+  const drawn = [];
+  const reported = [];
+  for (let i = 0; i < seconds * 60; i++) {
+    const from = finale.time;
+    finale.update(1 / 60);
+    for (let b = 0; b < FIREWORKS.MAX; b++) {
+      const bloomed = ages[b] >= FIREWORKS.RISE && (before[b] < FIREWORKS.RISE || ages[b] < before[b]);
+      if (bloomed) drawn.push(`${i}:${b}`);
+      before[b] = ages[b];
+    }
+    fireworkBlooms(from, finale.time, finale.bursts, (b) => reported.push(`${i}:${b}`));
+  }
+  return { drawn, reported, finale };
+}
+
+test('fireworkBlooms reports each burst\'s bloom in the frame its sparks come out, round after round', () => {
+  const { drawn, reported, finale } = bloomsSeen('high', 30);
+  assert.equal(finale.bursts, FIREWORKS.MAX);
+  assert.ok(drawn.length >= 20, `${drawn.length} blooms in 30 s`);
+  assert.deepEqual(reported, drawn);
+});
+
+test('on the low tier there are fewer bursts, and fewer blooms reported with them', () => {
+  const { drawn, reported, finale } = bloomsSeen('low', 30);
+  assert.equal(finale.bursts, FIREWORKS.LOW);
+  assert.ok(drawn.every((d) => Number(d.split(':')[1]) < FIREWORKS.LOW));
+  assert.deepEqual(reported, drawn);
+});
+
+test('the first bloom comes one shell\'s rise after the fireworks event', () => {
+  const times = [];
+  fireworkBlooms(0, 30, 4, (b, t) => times.push([b, t]));
+  assert.deepEqual(times[0], [0, FINALE_TIMES.fireworks + FIREWORKS.RISE]);
+  fireworkBlooms(0, FINALE_TIMES.fireworks + FIREWORKS.RISE - 1e-6, 4, () => assert.fail('none before it'));
+  // Back-to-back stretches report each bloom exactly once.
+  const pieces = [];
+  let t = 0;
+  for (; t < 30; t += 0.37) fireworkBlooms(t, t + 0.37, 4, (b, at) => pieces.push([b, at]));
+  const whole = [];
+  fireworkBlooms(0, t, 4, (b, at) => whole.push([b, at]));
+  assert.equal(pieces.length, whole.length);
+  assert.ok(whole.length > 20);
+});

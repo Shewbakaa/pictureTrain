@@ -1,6 +1,7 @@
-// The ride's sound effects. For now the train's own sounds (trainSounds.js): a "choo-choo" and a puff of steam as it
-// sets off, chugs and the clickety-clack of the rail joints following its speed, a brake hiss as it slows for a
-// stop, a long steam sigh once it stands there, and a longer, happy whistle at the Day 365 station.
+// The ride's sound effects, and the engine the ambience (ambience.js) and the cues (cueSounds.js) play through. Its
+// own are the train's sounds (trainSounds.js): a "choo-choo" and a puff of steam as it sets off, chugs and the
+// clickety-clack of the rail joints following its speed, a brake hiss as it slows for a stop, a long steam sigh once
+// it stands there, and a longer, happy whistle at the Day 365 station.
 //
 // They play on the music's AudioContext, into the effects bus of its master chain (mixer.js), so the Sound button,
 // a video's sound and the page going into the background govern them together with the music (music.js). Nothing
@@ -15,15 +16,17 @@
 // ?speed= time warp and skips rather than bursts (sfxTiming.js), and every sound plays at most once per its own
 // gap. All the sounds together hold at most NODE_BUDGET audio nodes at a time; one that does not fit is skipped.
 //
-// For the sounds still to come (the ambience, the finale's fireworks, the card's rustle and so on):
+// The ambience and the cues use it this way:
 //   sfx.kit      null until the Begin tap has made the AudioContext; then what a sound needs to make itself (Kit,
-//                below): the context, the three buses, the shared noise, a seeded random, and the node budget.
+//                below): the context, the three buses, the shared noise and dust, a seeded random, and the node
+//                budget.
 //   sfx.define(name, { gap, play(kit, at, level) })
 //                adds a one-shot. `play` builds its nodes to start at context time `at`, counts them with
 //                kit.room() and kit.track(), and returns false if it played nothing. It plays at most once per
 //                `gap` seconds of real time.
 //   sfx.play(name, delay = 0, level = 1)
-//                plays a one-shot `delay` seconds from now, if the sound is on and its gap allows.
+//                plays a one-shot `delay` seconds from now (later, if the master fader is still coming up), if the
+//                sound is on and its gap allows.
 //   sfx.audible  true while a sound started now would be heard: for continuous layers, such as an ambience bed
 //                on kit.buses.ambience updated from the frame loop, that need to know when to schedule.
 // A continuous layer's own nodes stay connected to its bus: the master chain fades and suspends them with
@@ -52,6 +55,14 @@ const WAITING = 6;
 const NOISE_SECONDS = 2;
 const NOISE_SEED = 29;
 
+/**
+ * The shared dust: sparse single-sample crackles, DUST_DENSITY a second on average, mostly faint with a few strong
+ * (their sizes squared), from a seed of its own. Filtered, it is rustling leaves, a paper's crinkle or a firework's
+ * crackle.
+ */
+const DUST_DENSITY = 900;
+const DUST_SEED = 31;
+
 /** When the steam puffs after the whistle as the train sets off, and the finale's whistle after its sigh (s). */
 const PUFF_AFTER = 0.95;
 const FINALE_WHISTLE_AFTER = 0.35;
@@ -64,6 +75,7 @@ const BRAKE_ARM = (RIDE.CRUISE * RIDE.CRUISE) / (2 * RIDE.BRAKE) + 1;
  * @property {BaseAudioContext} ctx
  * @property {{ music: GainNode, ambience: GainNode, effects: GainNode }} buses  into the master chain
  * @property {AudioBuffer} noise  NOISE_SECONDS of white noise, mono, made once; loop it from a random point
+ * @property {AudioBuffer} dust  NOISE_SECONDS of sparse crackles, mono, made once
  * @property {() => number} random  a seeded random number in [0, 1)
  * @property {(nodes: number) => boolean} room  whether a sound of `nodes` audio nodes fits in the budget now
  * @property {(source: AudioScheduledSourceNode, nodes: number, last: AudioNode) => void} track
@@ -82,11 +94,21 @@ export function createKit(mixer) {
   const noise = ctx.createBuffer(1, Math.round(NOISE_SECONDS * ctx.sampleRate), ctx.sampleRate);
   const samples = noise.getChannelData(0);
   for (let i = 0; i < samples.length; i++) samples[i] = random() * 2 - 1;
+  const dust = ctx.createBuffer(1, samples.length, ctx.sampleRate);
+  const grains = dust.getChannelData(0);
+  const scatter = createRng(DUST_SEED);
+  const chance = DUST_DENSITY / ctx.sampleRate;
+  for (let i = 0; i < grains.length; i++) {
+    if (scatter() >= chance) continue;
+    const size = scatter();
+    grains[i] = (scatter() < 0.5 ? -1 : 1) * size * size;
+  }
   let live = 0;
   return {
     ctx,
     buses: { music: mixer.music, ambience: mixer.ambience, effects: mixer.effects },
     noise,
+    dust,
     random,
     room: (nodes) => live + nodes <= NODE_BUDGET,
     track(source, nodes, last) {

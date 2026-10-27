@@ -7,9 +7,11 @@
 //
 // On top of it sits the ride UI: the intro card, a card at every stop, the timeline, the controls and the progress
 // pill, with the furthest moment she has reached remembered across reloads. If the phone takes the GPU away
-// mid-ride, a toast offers a fresh start. The sound starts with her tap on Begin: the music, and the train's own
-// sounds (whistle, steam, chugs and the rail joints' clickety-clack), which follow the ride. One Sound button turns
-// it all on and off.
+// mid-ride, a toast offers a fresh start. The sound starts with her tap on Begin: the music, the train's own sounds
+// (whistle, steam, chugs and the rail joints' clickety-clack), which follow the ride, and each zone's ambience
+// (birds, waves, leaves, wind, crickets...), which follows the scenery; in the winter hills the built-in tune gives
+// way to a carol. A card rustles as it comes up, and the finale's hearts and fireworks are heard. One Sound button
+// turns it all on and off.
 //
 // At the Day 365 station the ride ends in the finale (finale/finale.js): under a blush fade her seat gives way to
 // the train seen from outside, the two of them meet on the platform, and his message comes up on a card with the
@@ -48,6 +50,8 @@ import { initControls } from './ui/controls.js';
 import { showToast } from './ui/toast.js';
 import { createMusic } from './audio/music.js';
 import { createSfx } from './audio/sfx.js';
+import { createAmbience } from './audio/ambience.js';
+import { createCues } from './audio/cueSounds.js';
 import { createVideoDirector, videoToPlay } from './photos/videos.js';
 
 /**
@@ -329,6 +333,10 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     appState.reachedMax = ride.reachedMax;
     appState.paused = ride.paused;
     appState.yaw = look.yaw;
+    if (ambience) {
+      appState.ambience = ambience.beds;
+      appState.carol = music.carol;
+    }
     appState.finaleTime = finale.active ? finale.time : null;
     appState.quality = governor.tier;
     const { drawCalls, triangles } = stage.info();
@@ -349,8 +357,13 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   /** Hears the finale's events ('hearts', 'fireworks', 'card'); the ride UI sets it once it is up. */
   let onFinaleEvent = () => {};
 
-  /** The train's sounds (audio/sfx.js), made with the music once the ride UI is up. */
+  /**
+   * The train's sounds (audio/sfx.js), the zones' ambience (audio/ambience.js) and the cues (audio/cueSounds.js),
+   * made with the music once the ride UI is up.
+   */
   let sfx = null;
+  let ambience = null;
+  let cues = null;
 
   /** Metres from `d` to where the moving train stops next (a stop or the finale); Infinity when it is not moving. */
   function toStop(d) {
@@ -371,6 +384,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     if (finale.active) {
       // The finale moves the camera itself.
       for (const name of finale.update(dt)) onFinaleEvent(name);
+      if (cues) cues.fireworks(finale.time, finale.bursts);
     } else {
       camera.rotation.set(look.pitch, look.yaw, 0, 'YXZ');
     }
@@ -383,7 +397,11 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     particles.update(dt, env, eye);
     dressing.update(dt, elapsed);
     cabin.update(dt, ride.speed, elapsed);
-    if (sfx) sfx.update(ride.speed, d, dt, toStop(d));
+    if (sfx) {
+      sfx.update(ride.speed, d, dt, toStop(d));
+      ambience.update(env, look.yaw, dt, d);
+      music.setWinter(ambience.winter); // the carol in place of the built-in tune in the winter hills
+    }
     for (const spot of roadside) {
       spot.group.visible = Math.abs(spot.distance - d) < SIGN_RANGE;
       if (!spot.group.visible) continue;
@@ -446,6 +464,8 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     },
   });
   sfx = createSfx(music);
+  ambience = createAmbience(sfx);
+  cues = createCues(sfx);
   document.addEventListener('visibilitychange', () => music.setHidden(document.hidden), { signal });
   onVideoSound = () => {
     appState.videoSound = director.sound;
@@ -486,8 +506,10 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     appState.view = 'cabin';
   }
 
-  // The finale's card comes up over the fireworks, with the timeline below it to go back to any moment.
+  // The hearts sparkle as they rise; the finale's card comes up over the fireworks, with the timeline below it to go
+  // back to any moment.
   onFinaleEvent = (name) => {
+    if (name === 'hearts') cues.hearts();
     if (name !== 'card' || !finale.active) return;
     appState.phase = 'done';
     showFinaleCard(content, { onRideAgain: () => app.rideAgain() });
@@ -504,6 +526,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     // A video moment's clip starts again from the top as the card comes up (it may have been playing on the way in).
     director.play(clips[index] ? index : -1);
     director.restart();
+    cues.card(); // a quiet rustle as the card slides up
     showStopCard(content.moments[stop.index], assets.find((a) => a.index === stop.index) || null, {
       total,
       onContinue: () => app.continueRide(),

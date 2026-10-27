@@ -4,6 +4,8 @@
 //
 // phase: 'loading' | 'intro' | 'riding' | 'stopped' | 'finale' | 'done' | 'fallback' | 'error'
 // mode:  '3d' | 'fallback' | null (null until the first 3D frame or the fallback page is shown)
+// ambience: the zones whose ambience is playing (their beds are up), e.g. ['spring'] or ['spring', 'summer']
+// carol: how much of the built-in music is the winter carol rather than the tune, 0 to 1
 export const appState = {
   phase: 'loading',
   mode: null,
@@ -21,6 +23,8 @@ export const appState = {
   musicSource: null,
   audioSuspended: false,
   videoSound: false,
+  ambience: [],
+  carol: 0,
   finaleTime: null,
   view: 'cabin',
 };

@@ -253,10 +253,28 @@ function createHearts() {
  * RADIUS metres, droop and fade out over FADE seconds. Each relaunch blooms somewhere new in the AREA (along,
  * right and up ranges in the station's frame: across the track and well beyond it, over the rooftops).
  */
-const FIREWORKS = Object.freeze({
+export const FIREWORKS = Object.freeze({
   MAX: 4, LOW: 2, STAGGER: 0.8, PERIOD: 3.2, RISE: 0.7, LAUNCH: 7, TRAIL: 8, SPARKS: 110, RADIUS: 5.4, FADE: 2.3,
   SIZE: 1.25, AREA: { along: [24, 44], right: [-34, -56], up: [6, 9.5] },
 });
+
+/**
+ * The fireworks' blooms (each moment a burst's shell bursts into sparks) after finale time `from` and up to `to`,
+ * with `bursts` bursts going (the finale's `bursts`, fewer on the low tier): calls `visit(burst, t)` for each,
+ * burst by burst. Burst b first blooms a shell's RISE after it launches, STAGGER × b after the 'fireworks' event,
+ * and again every PERIOD, as updateFireworks draws them. The ride's sounds (audio/cueSounds.js) pop with them.
+ * @param {number} from
+ * @param {number} to
+ * @param {number} bursts
+ * @param {(burst: number, t: number) => void} visit
+ */
+export function fireworkBlooms(from, to, bursts, visit) {
+  for (let b = 0; b < bursts; b++) {
+    const first = T.fireworks + b * FIREWORKS.STAGGER + FIREWORKS.RISE;
+    const k = Math.max(0, Math.floor((from - first) / FIREWORKS.PERIOD) + 1);
+    for (let t = first + k * FIREWORKS.PERIOD; t <= to; t += FIREWORKS.PERIOD) visit(b, t);
+  }
+}
 
 /**
  * Colour pairs; a spark's colour lies between its burst's two. They are deeper than pastel because they are added
@@ -482,9 +500,9 @@ const STRIDE = Object.freeze({ HIM: (Math.PI * 2) / 1.15, HER: (Math.PI * 2) / 0
  *           layout: import('../world/layout.js').Layout, content: import('../content/normalize.js').Content,
  *           cabin: { setVisible: (visible: boolean) => void }, exterior: import('../three.js').Group }} options
  *   `exterior` is train/exterior.js's train; the finale places it at the station and shows it while it plays.
- * @returns {{ readonly active: boolean, readonly time: number, begin: () => void, update: (dt: number) => string[],
- *             skipTo: (t: number) => void, freeze: (frozen: boolean) => void, reset: () => void,
- *             setQuality: (tier: 'low'|'medium'|'high') => void }}
+ * @returns {{ readonly active: boolean, readonly time: number, readonly bursts: number, begin: () => void,
+ *             update: (dt: number) => string[], skipTo: (t: number) => void, freeze: (frozen: boolean) => void,
+ *             reset: () => void, setQuality: (tier: 'low'|'medium'|'high') => void }}
  *   `begin` swaps her cabin for the train outside and starts the clock at 0. `update` moves the clock on by `dt`
  *   seconds (at most a tenth of a second per frame), draws that instant and returns the events passed on the way
  *   ('hearts', 'fireworks', 'card'), each once. `skipTo` moves the clock to `t`; `freeze` stops it. `reset` puts
@@ -826,6 +844,8 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
   return {
     get active() { return active; },
     get time() { return time; },
+    /** How many firework bursts are going (fewer on the low tier), for fireworkBlooms. */
+    get bursts() { return bursts; },
     begin() {
       active = true;
       time = 0;

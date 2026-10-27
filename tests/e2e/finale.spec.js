@@ -46,16 +46,24 @@ test('full ride end to end', async ({ page, browserName }) => {
   const errors = collectConsoleErrors(page);
   await trackAudio(page);
   const titles = ['First coffee', 'Rainy walk', 'Beach day', 'Sunset pier', 'Pumpkin patch', 'Movie night', 'First snow', 'Ice skating', 'City lights', 'Our dinner'];
+  // Each stop's zone, whose ambience is playing there; in winter the carol plays in place of the tune.
+  const zones = ['spring', 'spring', 'summer', 'summer', 'autumn', 'autumn', 'winter', 'winter', 'evening', 'evening'];
   await page.goto('index.html?speed=50');
   await page.getByRole('button', { name: 'Begin the ride' }).click();
-  for (const t of titles) {
+  for (const [i, t] of titles.entries()) {
     await expect(page.locator('#stop-card')).toContainText(t);
+    await expect.poll(async () => (await appState(page)).ambience).toContain(zones[i]);
+    expect((await appState(page)).carol).toBe(zones[i] === 'winter' ? 1 : 0);
     await page.getByRole('button', { name: 'Continue' }).click();
   }
   await waitForPhase(page, 'done');
   await expect(page.locator('#finale-card')).toContainText('Happy 1 year, Maya');
-  // The train's sounds kept to real time while the ride ran 50 times too fast: they were heard, but never piled up
-  // (it crosses a rail joint every few frames, which would otherwise be dozens of clicks a second).
+  // The fireworks pop over the town (each a puff and a crackle) for as long as the finale plays.
+  const popped = (await audioReport(page)).sounds;
+  await expect.poll(async () => (await audioReport(page)).sounds - popped, { timeout: 5000 }).toBeGreaterThanOrEqual(6);
+  // The train's sounds and the ambience kept to real time while the ride ran 50 times too fast: they were heard,
+  // but never piled up (it crosses a rail joint every few frames, which would otherwise be dozens of clicks a second,
+  // and passes through a zone in a moment).
   const audio = await audioReport(page);
   expect(audio.states).toEqual(['running']);
   expect(audio.sounds).toBeGreaterThan(20);

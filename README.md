@@ -6,8 +6,8 @@ A little website you send as a link. She taps "Begin the ride" and a cosy cartoo
 five scenes (spring, summer, autumn, winter and an evening town). It slows down beside a photo sign for each
 moment you chose (ten to start with), and a card slides up with the photo, the date and your words. The
 last stop is the Day 365 station, where your message to her appears. It is built for phones held upright,
-plays a soft music-box tune (or your own song) with the little train's own sounds, and works on a computer
-too.
+plays a soft music-box tune (or your own song) with the little train's own sounds and the sounds of each
+scene, and works on a computer too.
 
 It is a plain folder of files: no accounts, no server and no tracking. Nothing is fetched from anywhere
 else when she opens it.
@@ -99,9 +99,9 @@ photo: 'photos/03.mp4',
 ```
 
 The clip plays on the moment's sign as the train comes in, and again from the start in the card when the
-train stops. It plays silently and loops; she taps the round speaker on the card to hear it, and the music
-and the train's sounds fade out while it plays and come back when she taps Continue. Only one clip plays at a
-time.
+train stops. It plays silently and loops; she taps the round speaker on the card to hear it, and the music,
+the train's sounds and the scenery's sounds fade out while it plays and come back when she taps Continue. Only
+one clip plays at a time.
 
 iPhone videos are large, and Android phones cannot play every iPhone video, so convert each clip before you
 add it. This command comes with every Mac. It makes a phone-sized MP4 that plays everywhere, and
@@ -119,8 +119,8 @@ file, as for photos.
 
 A Live Photo is a still picture plus about three seconds of motion, and the ride can show it the way her
 iPhone does. The card shows the still with a small LIVE badge; the motion plays once, silently, as the card
-comes up and then settles back to the still; and when she taps the picture it plays again with its sound (the
-music and the train's sounds fade out for it). The sign beside the track shows the still.
+comes up and then settles back to the still; and when she taps the picture it plays again with its sound (all
+the ride's other sounds fade out for it). The sign beside the track shows the still.
 
 Browsers cannot open a Live Photo directly, so export its two halves and convert them:
 
@@ -151,8 +151,14 @@ music: 'music/our-song.mp3',
 ```
 
 It starts when she taps "Begin the ride", loops, and she can switch it off and on with the Sound button at
-the top, which also switches the train's sounds (its whistle, steam, chugs and the clickety-clack of the rails).
-If the file is missing or will not play, the built-in tune plays instead and the console says why.
+the top, which also switches the ride's other sounds: the train's (its whistle, steam, chugs and the
+clickety-clack of the rails), each scene's (birds and a breeze in the meadow, waves at the beach, rustling
+leaves, a soft wind over the snow, crickets and a clock tower in the evening town), a rustle as each card comes
+up, and the finale's sparkle and fireworks. If the file is missing or will not play, the built-in tune plays
+instead and the console says why.
+
+In the winter hills the built-in tune gives way to *Silent Night*, played faintly on the same music box. That
+happens only with the built-in tune: your own song plays on through winter.
 Keep the file to a few MB (a 128 kbps mp3 is about 1 MB per minute).
 
 Her song is played at a little over a third of full volume on Android and computers, so the train's sounds can
@@ -206,11 +212,12 @@ second.)
 - The cards are readable and the Continue button is easy to reach with a thumb, including with your longest
   caption.
 - Music starts after you tap Begin, and the train whistles as it sets off. Listen once with the phone's
-  speaker: the train's sounds should sit softly under the music.
-- On iPhones before iOS 17, the silent switch mutes the built-in tune and the train's sounds. Test with the
+  speaker: the train's and the scenery's sounds should sit softly under the music, the birds and crickets
+  included, and the carol in the winter hills should be faint.
+- On iPhones before iOS 17, the silent switch mutes the built-in tune and the ride's other sounds. Test with the
   switch on and off. If she keeps hers on, tell her to flip it off, or give her your own song, which normally
-  still plays. With your song playing, check whether the train's sounds are heard too: that can differ from
-  phone to phone.
+  still plays. With your song playing, check whether the ride's other sounds are heard too: that can differ
+  from phone to phone.
 - Her own song plays at the phone's volume on iPhones (see section 4).
 - After the phone is locked and unlocked again, the sound may need one tap on the Sound button to come back.
 - A phone call or a Siri interruption can leave the Sound button showing the wrong state until you tap it.

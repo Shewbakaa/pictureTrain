@@ -54,6 +54,25 @@ test('the train whistles as it sets off and chugs along, and is quiet while the 
   await expect.poll(async () => (await audioReport(page)).sounds, { timeout: 5000 }).toBeGreaterThan(quiet);
 });
 
+test('the meadow\'s ambience comes in with the sound, and the Sound button silences it too', async ({ page }) => {
+  await trackAudio(page);
+  await useFixture(page);
+  await begin(page);
+  await expect.poll(async () => (await appState(page)).music).toBe('playing');
+  await expect.poll(async () => (await appState(page)).ambience).toEqual(['spring']); // the breeze
+
+  await soundButton(page, true).click();
+  await expect.poll(() => states(page)).toEqual(['suspended']);
+  const quiet = await audioReport(page);
+  await page.waitForTimeout(3000); // birds would sing, the breeze gust, the tune and the train go on, with sound
+  const after = await audioReport(page);
+  expect([after.sounds, after.tones]).toEqual([quiet.sounds, quiet.tones]);
+
+  await soundButton(page, false).click();
+  await expect.poll(async () => (await audioReport(page)).tones, { timeout: 5000 }).toBeGreaterThan(quiet.tones);
+  expect((await appState(page)).ambience).toEqual(['spring']);
+});
+
 test('a missing song falls back to the built-in tune', async ({ page }) => {
   const warnings = [];
   page.on('console', (m) => { if (m.type() === 'warning') warnings.push(m.text()); });
