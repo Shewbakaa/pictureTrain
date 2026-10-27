@@ -227,11 +227,12 @@ second.)
   included, and the carol in the winter hills should be faint.
 - Ride on past the first scene: the meadow's piece should fade away and the beach's begin. On an iPhone this is
   the thing to check, since iPhones only let each piece play because of her tap on Begin. If a scene plays the
-  little music-box tune instead of its piano piece, the browser would not play that scene's file.
-- On iPhones before iOS 17, the silent switch mutes the music and the ride's other sounds. Test with the
-  switch on and off. If she keeps hers on, tell her to flip it off, or give her your own song, which normally
-  still plays. With your song playing, check whether the ride's other sounds are heard too: that can differ
-  from phone to phone.
+  little music-box tune instead of its piano piece, the browser held that scene's file back: tap the Sound
+  button off and on again, which should bring the piano back.
+- Test with the iPhone's silent switch on and off. Whether the switch silences the music and the ride's other
+  sounds depends on the iPhone and its iOS version (older ones are the likelier to go quiet), so check what you
+  hear rather than assume. If it does go quiet and she keeps her switch on, tell her to flip it off. The same
+  goes for your own song, if you use one: check whether the ride's other sounds are heard beside it.
 - Her own song plays at the phone's volume on iPhones (see section 4).
 - After the phone is locked and unlocked again, the sound may need one tap on the Sound button to come back.
 - A phone call or a Siri interruption can leave the Sound button showing the wrong state until you tap it.

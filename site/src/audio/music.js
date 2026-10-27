@@ -14,9 +14,11 @@
 //
 // Phones only let sound start from a tap, so start() is called while her tap on "Begin the ride" is being handled
 // and makes its browser calls before it returns: it wakes the context and unlocks every scene's recording, one by
-// one, as phones ask (without fetching a file: each is fetched as its scene comes near). If the browser holds the
-// sound back anyway, the sound shows as off ('blocked') and a tap on the Sound button tries again. When the page
-// goes into the background (another app, a locked phone) the sound is held, and it comes back as she left it.
+// one, as phones ask (without fetching a file: each is fetched as its scene comes near, while the sound is on). If
+// the browser holds the sound back anyway, the sound shows as off ('blocked') and a tap on the Sound button tries
+// again; if it holds back a scene's recording, the built-in tune stands in for it and that tap lets it go too.
+// When the page goes into the background (another app, a locked phone) the sound is held, the recordings paused at
+// once, and it comes back as she left it.
 //
 // The AudioContext and the recordings are unlocked by that same tap even when her song is the one playing: the
 // train's sounds play on the context beside the song, and if the song cannot play (a mistyped file name, say) the
@@ -24,11 +26,10 @@
 // start; if it fails mid-song, the browser may refuse to wake the context without a tap, and then the sound shows
 // as off ('blocked') until she taps the Sound button.
 
-import { composeLoop, midiToFreq } from './compose.js';
-import { CAROL, composeCarol } from './carol.js';
-import { createFader, createMixer } from './mixer.js';
+import { createMixer } from './mixer.js';
 import { createRecording } from './recording.js';
-import { PIECES, PIECE_NAMES, ZONE_MUSIC, pieceShares } from './zoneMusic.js';
+import { createSoundtrack } from './soundtrack.js';
+import { PIECES } from './zoneMusic.js';
 import { ZONE_IDS } from '../content/normalize.js';
 
 /**
@@ -44,40 +45,7 @@ const TOGGLE_FADE = 0.4;
 /** How long the sound takes to fall silent when the page goes into the background (s). */
 const HIDE_FADE = 0.04;
 
-/**
- * The bell: a sine with a slightly sharp octave partial, a 5 ms strike and a long exponential decay, softened by a
- * lowpass and given a small echo. LEVEL is a note's peak gain at full velocity.
- */
-const BELL = { LEVEL: 0.9, PARTIAL: 2.002, PARTIAL_GAIN: 0.25, ATTACK: 0.005, DECAY: 1.6, LOWPASS: 3200 };
-const ECHO = { TIME: 0.38, FEEDBACK: 0.28, WET: 0.22 };
 
-/** The pad: three triangles ±6 cents apart, through a lowpass, swelling in and dying away slowly. */
-const PAD = { DETUNE: 6, LOWPASS: 900, ATTACK: 1.2, RELEASE: 1.5, GAIN: 0.05 };
-
-/** The bass: a plain sine, with a soft start and a release that ends with the note. */
-const BASS = { GAIN: 0.08, ATTACK: 0.06, RELEASE: 0.25 };
-
-/** Every envelope closes with a ramp this long (s) down to exactly zero before its oscillators stop. */
-const TAIL = 0.02;
-
-/** A lowpass Q (dB in Web Audio) for a Butterworth response: no resonant bump at the cutoff. */
-const FLAT_Q = -3;
-
-/** The scheduler wakes every TICK_MS and books every note starting within LOOKAHEAD seconds. */
-const TICK_MS = 50;
-const LOOKAHEAD = 0.25;
-
-/** The schedulers' timer: every TICK_MS. The unit tests and offline renders tick by hand instead. */
-const INTERVAL = Object.freeze({ start: (tick) => setInterval(tick, TICK_MS), stop: (id) => clearInterval(id) });
-
-/**
- * How quickly each piece follows the zone blend (s, a time constant), so a jump along the timeline from one scene
- * to another eases across rather than clicks.
- */
-const CROSSFADE_EASE = 0.12;
-
-/** The smallest change in a piece's share of the music worth moving its gain for. */
-const SHARE_STEP = 0.01;
 
 /**
  * Her song's volume: 0.37, a third down on the 0.55 it had before the train's sounds joined it, like the built-in
@@ -105,9 +73,10 @@ const RESUME_WAIT_MS = 2000;
  *   `suspended` is true while the page is in the background, holding the sound. `mixer` is the master chain, null
  *   until start() has made the AudioContext. `audible` is true while sound is on and may be heard (not held for the
  *   background or ducked for a video); `waking` while the browser is still answering a request to turn it on.
- *   `carol` is how much of the scenes' music is the winter carol (0 to 1). `piece` is the loudest piece: a zone's
- *   own ('spring' to 'evening', 'winter' being the carol), 'tune' where the built-in tune stands in for a zone's
- *   recording, 'file' for her song; null before start() and while nothing plays.
+ *   `carol` is how much of the scenes' music is the winter carol (0 to 1). `piece` is the piece the train's place
+ *   calls for (the largest share), whether or not the sound is on: a zone's own ('spring' to 'evening', 'winter'
+ *   being the carol), 'tune' where the built-in tune stands in for a zone's recording, 'file' for her song; null
+ *   before start(), and until the scenes' music has first been allowed to play.
  */
 export function createMusic({ src = '', onChange = () => {} } = {}) {
   let state = 'off';
@@ -124,10 +93,10 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
   let ctx = null;
   /** @type {import('./mixer.js').Mixer|null} */
   let mixer = null;
-  /** @type {Soundtrack|null} */
+  /** @type {import('./soundtrack.js').Soundtrack|null} */
   let soundtrack = null; // the scenes' music, made the first time it plays
   /** @type {Record<string, import('./recording.js').Recording>|null} */
-  let recordings = null; // each scene's recording, made and unlocked by the Begin tap
+  let recordings = null; // each scene's recording, made and unlocked by the tap that first makes the context
   /** @type {Record<string, number>} */
   const weights = {}; // each zone's weight in the scenery's blend, as last heard (setZones)
   let quietTimer = 0;
@@ -230,7 +199,8 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
 
   /**
    * Makes every scene's recording on the context and unlocks it, so each can play later without a tap: call it
-   * inside the Begin tap, after the context is made. No file is fetched yet.
+   * inside a tap, after asking for the context (the Begin tap; a Sound tap too, in case the context could only be
+   * made then). No file is fetched yet.
    */
   function makeRecordings() {
     if (recordings || !ctx) return;
@@ -239,6 +209,12 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
       recordings[zone] = createRecording(ctx, zone, PIECES[zone]);
       recordings[zone].unlock();
     }
+  }
+
+  /** Inside a tap: lets play again any recording the browser held back for want of one. */
+  function retryRecordings() {
+    if (!recordings) return;
+    for (const zone in recordings) recordings[zone].retry();
   }
 
   // Either kind.
@@ -280,8 +256,13 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
     idleContext(fade);
   }
 
-  /** Silences the sound at once for the background. */
+  /**
+   * Silences the sound at once for the background. The scenes' music is held now, not once the fade is over: a page
+   * in the background may have its timers stopped, and a recording left playing there would go on sounding (and
+   * show in the phone's Now Playing).
+   */
   function hold() {
+    if (soundtrack) soundtrack.pause();
     if (source !== 'file') return quiet(HIDE_FADE);
     clearInterval(volumeTimer);
     if (audio) {
@@ -365,14 +346,20 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
       onChange();
       return on;
     },
-    /** The Sound button. Turning it on is a tap, so it can also start sound the browser held back before. */
+    /**
+     * The Sound button. It is a tap, so it can also start sound the browser held back before: the context, and any
+     * scene's recording (which takes over from the tune again).
+     */
     toggle() {
       if (!started) return music.start();
+      retryRecordings();
       if (state === 'playing') {
         turnOff();
         return Promise.resolve();
       }
-      return turnOn(heard ? TOGGLE_FADE : START_FADE);
+      const on = turnOn(heard ? TOGGLE_FADE : START_FADE);
+      makeRecordings(); // if the context could not be made in the Begin tap but can now
+      return on;
     },
     setHidden(value) {
       const next = Boolean(value);
@@ -394,13 +381,14 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
     },
     /**
      * Every frame: each zone's weight in the scenery's blend (ambienceTiming.js zoneWeights), which the scenes'
-     * music follows, and the zones whose recordings should be loading by now (zoneMusic.js zonesToLoad). Her own
-     * song plays on through every zone, and no recording is fetched for it.
+     * music follows, and the zones whose recordings should be loading by now (zoneMusic.js zonesToLoad). They load
+     * only while she wants sound and the browser lets it run: with the sound off, a scene's file is fetched when it
+     * is played. Her own song plays on through every zone, and no recording is fetched for it.
      */
     setZones(next, near) {
       for (let i = 0; i < ZONE_IDS.length; i++) weights[ZONE_IDS[i]] = next[ZONE_IDS[i]] || 0;
       if (soundtrack) soundtrack.setZones(weights);
-      if (!near || !recordings || source === 'file') return;
+      if (!near || !recordings || source === 'file' || !wanted || state === 'blocked') return;
       for (const zone in recordings) if (near[zone]) recordings[zone].load();
     },
   };
@@ -422,341 +410,4 @@ function usePlaybackSession() {
   } catch {
     // An older or stricter browser: it plays as it would anyway.
   }
-}
-
-/**
- * The built-in tune's instruments on `ctx`, playing into `out` (the mixer's music bus) through a fader of their
- * own, silent until fade(true). Exported so the tune can be rendered offline (OfflineAudioContext) to check its
- * levels.
- * @param {BaseAudioContext} ctx
- * @param {AudioNode} out
- * @returns {{ fade: (on: boolean, seconds: number) => void, playNote: (note: import('./compose.js').Note, at: number) => void }}
- */
-export function createSynth(ctx, out) {
-  const master = ctx.createGain();
-  master.connect(out);
-  const fader = createFader(ctx, master.gain); // between silence and its full level, which the music bus sets
-
-  const lowpass = (frequency) => {
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = frequency;
-    filter.Q.value = FLAT_Q;
-    return filter;
-  };
-
-  // The bell, straight and through a feedback echo.
-  const bells = lowpass(BELL.LOWPASS);
-  bells.connect(master);
-  const echo = ctx.createDelay(1);
-  echo.delayTime.value = ECHO.TIME;
-  const feedback = ctx.createGain();
-  feedback.gain.value = ECHO.FEEDBACK;
-  const wet = ctx.createGain();
-  wet.gain.value = ECHO.WET;
-  bells.connect(echo);
-  echo.connect(feedback);
-  feedback.connect(echo);
-  echo.connect(wet);
-  wet.connect(master);
-
-  const pads = lowpass(PAD.LOWPASS);
-  pads.connect(master);
-
-  /** A sine or triangle at `frequency` into `into`, from `at` until `end`. Returns the oscillator. */
-  const oscillator = (type, frequency, into, at, end, detune = 0) => {
-    const osc = ctx.createOscillator();
-    osc.type = type;
-    osc.frequency.value = frequency;
-    osc.detune.value = detune;
-    osc.connect(into);
-    osc.start(at);
-    osc.stop(end);
-    return osc;
-  };
-
-  /** A gain into `into`, at zero from `at`: a note's envelope. freeAfter disconnects it once the note is over. */
-  const envelope = (into, at) => {
-    const env = ctx.createGain();
-    env.gain.value = 0;
-    env.gain.setValueAtTime(0, at);
-    env.connect(into);
-    return env;
-  };
-  const freeAfter = (osc, env) => {
-    osc.onended = () => env.disconnect();
-  };
-
-  const voices = {
-    bell(note, at) {
-      const f = midiToFreq(note.midi);
-      const peak = BELL.LEVEL * note.vel;
-      const decayed = at + BELL.ATTACK + BELL.DECAY;
-      const end = decayed + TAIL;
-      const env = envelope(bells, at);
-      env.gain.linearRampToValueAtTime(peak, at + BELL.ATTACK);
-      env.gain.exponentialRampToValueAtTime(peak * 0.001, decayed);
-      env.gain.linearRampToValueAtTime(0, end);
-      const partial = ctx.createGain();
-      partial.gain.value = BELL.PARTIAL_GAIN;
-      partial.connect(env);
-      oscillator('sine', f, env, at, end);
-      freeAfter(oscillator('sine', f * BELL.PARTIAL, partial, at, end), env);
-    },
-    pad(note, at) {
-      const f = midiToFreq(note.midi);
-      const peak = PAD.GAIN * note.vel;
-      const held = at + Math.max(note.dur, PAD.ATTACK);
-      const end = held + PAD.RELEASE;
-      const env = envelope(pads, at);
-      env.gain.linearRampToValueAtTime(peak, at + PAD.ATTACK);
-      env.gain.setValueAtTime(peak, held);
-      env.gain.linearRampToValueAtTime(0, end);
-      let last = null;
-      for (const cents of [-PAD.DETUNE, 0, PAD.DETUNE]) last = oscillator('triangle', f, env, at, end, cents);
-      freeAfter(last, env);
-    },
-    bass(note, at) {
-      const peak = BASS.GAIN * note.vel;
-      const end = at + Math.max(note.dur, BASS.ATTACK + BASS.RELEASE);
-      const env = envelope(master, at);
-      env.gain.linearRampToValueAtTime(peak, at + BASS.ATTACK);
-      env.gain.exponentialRampToValueAtTime(peak * 0.55, end - BASS.RELEASE);
-      env.gain.linearRampToValueAtTime(0, end);
-      freeAfter(oscillator('sine', midiToFreq(note.midi), env, at, end), env);
-    },
-  };
-
-  return {
-    fade: fader.fade,
-    playNote(note, at) {
-      voices[note.voice](note, at);
-    },
-  };
-}
-
-/**
- * @typedef {{ play: () => void, pause: () => void, fade: (on: boolean, seconds: number) => void,
- *             setZones: (weights: Record<string, number>) => void, readonly shares: Record<string, number>,
- *             readonly loudest: string|null, gainOf: (name: string) => GainNode|null }} Soundtrack
- */
-
-/**
- * The scenes' music on `ctx`, into `out` (the mixer's music bus): each zone's piece (zoneMusic.js), behind a gain
- * that follows the zone blend (pieceShares) and then one fader for them all. The recordings are `recordings`
- * (recording.js), each at its share times its trim; the winter carol (carol.js) and the built-in tune (compose.js),
- * the stand-in for a scene whose recording cannot play, are each on instruments of their own (createSynth), made
- * the first time they are heard.
- *
- * A piece starts from its top as its zone becomes audible (its share rises from 0): the carol from "Silent night"
- * as the train rolls into winter, a recording from its first note. Once its share has fallen back to 0 a carol or
- * tune books no more notes (those booked ring out), and a recording plays on for ZONE_MUSIC.TAIL while its gain
- * eases out, then pauses and goes back to its top. No more than ZONE_MUSIC.MAX_PLAYING pieces play at once: a piece
- * starting while two others play cuts short the tails of those fading out (only a jump along the timeline from the
- * middle of a blend makes three).
- *
- * `play()` and `pause()` run and hold the pieces (pause once the sound has faded out: each recording pauses where
- * it is, and plays on from there); `fade` swells the music in (its first 3 s) or out; `setZones` takes each zone's
- * weight, every frame. `shares` is how much of each piece (PIECE_NAMES) is playing (0 to 1, where its gain is
- * heading; the carol's gain is CAROL.LEVEL at most, a recording's its trim), and `loudest` names the piece with the
- * largest share, or null while none is heard. `gainOf(name)` is a piece's gain, null until it is first heard.
- * Exported so the unit tests and offline renders can drive it with their own `timer` ({ start(tick) → id,
- * stop(id) }) and recordings.
- * @param {BaseAudioContext} ctx
- * @param {AudioNode} out
- * @param {{ timer?: { start: (tick: () => void) => unknown, stop: (id: unknown) => void },
- *           recordings?: Record<string, import('./recording.js').Recording> }} [options]
- * @returns {Soundtrack}
- */
-export function createSoundtrack(ctx, out, { timer = INTERVAL, recordings = {} } = {}) {
-  const faded = ctx.createGain();
-  faded.connect(out);
-  const fader = createFader(ctx, faded.gain);
-
-  /** A piece's gain: silent until it has a share. */
-  const shareGain = () => {
-    const gain = ctx.createGain();
-    gain.gain.value = 0;
-    gain.connect(faded);
-    return gain;
-  };
-  /** A piece played on instruments of its own: the carol, or the tune. */
-  const played = (name, loop, level) => () => {
-    const gain = shareGain();
-    const synth = createSynth(ctx, gain);
-    synth.fade(true, 0.01); // the soundtrack's fader swells it in, and its share brings it in and out
-    const scheduler = createScheduler(ctx, synth, loop, timer);
-    return { name, level, gain, tails: false, start: scheduler.start, stop: scheduler.stop, update() {} };
-  };
-  /** A scene's recording: it plays on through a tail as its share falls to 0. */
-  const recorded = (recording) => () => {
-    const gain = shareGain();
-    recording.output.connect(gain);
-    return {
-      name: recording.name,
-      level: recording.trim,
-      gain,
-      tails: true,
-      start: (fromTop) => recording.start(fromTop),
-      stop: (rewind) => recording.stop(rewind),
-      update: () => recording.update(),
-    };
-  };
-  /** @type {Record<string, () => object>} how to make each piece, the first time it is heard */
-  const makers = { tune: played('tune', composeLoop(), 1), winter: played('winter', composeCarol(), CAROL.LEVEL) };
-  for (const zone of Object.keys(recordings)) makers[zone] = recorded(recordings[zone]);
-
-  const pieces = {}; // name to piece, once made
-  const made = []; // the same, as a list
-  const shares = {};
-  for (const name of PIECE_NAMES) shares[name] = 0;
-  const weights = {};
-  const mix = {}; // every piece's share for the weights, worked out each frame
-  let playing = false;
-  let first = true; // until the first weights, shares are set at once; after them they ease
-
-  /**
-   * Starts or stops the piece for its share: playing while the music plays and the piece is heard, from its top if
-   * it was silent; a recording whose share has just fallen to 0 plays on through its tail.
-   */
-  function run(p) {
-    if (playing && p.share > 0) {
-      p.tailEnd = 0;
-      if (!p.on) {
-        makeRoom(p);
-        p.start(p.fromTop);
-        p.on = true;
-      }
-      p.fromTop = false;
-    } else if (playing && p.share === 0 && p.on && p.tails) {
-      if (!p.tailEnd) p.tailEnd = ctx.currentTime + ZONE_MUSIC.TAIL;
-    } else {
-      halt(p);
-    }
-  }
-
-  /** Stops the piece: back to its top if its share is 0 (even while held), else where it is. */
-  function halt(p) {
-    const silent = p.share === 0;
-    if (p.on || (silent && !p.fromTop)) p.stop(silent);
-    p.on = false;
-    p.tailEnd = 0;
-    if (silent) p.fromTop = true;
-  }
-
-  /** Before `p` starts: if two others are playing, those fading out stop now. */
-  function makeRoom(p) {
-    let on = 0;
-    for (const q of made) if (q !== p && q.on) on += 1;
-    if (on < ZONE_MUSIC.MAX_PLAYING) return;
-    for (const q of made) if (q !== p && q.on && q.share === 0) halt(q);
-  }
-
-  function setShare(name, share) {
-    let p = pieces[name];
-    if (!p) {
-      if (!(share > 0) || !makers[name]) return;
-      p = pieces[name] = makers[name]();
-      Object.assign(p, { share: 0, on: false, fromTop: true, tailEnd: 0 });
-      made.push(p);
-    }
-    const change = Math.abs(share - p.share);
-    if (change === 0 || (change < SHARE_STEP && share > 0 && share < 1)) return;
-    p.share = share;
-    shares[name] = share;
-    if (first) p.gain.gain.value = share * p.level;
-    else p.gain.gain.setTargetAtTime(share * p.level, ctx.currentTime, CROSSFADE_EASE);
-    run(p);
-  }
-
-  return {
-    get shares() {
-      return shares;
-    },
-    get loudest() {
-      let loudest = null;
-      let top = 0;
-      for (const p of made) {
-        if (p.share > top) {
-          top = p.share;
-          loudest = p.name;
-        }
-      }
-      return loudest;
-    },
-    gainOf(name) {
-      return pieces[name] ? pieces[name].gain : null;
-    },
-    play() {
-      playing = true;
-      for (const p of made) run(p);
-    },
-    pause() {
-      playing = false;
-      for (const p of made) run(p);
-    },
-    fade(on, seconds) {
-      fader.fade(on, seconds);
-    },
-    setZones(next) {
-      for (let i = 0; i < ZONE_IDS.length; i++) weights[ZONE_IDS[i]] = next[ZONE_IDS[i]] || 0;
-      pieceShares(weights, recordings, mix);
-      // The pieces fading first, then those rising, so a piece starting finds the room it needs.
-      for (let i = 0; i < PIECE_NAMES.length; i++) {
-        if (mix[PIECE_NAMES[i]] <= shares[PIECE_NAMES[i]]) setShare(PIECE_NAMES[i], mix[PIECE_NAMES[i]]);
-      }
-      for (let i = 0; i < PIECE_NAMES.length; i++) {
-        if (mix[PIECE_NAMES[i]] > shares[PIECE_NAMES[i]]) setShare(PIECE_NAMES[i], mix[PIECE_NAMES[i]]);
-      }
-      first = false;
-      const now = ctx.currentTime;
-      for (let i = 0; i < made.length; i++) {
-        const p = made[i];
-        if (p.tailEnd && now >= p.tailEnd) halt(p);
-        if (p.on) p.update();
-      }
-    },
-  };
-}
-
-/**
- * Plays `loop` round and round on `synth`: every TICK_MS (on `timer`) it books the notes starting in the next
- * LOOKAHEAD seconds of the context's clock. While the context is suspended its clock stands still, so the tune
- * picks up where it left off; `start(true)` begins it again from the top instead. A note whose moment has already
- * passed (the page stalled) is skipped rather than played late.
- */
-function createScheduler(ctx, synth, loop, timer) {
-  let running = null;
-  let index = 0; // the next note to book
-  let loopStart = -1; // the context time the current pass of the loop began at
-  const tick = () => {
-    const now = ctx.currentTime;
-    for (;;) {
-      const note = loop.notes[index];
-      const at = loopStart + note.t;
-      if (at >= now + LOOKAHEAD) break;
-      if (at >= now) synth.playNote(note, at);
-      index += 1;
-      if (index === loop.notes.length) {
-        index = 0;
-        loopStart += loop.lengthSec;
-      }
-    }
-  };
-  return {
-    start(fromTop = false) {
-      if (running !== null) return;
-      if (fromTop || loopStart < 0) {
-        loopStart = ctx.currentTime + 0.05;
-        index = 0;
-      }
-      tick();
-      running = timer.start(tick);
-    },
-    stop() {
-      if (running === null) return;
-      timer.stop(running);
-      running = null;
-    },
-  };
 }

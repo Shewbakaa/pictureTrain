@@ -72,6 +72,7 @@ test('it is made silent and unloaded, its element looping into the context', () 
   assert.equal(recording.file, FILE);
   assert.equal(recording.trim, 4.4);
   assert.equal(recording.failed, false);
+  assert.equal(recording.blocked, false);
   assert.ok(recording.output.gain, 'its output is a gain, for the loop seam');
 });
 
@@ -126,13 +127,49 @@ test('stop(true) pauses and rewinds, for a piece whose zone has gone', () => {
 });
 
 test('a play the browser refuses fails the recording, with a warning naming the file', async () => {
-  for (const refusal of ['NotAllowedError', 'NotSupportedError', 'throw']) {
+  for (const refusal of ['NotSupportedError', 'throw']) {
     const { el, recording } = setup();
     el.answer = refusal;
     const said = await warnings(() => recording.start(true));
     assert.equal(recording.failed, true, refusal);
     assert.deepEqual(said, [`[music] Could not play "${FILE}" — the built-in tune plays in this scene instead.`]);
   }
+});
+
+test('a play refused for want of a tap holds the recording back, with a warning that says so; a tap lets it go', async () => {
+  const { el, recording } = setup();
+  el.answer = 'NotAllowedError';
+  const said = await warnings(() => recording.start(true));
+  assert.equal(recording.blocked, true);
+  assert.equal(recording.failed, false, 'not for good: a tap can let it play');
+  assert.deepEqual(said, [`[music] The browser held back "${FILE}" until a tap — the built-in tune plays in this scene for now.`]);
+  assert.equal(el.paused, true);
+  // Asked again while held back, it does not try (the soundtrack plays the tune instead) and says nothing more.
+  el.calls.length = 0;
+  const again = await warnings(() => recording.start(true));
+  assert.deepEqual(el.calls, []);
+  assert.deepEqual(again, []);
+  // A tap on the Sound button: retry() plays and pauses it at once, as the unlock does, now with its file.
+  el.answer = 'AbortError';
+  recording.retry();
+  assert.deepEqual(el.calls, [`play ${FILE}`, 'pause']);
+  assert.equal(recording.blocked, false);
+  el.answer = 'ok';
+  recording.start(true);
+  assert.equal(el.paused, false, 'it plays again');
+});
+
+test('retry() leaves a recording that is not held back alone, and one that failed for good stays failed', async () => {
+  const { el, recording } = setup();
+  recording.retry();
+  assert.deepEqual(el.calls, []);
+  el.answer = 'NotSupportedError';
+  await warnings(() => recording.start(true));
+  el.calls.length = 0;
+  recording.retry();
+  assert.deepEqual(el.calls, []);
+  assert.equal(recording.failed, true);
+  assert.equal(recording.blocked, false);
 });
 
 test('a play interrupted by a pause or a new load is not a failure', async () => {

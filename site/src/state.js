@@ -6,9 +6,10 @@
 // mode:  '3d' | 'fallback' | null (null until the first 3D frame or the fallback page is shown)
 // ambience: the zones whose ambience is playing (their beds are up), e.g. ['spring'] or ['spring', 'summer']
 // musicSource: 'built-in' (each scene's own music) | 'file' (her song) | null before the ride UI is up
-// musicPiece: the loudest piece of music: a scene's own 'spring' | 'summer' | 'autumn' | 'winter' (the carol) |
-//   'evening', 'tune' (the built-in tune, standing in for a scene whose recording cannot play), 'file' (her song),
-//   or null (before Begin, and while nothing plays)
+// musicPiece: the piece of music the train's place calls for (the one with the largest share), whether or not the
+//   sound is on: a scene's own 'spring' | 'summer' | 'autumn' | 'winter' (the carol) | 'evening', 'tune' (the
+//   built-in tune, standing in for a scene whose recording cannot play or is held back), 'file' (her song), or null
+//   (before Begin, and until the scenes' music has first been allowed to play)
 // carol: how much of the music is the winter carol, 0 to 1
 export const appState = {
   phase: 'loading',

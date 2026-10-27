@@ -189,6 +189,59 @@ test('a scene whose recording is missing plays the built-in tune, and the warnin
   expect(warnings.filter((w) => w.includes('music/zones/'))).toHaveLength(1);
 });
 
+test('a scene\'s recording the browser holds back for want of a tap plays the tune until a tap on Sound lets it go', async ({ page }) => {
+  const warnings = [];
+  page.on('console', (m) => { if (m.type() === 'warning') warnings.push(m.text()); });
+  await trackAudio(page);
+  // As a phone would if the Begin tap had not unlocked it: the beach's piece is refused until a later tap.
+  await page.addInitScript(() => {
+    const play = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function (...args) {
+      if (this.src.includes('/music/zones/summer.mp3') && !window.__tapped) {
+        return Promise.reject(new DOMException('held back until a tap', 'NotAllowedError'));
+      }
+      return play.apply(this, args);
+    };
+  });
+  await useFixture(page);
+  await page.goto('index.html?speed=50');
+  await page.getByRole('button', { name: 'Begin the ride' }).click();
+  await expect(page.locator('#stop-card')).toContainText('First coffee');
+  await rideTo(page, 'Beach day');
+  await expect.poll(async () => (await appState(page)).musicPiece).toBe('tune');
+  expect(warnings).toContain('[music] The browser held back "music/zones/summer.mp3" until a tap — the built-in tune plays in this scene for now.');
+  expect(warnings.some((w) => w.includes('Could not play'))).toBe(false);
+
+  // Her taps on the Sound button, off and on again: the first lets the beach's piece go.
+  await page.evaluate(() => { window.__tapped = true; });
+  await soundButton(page, true).click();
+  await expect.poll(async () => (await appState(page)).musicPiece).toBe('summer');
+  await expect.poll(() => states(page)).toEqual(['suspended']);
+  await soundButton(page, false).click();
+  await playing(page, 'summer');
+  expect((await appState(page)).musicPiece).toBe('summer');
+});
+
+test('with the sound off no scene\'s file is fetched; back on, the scene\'s piece is fetched and plays', async ({ page }) => {
+  await trackAudio(page);
+  await useFixture(page);
+  await page.goto('index.html?speed=50');
+  await page.getByRole('button', { name: 'Begin the ride' }).click();
+  await expect(page.locator('#stop-card')).toContainText('First coffee');
+  await playing(page, 'spring');
+  await soundButton(page, true).click();
+  await expect.poll(() => states(page)).toEqual(['suspended']);
+
+  await rideTo(page, 'Pumpkin patch'); // past the forest's 250 m mark and into it, with the sound off
+  const off = await audioReport(page);
+  expect(Object.keys(off.pieces).sort()).toEqual(['spring', 'summer']); // fetched at Begin, with the sound on
+  expect(off.unloaded).toBe(2);
+  expect((await appState(page)).musicPiece).toBe('autumn'); // the scene still calls for it
+
+  await soundButton(page, false).click();
+  await playing(page, 'autumn');
+});
+
 test('a song file is used when present, with the train\'s sounds beside it', async ({ page }) => {
   await trackAudio(page);
   await useFixture(page, { music: 'music/tone.wav' });
@@ -227,16 +280,18 @@ test('backgrounding suspends and restores audio', async ({ page }) => {
   await useFixture(page);
   await begin(page);
   await expect.poll(async () => (await appState(page)).music).toBe('playing');
+  /** Sends the page into the background or back; returns whether each scene's element was paused right after. */
   const setHidden = (hidden) => page.evaluate((h) => {
     Object.defineProperty(document, 'hidden', { value: h, configurable: true });
     Object.defineProperty(document, 'visibilityState', { value: h ? 'hidden' : 'visible', configurable: true });
     document.dispatchEvent(new Event('visibilitychange'));
+    return [...window.__audio.media].filter((m) => m.src.includes('/music/zones/')).map((m) => m.paused);
   }, hidden);
   await playing(page, 'spring');
-  await setHidden(true);
+  // Every recording is paused there and then, without waiting for a timer (a background page's may not run).
+  expect((await setHidden(true)).every(Boolean)).toBe(true);
   await expect.poll(async () => (await appState(page)).audioSuspended).toBe(true);
   await expect.poll(() => states(page)).toEqual(['suspended']);
-  await expect.poll(async () => (await pieces(page)).spring.paused).toBe(true);
   await setHidden(false);
   await expect.poll(async () => (await appState(page)).audioSuspended).toBe(false);
   await expect.poll(() => states(page)).toEqual(['running']);

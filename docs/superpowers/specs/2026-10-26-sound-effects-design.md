@@ -125,12 +125,16 @@ the site itself, like the photos. Everything else here still holds.
   stereo MP3 without metadata. Credited in the README.
 - **One piece per zone, crossfaded by the zone blend** (`audio/zoneMusic.js`). Each piece's share follows its
   zone's weight (envAt's zoneA/zoneB/t, as the ambience) through the carol's dip: across a boundary the piece
-  behind is gone by the middle of the blend and the piece ahead rises over its last 55%, equal-power, so two
-  melodies are never loud together. The carol now crosses with its neighbours this way (it used to cross with
+  behind fades out over t 0 to 0.55 and the piece ahead rises over t 0.45 to 1, equal-power, so both sound only
+  between t 0.45 and 0.55, faintly (each about 0.14 of its level at t 0.5): two melodies are never loud together. The carol now crosses with its neighbours this way (it used to cross with
   the tune; the curve is the same).
-- **The built-in tune is a fallback only.** A zone whose recording cannot load or play (missing, not audio,
-  refused) plays the tune instead, with `[music] Could not play "music/zones/<zone>.mp3" — the built-in tune
-  plays in this scene instead.` Two neighbouring zones both on the tune play it whole across their boundary.
+- **The built-in tune is a fallback only.** A zone whose recording cannot load or play (missing, not audio)
+  plays the tune instead, with `[music] Could not play "music/zones/<zone>.mp3" — the built-in tune plays in
+  this scene instead.` A recording the browser refuses for want of a tap (NotAllowedError: the unlock did not
+  take) is only held back: the tune plays there "for now", with a warning saying the browser held the file back
+  until a tap, and her next tap on the Sound button plays and pauses each held-back element again (it has its
+  file by then), after which it takes over from the tune. Two neighbouring zones both on the tune play it whole
+  across their boundary.
 - **Her song (content.music) overrides everything**: it plays throughout, with no zone piece and no carol, and
   no zone file is fetched. If it fails, the zones' music takes over (it used to be the tune).
 - **Starting and stopping.** A piece starts from its top as its zone becomes audible. A recording loops, fading
@@ -142,11 +146,15 @@ the site itself, like the photos. Everything else here still holds.
   pieces follow. At the finale the evening piece plays on.
 - **Routing.** `HTMLAudioElement → MediaElementAudioSourceNode → seam gain → share × trim gain → the soundtrack's
   fader → the music bus`, on the one shared context: the Sound button, ducking, hiding and the master fader
-  apply. Holding the sound (off, ducked, hidden) pauses each element where it is; it plays on from there.
+  apply. Holding the sound (off, ducked, hidden) pauses each element where it is; it plays on from there. When
+  the page is hidden the elements are paused at once, not after the 40 ms fade's timer, since a background
+  page's timers may never run (and a playing element would show in iOS's Now Playing).
 - **iOS.** Each element needs a tap of its own. All four are created inside the Begin tap with no file, and
   unlocked there with play() then pause(), so nothing is downloaded. A file is fetched (`preload='auto'`, src set)
-  only once its zone is within 250 m of the train or is the next zone, or when it is first played. Playwright's
-  WebKit does not enforce the gesture rule, so this is checked on a real iPhone (README section 6).
+  once its zone is within 250 m of the train or is the next zone, only while the sound is wanted and not held
+  back by the browser; otherwise when it is first played. If the context could only be made on a later Sound tap,
+  the elements are made and unlocked in that tap. Playwright's WebKit does not enforce the gesture rule, so this
+  is checked on a real iPhone (README section 6).
 - **Levels.** The tune comes out of its instruments at −13.46 LUFS (both speakers, measured offline); each
   recording gets a trim of 10^((−13.46 − its LUFS)/20), +11.5 to +12.9 dB, before the music bus. Through the
   master chain (offline, whole files): tune −22.75 LUFS / −25.21 dBFS RMS; recordings −22.74 to −22.94 LUFS /
@@ -154,8 +162,13 @@ the site itself, like the photos. Everything else here still holds.
   against the tune's −20.0) reach the compressor, which takes up to about 3 dB off their peaks and 0.1–0.2 LU off
   their loudness. Measured again in real time in Chromium (AnalyserNodes on the music bus, the first 40 s, through
   the real MediaElementSource path): the same as offline within 0.05 dB.
-- **State.** `appState.musicPiece`: the loudest piece ('spring'|'summer'|'autumn'|'winter'|'evening'|'tune'|
-  'file'|null). `appState.musicSource` is now 'built-in' or 'file' (it was 'generated' or 'file').
+- **State.** `appState.musicPiece`: the piece the train's place calls for, the largest share, whether or not
+  the sound is on ('spring'|'summer'|'autumn'|'winter'|'evening'|'tune'|'file'; null before Begin and until the
+  scenes' music has first been allowed to play). `appState.musicSource` is now 'built-in' or 'file' (it was
+  'generated' or 'file').
+- **Code.** `zoneMusic.js` (the numbers), `recording.js` (one element), `soundtrack.js` (the pieces' lifecycle,
+  tails and the two-piece cap), `musicBox.js` (the carol's and the tune's instruments and note scheduler) and
+  `music.js` (the context, her song, and the Sound button, hiding and ducking).
 
 Acceptance: unit tests for the N-piece dip at every zone pair, the start/stop/rewind and tail decisions, at most
 two pieces, the loop-seam timing, the preload distance and the fallback choice (`zoneMusic.test.js`,

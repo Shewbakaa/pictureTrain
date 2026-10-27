@@ -14,7 +14,8 @@ test('the ambience, the carol and the cues sit at their targets, under the music
 
   const m = await page.evaluate(async () => {
     const { createMixer } = await import('./src/audio/mixer.js');
-    const { createSynth, createSoundtrack } = await import('./src/audio/music.js');
+    const { createSynth } = await import('./src/audio/musicBox.js');
+    const { createSoundtrack } = await import('./src/audio/soundtrack.js');
     const { composeLoop } = await import('./src/audio/compose.js');
     const { createKit } = await import('./src/audio/sfx.js');
     const { createTrainSounds } = await import('./src/audio/trainSounds.js');

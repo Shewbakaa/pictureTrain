@@ -1,10 +1,10 @@
-// The built-in soundtrack (music.js createSoundtrack): each scene's piece, crossfading with the zone blend. The
+// The scenes' music (site/src/audio/soundtrack.js): each scene's piece, crossfading with the zone blend. The
 // recordings of spring, summer, autumn and the evening; Silent Night in the winter hills; and the built-in tune for a
 // scene whose recording cannot play. On the stub AudioContext (audioStub.js), with the scheduler's timer ticked by
 // hand and stand-in recordings that log what they are asked to do.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSoundtrack } from '../../site/src/audio/music.js';
+import { createSoundtrack } from '../../site/src/audio/soundtrack.js';
 import { composeCarol } from '../../site/src/audio/carol.js';
 import { composeLoop } from '../../site/src/audio/compose.js';
 import { ZONE_MUSIC } from '../../site/src/audio/zoneMusic.js';
@@ -25,7 +25,7 @@ function manualTimer() {
 function stubRecording(ctx, name, trim) {
   const log = [];
   return {
-    name, trim, log, file: `music/zones/${name}.mp3`, output: ctx.createGain(), failed: false, playing: false, updates: 0,
+    name, trim, log, file: `music/zones/${name}.mp3`, output: ctx.createGain(), failed: false, blocked: false, playing: false, updates: 0,
     unlock() {},
     load() {},
     start(fromTop) { log.push(fromTop ? 'top' : 'play'); this.playing = true; },
@@ -240,6 +240,25 @@ test('a scene whose recording fails plays the built-in tune from its top instead
   assert.equal(t.soundtrack.loudest, 'autumn');
   assert.equal(t.timer.count, 0, 'the tune has stopped');
   assert.deepEqual(t.recordings.autumn.log, ['top']);
+});
+
+test('a scene whose recording the browser holds back plays the tune until a tap lets it go, then its own piece', () => {
+  const t = setup();
+  t.soundtrack.setZones(t.zones({ summer: 1 }));
+  t.soundtrack.play();
+  t.runTo(2);
+  t.recordings.summer.blocked = true; // play() was refused for want of a tap
+  t.soundtrack.setZones(t.zones({ summer: 1 }));
+  t.runTo(4);
+  assert.equal(t.soundtrack.loudest, 'tune');
+  assert.ok(t.timer.count === 1, 'the tune plays');
+  t.soundtrack.setZones(t.zones({ summer: 1 }));
+  assert.deepEqual(t.recordings.summer.log, ['top', 'rewind'], 'stopped and back at its top once its tail is over');
+  t.recordings.summer.blocked = false; // her tap on the Sound button let it go
+  t.soundtrack.setZones(t.zones({ summer: 1 }));
+  assert.equal(t.soundtrack.loudest, 'summer');
+  assert.deepEqual(t.recordings.summer.log, ['top', 'rewind', 'top'], 'its own piece again, from its top');
+  assert.equal(t.timer.count, 0, 'the tune gives way');
 });
 
 test('with no recordings at all, every scene but winter plays the tune, on and on across their boundaries', () => {

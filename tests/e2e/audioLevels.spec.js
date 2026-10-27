@@ -11,7 +11,7 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
 
   const m = await page.evaluate(async () => {
     const { createMixer, BUS } = await import('./src/audio/mixer.js');
-    const { createSynth } = await import('./src/audio/music.js');
+    const { createSynth } = await import('./src/audio/musicBox.js');
     const { composeLoop } = await import('./src/audio/compose.js');
     const { createKit } = await import('./src/audio/sfx.js');
     const { createTrainSounds } = await import('./src/audio/trainSounds.js');

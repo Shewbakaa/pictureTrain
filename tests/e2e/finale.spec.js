@@ -73,5 +73,18 @@ test('full ride end to end', async ({ page, browserName }) => {
   expect(audio.sounds).toBeGreaterThan(20);
   expect(audio.busiest).toBeLessThanOrEqual(12);
   expect(audio.mostPieces).toBeLessThanOrEqual(2); // never more than two scenes' pieces at once
+
+  // Ride again: the evening's piece pauses and goes back to its top, and the meadow's plays from its top.
+  expect(audio.pieces.spring).toEqual({ paused: true, time: 0 });
+  const rodeAgainAt = Date.now();
+  await page.getByRole('button', { name: 'Ride again' }).click();
+  await waitForPhase(page, 'riding');
+  await expect.poll(async () => (await appState(page)).musicPiece).toBe('spring');
+  await expect.poll(async () => (await audioReport(page)).pieces.evening).toEqual({ paused: true, time: 0 });
+  await expect.poll(async () => {
+    const spring = (await audioReport(page)).pieces.spring;
+    return !spring.paused && spring.time > 0;
+  }).toBe(true);
+  expect((await audioReport(page)).pieces.spring.time).toBeLessThanOrEqual((Date.now() - rodeAgainAt) / 1000 + 0.5);
   expect(errors).toEqual([]);
 });

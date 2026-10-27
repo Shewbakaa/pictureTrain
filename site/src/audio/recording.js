@@ -8,9 +8,10 @@
 // fetches nothing: each file is fetched only once its scene comes near (load()), or when it is first played.
 //
 // It loops, fading out over its last seconds and back in after the seam (zoneMusic.js seamLevel), so a scene that
-// lasts longer than its piece hears it start again gently. A file that cannot be played (missing, not audio, or
-// refused by the browser) fails the recording for good, with a warning naming the file, and music.js plays the
-// built-in tune in its scene instead.
+// lasts longer than its piece hears it start again gently. A file that cannot be played (missing, or not audio)
+// fails the recording for good, with a warning naming the file, and the soundtrack plays the built-in tune in its
+// scene instead. A play the browser refuses for want of a tap (the unlock did not take) only holds the recording
+// back: the tune stands in until her next tap on the Sound button, which retry()s it.
 //
 // It touches the DOM only when made: the Node unit tests give it a stand-in element.
 
@@ -22,12 +23,14 @@ const SEAM_STEP = 0.01;
 
 /**
  * @typedef {{ readonly name: string, readonly file: string, readonly trim: number, readonly output: GainNode,
- *             readonly failed: boolean, unlock: () => void, load: () => void, start: (fromTop: boolean) => void,
- *             stop: (rewind: boolean) => void, update: () => void }} Recording
- *   `trim` is its gain to the tune's loudness (PIECES), for music.js to apply. `unlock()` lets it play later
- *   without a tap: call it inside one. `load()` starts fetching its file (once). `start(fromTop)` plays it, from its
- *   top or from where it was; `stop(rewind)` pauses it, back at its top or where it is. `update()`, every frame
- *   while it plays, moves its loop seam's fade.
+ *             readonly failed: boolean, readonly blocked: boolean, unlock: () => void, retry: () => void,
+ *             load: () => void, start: (fromTop: boolean) => void, stop: (rewind: boolean) => void,
+ *             update: () => void }} Recording
+ *   `trim` is its gain to the tune's loudness (PIECES), for the soundtrack to apply. `failed` is for good;
+ *   `blocked` until retry(). `unlock()` lets it play later without a tap, and `retry()` lets a blocked one play
+ *   again: call each inside a tap. `load()` starts fetching its file (once). `start(fromTop)` plays it, from its top
+ *   or from where it was; `stop(rewind)` pauses it, back at its top or where it is. `update()`, every frame while it
+ *   plays, moves its loop seam's fade.
  */
 
 /**
@@ -42,6 +45,7 @@ export function createRecording(ctx, name, { file, trim }, { makeElement = () =>
   const output = ctx.createGain();
   let element = null;
   let failed = false;
+  let blocked = false; // the browser refused to play it without a tap
   let loading = false;
   let wanted = false; // asked to play, and not stopped since
   let looped = false; // it has come round its seam since it last started from its top
@@ -66,10 +70,35 @@ export function createRecording(ctx, name, { file, trim }, { makeElement = () =>
     console.warn(`[music] Could not play "${file}" — the built-in tune plays in this scene instead.`);
   }
 
-  /** A play() the browser turned down: a pause or a new load interrupting it is no failure; anything else is. */
+  /** Held back for want of a tap: the tune stands in until retry(). */
+  function block() {
+    if (blocked || failed) return;
+    blocked = true;
+    wanted = false;
+    element.pause();
+    console.warn(`[music] The browser held back "${file}" until a tap — the built-in tune plays in this scene for now.`);
+  }
+
+  /**
+   * A play() the browser turned down: a pause or a new load interrupting it is nothing, a refusal for want of a tap
+   * holds it back, and anything else fails it.
+   */
   function refused(error) {
-    if (error && error.name === 'AbortError') return;
-    fail();
+    const name = error && error.name;
+    if (name === 'AbortError') return;
+    if (name === 'NotAllowedError') block();
+    else fail();
+  }
+
+  /** play() then pause() at once: inside a tap, that lets it play later without one. */
+  function playAndPause() {
+    try {
+      const attempt = element.play();
+      if (attempt && attempt.catch) attempt.catch(() => {});
+    } catch {
+      // Nothing to unlock with: a later play() says whether it can play.
+    }
+    element.pause();
   }
 
   function load() {
@@ -105,19 +134,20 @@ export function createRecording(ctx, name, { file, trim }, { makeElement = () =>
     get failed() {
       return failed;
     },
+    get blocked() {
+      return blocked;
+    },
     unlock() {
-      if (failed) return;
-      try {
-        const attempt = element.play();
-        if (attempt && attempt.catch) attempt.catch(() => {});
-      } catch {
-        // Nothing to unlock with: a later play() says whether it can play.
-      }
-      element.pause();
+      if (!failed) playAndPause();
+    },
+    retry() {
+      if (!blocked) return;
+      blocked = false;
+      playAndPause();
     },
     load,
     start(fromTop) {
-      if (failed) return;
+      if (failed || blocked) return;
       load();
       if (fromTop) rewind();
       wanted = true;

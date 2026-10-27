@@ -18,7 +18,7 @@ test('each scene\'s recording sits at the tune\'s loudness through the master ch
   const m = await page.evaluate(async () => {
     const { loudness } = await import('./loudness.js');
     const { createMixer } = await import('./src/audio/mixer.js');
-    const { createSynth } = await import('./src/audio/music.js');
+    const { createSynth } = await import('./src/audio/musicBox.js');
     const { composeLoop } = await import('./src/audio/compose.js');
     const { PIECES, TUNE_LUFS } = await import('./src/audio/zoneMusic.js');
 

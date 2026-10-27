@@ -52,8 +52,8 @@ export const PIECE_NAMES = Object.freeze(['tune', ...ZONE_IDS]);
 
 export const ZONE_MUSIC = Object.freeze({
   /**
-   * Across a boundary the piece behind fades over the first MIX_OVERLAP of the blend and the piece ahead rises over
-   * the last: each is silent for the other's first 45%.
+   * Across a boundary the piece behind fades out over the first MIX_OVERLAP of the blend (t 0 to 0.55) and the
+   * piece ahead rises over the last (t 0.45 to 1): both sound only between t 0.45 and 0.55, faintly.
    */
   MIX_OVERLAP: 0.55,
   /** A recording starts loading once its zone is this close to the train (m), or is the zone after the train's. */
@@ -73,8 +73,10 @@ export const ZONE_MUSIC = Object.freeze({
 /**
  * How much of a piece plays (its gain share, 0 to 1) when its zones' weight is `weight`: none until the weight is
  * past 1 − MIX_OVERLAP, then rising on an equal-power curve to all of it at 1. Across a boundary, where one zone's
- * weight is 1 − t and the next's t, the two pieces dip: the one behind is gone by the middle of the blend before the
- * one ahead begins, so they are never heard clearly together, and never louder together than either alone.
+ * weight is 1 − t and the next's t, the two pieces dip: the one behind fades over t 0 to 0.55 and the one ahead
+ * rises over t 0.45 to 1, so both are heard only between t 0.45 and 0.55, each at a share under 0.29 (about 0.14
+ * at the boundary itself). They are never heard clearly together, and never louder together than either
+ * alone.
  * @param {number} weight
  */
 export function pieceShare(weight) {
@@ -87,15 +89,15 @@ export function pieceShare(weight) {
 
 /**
  * The piece that plays in `zone`: the carol in winter, else the zone's recording, or the built-in tune where it
- * has none or it cannot be played (`failed`).
+ * has none, it cannot be played (`failed`) or the browser holds it back until a tap (`blocked`).
  * @param {string} zone
- * @param {Record<string, { failed: boolean }>} recordings  zone to its recording, as far as one has been made
+ * @param {Record<string, { failed: boolean, blocked?: boolean }>} recordings  zone to its recording, if made
  * @returns {string}  one of PIECE_NAMES
  */
 export function pieceFor(zone, recordings) {
   if (zone === 'winter') return 'winter';
   const recording = recordings[zone];
-  return recording && !recording.failed ? zone : 'tune';
+  return recording && !recording.failed && !recording.blocked ? zone : 'tune';
 }
 
 /**
@@ -103,7 +105,7 @@ export function pieceFor(zone, recordings) {
  * zones at once (the tune, standing in for both) takes their weights together, so it plays on whole across their
  * boundary. Writes every name of PIECE_NAMES into `out` and returns it, so the frame loop allocates nothing.
  * @param {Record<string, number>} weights
- * @param {Record<string, { failed: boolean }>} recordings
+ * @param {Record<string, { failed: boolean, blocked?: boolean }>} recordings
  * @param {Record<string, number>} [out]
  * @returns {Record<string, number>}
  */

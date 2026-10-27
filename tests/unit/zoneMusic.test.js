@@ -31,6 +31,8 @@ test('a recording that cannot play gives its scene the built-in tune, and only i
   assert.equal(pieceFor('spring', broken), 'spring');
   assert.equal(pieceFor('autumn', broken), 'autumn');
   assert.equal(pieceFor('spring', {}), 'tune', 'no recording at all: the tune');
+  const held = { ...playable, autumn: { failed: false, blocked: true } };
+  assert.equal(pieceFor('autumn', held), 'tune', 'held back until a tap: the tune for now');
 });
 
 test('each recording is trimmed to the tune\'s loudness: its trim makes up the gap from its measured LUFS', () => {
