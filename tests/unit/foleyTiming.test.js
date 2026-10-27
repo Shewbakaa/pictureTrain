@@ -1,15 +1,14 @@
 // The finale's own sounds keep time with what the finale draws (site/src/finale/foleyTiming.js): her hop and landing
-// from the keys of her hop, his door as he sets off from it, a footfall each time one of his legs swings out, two
+// from the keys of her hop, his door as he sets off from it, his footsteps at a person's cadence over his walk, two
 // heartbeats before the hand-off, the bouquet's paper at the hand-off, the sparkle with the hearts and the doves
-// with the fireworks. And the station bell as the train pulls in (audio/sfxTiming.js), with the whistle.
+// with the fireworks. And the station bell as the train pulls in (audio/sfxTiming.js), after the whistle.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FINALE_TIMES as T, finaleTracks } from '../../site/src/finale/finale.js';
 import { FOLEY, FOLEY_CUES, foleyCues, footfalls } from '../../site/src/finale/foleyTiming.js';
 import { createTimeline } from '../../site/src/finale/timeline.js';
-import { walkPose } from '../../site/src/world/figures.js';
 import { FINALE_WHISTLE_AFTER, STATION_BELL, WHISTLE } from '../../site/src/audio/sfxTiming.js';
-import { FINALE_PATH, finaleOnStage } from './finaleStage.js';
+import { FINALE_PATH } from './finaleStage.js';
 
 const tracks = finaleTracks(FINALE_PATH, 960);
 const track = (key) => tracks.find((tr) => tr.key === key);
@@ -17,14 +16,12 @@ const track = (key) => tracks.find((tr) => tr.key === key);
 const cue = (name) => FOLEY_CUES.filter((c) => c.name === name).map((c) => c.t);
 const apart = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
-test('the station bell rings twice as the train pulls in, inside the whistle\'s long last toot', () => {
+test('the station bell rings twice as the train pulls in, once the whistle has finished', () => {
   const last = WHISTLE.finale[WHISTLE.finale.length - 1];
-  const tootFrom = FINALE_WHISTLE_AFTER + last.t;
-  const tootTo = tootFrom + last.dur;
-  assert.ok(STATION_BELL.AFTER > tootFrom, 'once the long toot is under way');
-  assert.ok(STATION_BELL.AFTER + STATION_BELL.APART < tootTo, 'both strikes before it ends');
+  const whistled = FINALE_WHISTLE_AFTER + last.t + last.dur;
+  assert.ok(STATION_BELL.AFTER > whistled, 'after the whistle, so nothing masks it');
+  assert.ok(STATION_BELL.AFTER <= whistled + 0.3, 'straight after it');
   assert.ok(STATION_BELL.APART >= 0.25 && STATION_BELL.APART <= 0.5, 'a "ding-ding"');
-  assert.ok(STATION_BELL.AFTER < 3, 'while the train is pulling in, before she hops down');
 });
 
 test('her hop whooshes as she takes off, and taps and rustles as she lands: the keys of her hop', () => {
@@ -58,50 +55,37 @@ test('his door creaks as he sets off from it, its little shop bell jingling with
   assert.ok(bells[0] >= door && bells[0] <= door + 0.2, `the bell at ${bells[0]}`);
 });
 
-test('his footsteps fall with his walk as the finale poses it: one each time a leg swings out, slowing as he arrives, none once he stands', () => {
-  const { scene, finale } = finaleOnStage();
-  const leg = scene.getObjectByName('finale-him').getObjectByName('leftLeg');
-  finale.begin();
-  const legAt = (t) => {
-    finale.skipTo(t);
-    finale.update(0);
-    return Math.abs(leg.rotation.x);
-  };
-  const full = Math.abs(walkPose(Math.PI / 2, 1).leftLeg);
+test('his footsteps keep a person\'s cadence over his walk: slower as he sets off, brisk as he hurries, slower as he nears her, none once he has stopped', () => {
+  const tl = createTimeline([track('him')]);
+  const where = (t) => tl.sample(t).him.slice();
+  const pace = (t) => apart(where(t + 0.05), where(t - 0.05)) / 0.1; // as the finale moves him
   const steps = [];
   footfalls(0, T.end, (name, t, level) => steps.push({ name, t, level }));
-  assert.ok(steps.length >= 8, `${steps.length} footsteps`);
-  // Each falls as a leg reaches the far end of its swing, swinging in full.
+  const n = steps.length - 1;
+  assert.ok(steps.length >= 4 && steps.length <= 7, `${steps.length} footsteps`);
   for (const { name, t, level } of steps) {
     assert.equal(name, 'step');
     assert.ok(level > 0 && level <= 1, `level ${level}`);
-    const here = legAt(t);
-    assert.ok(Math.abs(here - full) < 1e-3, `at ${t.toFixed(3)} s the leg is out ${here.toFixed(4)} rad of ${full}`);
-    assert.ok(here >= legAt(t - 0.004) && here >= legAt(t + 0.004), `at ${t.toFixed(3)} s the swing is at its end`);
+    assert.ok(pace(t) >= FOLEY.STEP.STILL, `at ${t.toFixed(2)} s he is walking (${pace(t).toFixed(2)} m/s)`);
   }
-  // And each time the finale swings a leg out, there is one: scanning what it draws at 480 frames a second.
-  const outs = [];
-  const dt = 1 / 480;
-  let before = legAt(T.himWalkStart - dt);
-  let here = legAt(T.himWalkStart);
-  for (let t = T.himWalkStart; t <= T.end; t += dt) {
-    const next = legAt(t + dt);
-    if (here > 0.9 * full && here > before && here >= next) outs.push(t);
-    before = here;
-    here = next;
-  }
-  assert.equal(outs.length, steps.length, `${outs.length} swings drawn, ${steps.length} footsteps`);
-  outs.forEach((t, i) => assert.ok(Math.abs(t - steps[i].t) <= dt, `swing ${i}: drawn at ${t.toFixed(4)}, heard at ${steps[i].t.toFixed(4)}`));
-  // Slowing as he arrives: the last steps come further and further apart, and softer than his stride's.
+  // The first a beat after the door's bell, as he steps off.
+  assert.ok(steps[0].t > cue('shop-bell')[0] && steps[0].t <= T.himWalkStart + 0.5, `the first at ${steps[0].t}`);
+  // Two to two and a half steps a second as he strides; slower at either end.
   const gaps = steps.slice(1).map((s, i) => s.t - steps[i].t);
-  const n = gaps.length;
-  assert.ok(gaps[n - 1] > gaps[n - 2] && gaps[n - 2] > gaps[n - 3], `gaps ${gaps.map((g) => g.toFixed(3))}`);
-  assert.ok(steps[n].level < Math.max(...steps.map((s) => s.level)), 'the last step is a softer one');
-  // He sets off from the door, and once he is all but standing beside her, there are no more.
-  assert.ok(steps[0].t > T.himWalkStart);
-  assert.ok(steps[n].t < T.himWalkEnd - 0.3, `the last at ${steps[n].t}`);
-  footfalls(steps[n].t, 100, () => assert.fail('a step after he stands'));
+  for (const gap of gaps) assert.ok(gap >= 0.4 - 1e-6 && gap <= 1 / FOLEY.STEP.SLOW, `a step ${gap.toFixed(3)} s after the last`);
+  const striding = gaps.slice(1, -1);
+  assert.ok(striding.length >= 1 && striding.every((gap) => gap <= 0.5), `striding ${striding.map((g) => g.toFixed(3))}`);
+  assert.ok(gaps[0] > Math.max(...striding) && gaps[n - 1] > Math.max(...striding), `gaps ${gaps.map((g) => g.toFixed(3))}`);
+  // Softer as he sets off and as he arrives than as he hurries.
+  const loudest = Math.max(...steps.map((s) => s.level));
+  assert.ok(steps[0].level < loudest && steps[n].level < loudest);
+  // None once he has all but stopped, and none so late that it would come after his walk has slowed past a step.
+  let still = steps[n].t;
+  while (pace(still) >= FOLEY.STEP.STILL) still += 0.001;
+  assert.ok(still - steps[n].t < 1 / FOLEY.STEP.SLOW, `he stops ${(still - steps[n].t).toFixed(2)} s after the last step`);
+  footfalls(steps[n].t, 100, () => assert.fail('a step after he has stopped'));
   footfalls(-1, T.himWalkStart, () => assert.fail('a step before he sets off'));
+  assert.ok(steps[n].t < T.handoffStart - 0.5, `the last at ${steps[n].t}, well before the hand-off`);
 });
 
 test('two soft heartbeats, lub-dub, about 0.8 s apart, the second dying away as the hand-off begins', () => {

@@ -102,3 +102,26 @@ test('no voice starts an oscillator below 20 Hz', () => {
   assert.ok(tones.length > 0);
   for (const s of tones) assert.ok(s.node.frequency.value >= 20, `${s.node.frequency.value} Hz`);
 });
+
+test('his feet take turns: each step a little lower or higher than the one before, by turns', () => {
+  const { audio, voices } = setup();
+  for (let i = 0; i < 12; i++) {
+    audio.advance(i * 0.5);
+    voices.step(0.1 + i * 0.5, 1);
+  }
+  const thuds = audio.starts.filter((s) => s.type === 'osc').map((s) => s.node.frequency.value);
+  assert.equal(thuds.length, 12);
+  const turns = thuds.slice(1).map((f, i) => Math.sign(f - thuds[i]));
+  turns.forEach((turn, i) => assert.ok(turn !== 0 && (i === 0 || turn === -turns[i - 1]), `step ${i + 1}: ${thuds.map(Math.round)}`));
+});
+
+test('a heartbeat has a body a phone\'s speaker can play and a faint knock, over its low, felt thump', () => {
+  const { audio, voices } = setup();
+  voices.heartbeat(0.1, 1);
+  const tones = audio.starts.filter((s) => s.type === 'osc').map((s) => s.node.frequency.value);
+  assert.ok(tones.some((f) => f < 80), `a low part: ${tones}`);
+  assert.ok(tones.some((f) => f >= 120 && f <= 250), `a body: ${tones}`);
+  const knock = audio.made.find((n) => n.type === 'bandpass');
+  assert.ok(knock && knock.frequency.value >= 300 && knock.frequency.value <= 500, 'a knock between 300 and 500 Hz');
+  assert.ok(audio.starts.some((s) => s.type === 'noise'));
+});

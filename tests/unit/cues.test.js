@@ -24,6 +24,7 @@ function fakeSfx() {
   let frame = 0;
   return {
     asked,
+    settled: true,
     set frame(f) { frame = f; },
     define() {},
     play(name, delay = 0, level = 1) { asked.push({ name, delay, level, frame }); return true; },
@@ -202,18 +203,56 @@ test('on a slow phone (a tenth of a second a frame) every footstep and cue is st
   assert.equal(cues.heard.filter((n) => n === 'heartbeat').length, 2);
 });
 
-test('the whole finale fits the node budget beside the evening\'s crickets: nothing it plays is skipped for want of room', () => {
+/** The blush that covers the swap to the finale takes this long, so its clock starts this long after the train stops (app.js FINALE_FADE_MS). */
+const FINALE_FADE = 0.4;
+
+test('the whole finale fits the node budget beside the evening\'s crickets: nothing it plays is skipped for want of room', (t) => {
   const { audio, sfx, cues } = engine();
   assert.ok(sfx.kit.hold(BED_NODES.evening), 'the crickets');
-  sfx.finale(); // the sigh and the whistle
-  cues.arrival();
-  run(cues, 0, 16, { audio });
+  let most = 0;
+  const watch = () => { most = Math.max(most, sfx.kit.live); };
+  sfx.finale(); // the sigh and the whistle as the train stops
+  cues.arrival(); // the bell, after the whistle
+  watch();
+  // The blush covers the screen and the finale begins: its clock starts FINALE_FADE after the stop.
+  for (let i = 0; i < FINALE_FADE / FRAME; i++) {
+    audio.advance(audio.ctx.currentTime + FRAME);
+    watch();
+  }
+  for (let time = FRAME; time <= 16; time += FRAME) {
+    audio.advance(audio.ctx.currentTime + FRAME);
+    cues.finale(time, 4);
+    watch();
+  }
   const due = [];
   foleyCues(0, 16, (name) => due.push(name));
   const pops = [];
   fireworkBlooms(0, 16, 4, () => pops.push('firework'));
   assert.equal(cues.heard.length, 1 + due.length + pops.length, `${cues.heard.length} played`);
-  assert.ok(sfx.kit.live <= 40);
+  t.diagnostic(`most nodes held at once in the finale: ${most} of 40`);
+  assert.ok(most <= 36, `${most} nodes at the busiest, leaving room for a passing sound`);
+});
+
+test('while the sound is off or coming back up, the finale\'s cues are skipped, not saved up to land together', () => {
+  const { audio, music, sfx, cues } = engine();
+  cues.arrival();
+  run(cues, 0, 4.2, { audio });
+  const before = cues.heard.length;
+  // The sound goes off as he sets off across the platform: his steps and the first heartbeat pass unheard...
+  music.audible = false;
+  run(cues, 4.2, 6.0, { audio });
+  assert.equal(cues.heard.length, before);
+  // ...and it comes back on: while the master fader rises, nothing; once it is up, each in its own time again.
+  music.audible = true;
+  music.mixer.fade(true, 0.4);
+  assert.equal(sfx.settled, false, 'the fader is rising');
+  const from = audio.starts.length;
+  run(cues, 6.0, 7.05, { audio });
+  assert.equal(sfx.settled, true);
+  assert.deepEqual(cues.heard.slice(before), ['heartbeat', 'crinkle'], 'the step at 6.3 s fell while it rose');
+  // The heartbeat's sources start at its own time, not bunched with anything held back.
+  const started = audio.starts.slice(from).map((st) => st.at);
+  assert.ok(started.every((at) => at >= 1 + 6.6), `${started}`);
 });
 
 test('the list of what the finale played is kept short', () => {

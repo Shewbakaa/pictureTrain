@@ -2,7 +2,8 @@
 // (audio/mixer.js) with the real voices (audio/foleySounds.js), against the targets in the sound design's finale
 // foley addendum (docs/superpowers/specs/2026-10-26-sound-effects-design.md): the station bell peaking about
 // −22 dBFS, the shop bell about −26, the footsteps, the landing tap, the heartbeats, the whoosh, the rustle, the
-// crinkle, the door and the doves about −30; each under the music at its loudest; and the whole finale, with the
+// crinkle, the door and the doves about −30, the heartbeats and steps mostly above 200 Hz (what a phone's speaker
+// plays); each under the music at its loudest; and the whole finale, with the
 // music, the evening's crickets, the arrival's sigh and whistle, the sparkle and the fireworks, never clipping. What
 // it measured goes with the test's results (and to the console with AUDIO_LEVELS=1).
 import { test, expect } from '@playwright/test';
@@ -62,6 +63,27 @@ test('the finale\'s foley sits at its targets, under the music, and the whole fi
       return top;
     };
     const measure = (channels) => ({ peakDb: db(peak(channels)), loudestDb: db(loudest(channels)) });
+    /** `channels` as a phone's speaker would play them: only what is above `hz` (a 4th-order high-pass). */
+    async function above(hz, channels) {
+      const ctx = new OfflineAudioContext(2, channels[0].length, RATE);
+      const buffer = ctx.createBuffer(2, channels[0].length, RATE);
+      channels.forEach((data, i) => buffer.copyToChannel(data, i));
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      let into = ctx.destination;
+      for (let i = 0; i < 2; i++) {
+        const high = ctx.createBiquadFilter();
+        high.type = 'highpass';
+        high.frequency.value = hz;
+        high.Q.value = Math.SQRT1_2;
+        high.connect(into);
+        into = high;
+      }
+      src.connect(into);
+      src.start(0);
+      const done = await ctx.startRendering();
+      return [done.getChannelData(0), done.getChannelData(1)];
+    }
 
     const out = {};
     const loop = composeLoop();
@@ -83,10 +105,12 @@ test('the finale\'s foley sits at its targets, under the music, and the whole fi
         for (let i = 0; i < count; i++) foley[name](0.2 + i * every, 1);
       });
       out[name] = measure(channels);
+      // What a phone's speaker plays of the low ones (it plays very little below about 200 Hz).
+      if (name === 'heartbeat' || name === 'step') out[`${name}Above200`] = measure(await above(200, channels));
     }
 
     // The whole finale as the ride plays it: the music and the evening's crickets throughout; the train stops at 0.2 s
-    // (its sigh, the whistle, the station bell), and the finale's clock starts 0.4 s later, under the blush; then
+    // (its sigh, the whistle, then the station bell), and the finale's clock starts 0.4 s later, under the blush; then
     // every foley cue and footstep at its time, the sparkle, and the fireworks (four bursts) to the end.
     const finale = await render(16, (ctx, mixer, kit) => {
       const synth = createSynth(ctx, mixer.music);
@@ -125,6 +149,10 @@ test('the finale\'s foley sits at its targets, under the music, and the whole fi
   for (const [name, target] of Object.entries(targets)) {
     expect(Math.abs(m[name].peakDb - target), `${name} peaks at ${m[name].peakDb.toFixed(2)} dBFS`).toBeLessThanOrEqual(2);
     expect(m[name].loudestDb, `${name} under the music`).toBeLessThan(m.music.loudestDb);
+  }
+  // The heartbeats and the steps are heard on a phone's speaker: most of their peak is above 200 Hz.
+  for (const name of ['heartbeat', 'step']) {
+    expect(m[`${name}Above200`].peakDb, `${name} above 200 Hz`).toBeGreaterThanOrEqual(m[name].peakDb - 6);
   }
   expect(Math.pow(10, m.finaleMix.peakDb / 20), 'the finale never clips').toBeLessThan(0.9);
 });

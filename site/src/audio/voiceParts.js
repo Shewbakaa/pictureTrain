@@ -81,3 +81,11 @@ export function voiceParts(kit) {
 export function fallen(level, seconds, tau) {
   return level * Math.exp(-seconds / tau);
 }
+
+/** Every envelope closes with a ramp this long (s) down to exactly zero before its sources stop. */
+export const TAIL = 0.02;
+
+/** A time constant (s) for setTargetAtTime that falls to −60 dB over `decay` seconds. */
+export function toSilence(decay) {
+  return decay / Math.log(1000);
+}

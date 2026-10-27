@@ -1,35 +1,37 @@
 // Sounds that answer something on screen: a quiet paper rustle as a stop's card slides up, and the finale's own sounds
-// on its clock. As the train pulls in at the Day 365 station the platform bell rings ("ding-ding") with the whistle;
-// then, as the finale plays, its foley (foleySounds.js, at the times in finale/foleyTiming.js: her hop and landing,
-// his door and his footsteps, two heartbeats, the bouquet's paper, doves taking off), a sparkle of high bell notes as
-// the hearts rise between the two of them, and a soft pop and crackle for each of the fireworks, in time with their
-// bursts (finale/fireworkTiming.js), for as long as the finale plays.
+// on its clock. As the train pulls in at the Day 365 station the platform bell rings ("ding-ding") once the whistle
+// has finished; then, as the finale plays, its foley (foleySounds.js, at the times in finale/foleyTiming.js: her hop
+// and landing, his door and his footsteps, two heartbeats, the bouquet's paper, doves taking off), a sparkle of high
+// bell notes as the hearts rise between the two of them, and a soft pop and crackle for each of the fireworks, in
+// time with their bursts (finale/fireworkTiming.js), for as long as the finale plays.
 //
 // They play into the effects bus through the sound effects' one-shots (sfx.js), so they keep to the Sound button,
 // a video's sound and the page going into the background like every other sound. The finale's own go through a bus
 // of their own on the way, which Ride again or a jump from the finale fades out at once (silence), so nothing of the
 // finale goes on sounding into the ride. The finale's clock drives them every frame (finale(time, bursts)), and only
 // a frame's step of it at a time: a clock that jumps (?ft=, skipTo) or stands still (freeze) plays nothing of what it
-// passed over, never a burst. The levels are set for the mix after the master chain and measured there offline
-// (tests/e2e/ambienceLevels.spec.js and finaleFoleyLevels.spec.js): the pops and the sparkle, the celebration, peak
-// about −18 dBFS so they are clearly heard under the music; the rustle and the foley are far quieter.
+// passed over, never a burst; and what falls while the sound is off or coming back up is skipped, not saved up. The
+// levels are set for the mix after the master chain and measured there offline (tests/e2e/ambienceLevels.spec.js
+// and finaleFoleyLevels.spec.js): the pops and the sparkle, the celebration, peak about −18 dBFS so they are clearly
+// heard under the music; the rustle and the foley are far quieter.
 
 import { fireworkBlooms, FIREWORK_TIMING } from '../finale/fireworkTiming.js';
 import { foleyCues } from '../finale/foleyTiming.js';
 import { MAX_STEP } from '../finale/finaleTimes.js';
-import { createFoleySounds, FOLEY_NAMES } from './foleySounds.js';
+import { brushNodes, createBrush, createFoleySounds, FOLEY_NAMES } from './foleySounds.js';
 import { STATION_BELL } from './sfxTiming.js';
-import { voiceParts } from './voiceParts.js';
+import { TAIL, toSilence, voiceParts } from './voiceParts.js';
 
 /** The stop card rises a beat after the train stops (styles.css: #stop-card's 0.6 s animation delay). */
 export const CARD_RISES_AFTER = 0.6;
 
 /**
- * The paper rustle: the dust's crinkles and a breath of noise through a bandpass, swelling in GRAINS (start s,
- * level) over LENGTH seconds as the card slides.
+ * The paper rustle, a brush of paper (foleySounds.js createBrush): the dust's crinkles and a breath of noise (HISS)
+ * through a highpass (HIGH) and a bandpass (BAND), swelling in GRAINS (start s, level) over LENGTH seconds as the card
+ * slides.
  */
 const RUSTLE = {
-  LEVEL: 0.025, LENGTH: 0.4, FREQ: 3500, Q: 0.6, HIGH: 2500, HISS: 0.35,
+  LEVEL: 0.025, LENGTH: 0.4, BAND: 3500, Q: 0.6, HIGH: 2500, HISS: 0.35, DUST: 1,
   GRAINS: [[0, 0], [0.03, 0.7], [0.09, 0.4], [0.15, 1], [0.24, 0.55], [0.4, 0]],
 };
 
@@ -53,20 +55,16 @@ const FIREWORK = {
   PANS: [-0.35, 0.3, -0.1, 0.45],
 };
 
-/** Every envelope closes with a ramp this long (s) down to exactly zero before its sources stop. */
-const TAIL = 0.02;
-
 /** How many audio nodes each sound holds while it plays, counted against the kit's budget. */
-const NODES = Object.freeze({ rustle: 6, sparkle: 11, firework: 10 });
+const NODES = Object.freeze({ rustle: brushNodes(RUSTLE), sparkle: 11, firework: 10 });
 
 const midiToHz = (midi) => 440 * 2 ** ((midi - 69) / 12);
-const toSilence = (decay) => decay / Math.log(1000);
 
 /**
- * How the finale's foley one-shots are gated (s between plays, sfx.define): his footsteps are paced by his walk
- * (and a slow frame can hold two), and the two heartbeats come 0.8 s apart.
+ * How the finale's foley one-shots are gated (s between plays, sfx.define): his footsteps come at least 0.4 s apart,
+ * and the two heartbeats 0.8 s apart.
  */
-const FOLEY_GAP = Object.freeze({ step: 0, heartbeat: 0.5, bell: 3, doves: 2 });
+const FOLEY_GAP = Object.freeze({ step: 0.25, heartbeat: 0.5, bell: 3, doves: 2 });
 const FOLEY_GAP_ELSE = 1;
 
 /** Ride again or a jump from the finale fades the finale's sounds out over this long (s), under the blush. */
@@ -87,21 +85,11 @@ const HEARD_MAX = 64;
  */
 export function createCueSounds(kit, out = kit.buses.effects) {
   const parts = voiceParts(kit);
+  const brush = createBrush(kit, out);
 
   return {
     rustle(at, level = 1) {
-      if (!(level > 0) || !kit.room(NODES.rustle)) return false;
-      const R = RUSTLE;
-      const end = at + R.LENGTH + TAIL;
-      const env = parts.gain(0, out);
-      env.gain.setValueAtTime(0, at);
-      for (const [t, share] of R.GRAINS) if (t > 0) env.gain.linearRampToValueAtTime(R.LEVEL * level * share, at + t);
-      const band = parts.filter('bandpass', R.FREQ, R.Q, parts.filter('highpass', R.HIGH, 0.7, env));
-      const dust = parts.source(kit.dust, at, end);
-      dust.connect(band);
-      parts.source(kit.noise, at, end).connect(parts.gain(R.HISS, band));
-      kit.track(dust, NODES.rustle, env);
-      return true;
+      return brush(RUSTLE, at, level);
     },
 
     sparkle(at, level = 1) {
@@ -237,8 +225,10 @@ export function createCues(sfx) {
     finale(time, count) {
       now = time;
       const step = time - heardTo;
-      // A clock gone back (riding again ends in another finale), jumped or held reports nothing for that frame.
-      if (!hushed && step > 0 && step <= FRAME_STEP) {
+      // A clock gone back (riding again ends in another finale), jumped or held reports nothing for that frame; and
+      // nothing is played while the sound is off or still coming back up (the page shown again, say), rather than
+      // saved up for it, so that steps and heartbeats never land together.
+      if (!hushed && step > 0 && step <= FRAME_STEP && sfx.settled) {
         foleyCues(heardTo, time, hear);
         fireworkBlooms(heardTo, time, count, pop);
       }

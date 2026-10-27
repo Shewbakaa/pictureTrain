@@ -133,10 +133,10 @@ const longToot = WHISTLE.finale[WHISTLE.finale.length - 1];
 
 /**
  * The station bell as the train pulls in at the Day 365 station: two strikes ("ding-ding") APART seconds apart, the
- * first AFTER seconds after the train stops, which is 0.3 s into the whistle's long last toot: bell and whistle ring
- * out together, and the strikes are not lost among the short toots.
+ * first AFTER seconds after the train stops, which is 0.15 s after the whistle's long last toot has ended, so that
+ * nothing masks it. It rings on as she hops down.
  */
 export const STATION_BELL = Object.freeze({
   APART: 0.38,
-  AFTER: FINALE_WHISTLE_AFTER + longToot.t + 0.3,
+  AFTER: FINALE_WHISTLE_AFTER + longToot.t + longToot.dur + 0.15,
 });

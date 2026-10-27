@@ -31,6 +31,7 @@
 //                sound is on and its gap allows.
 //   sfx.audible  true while a sound started now would be heard: for continuous layers, such as an ambience bed
 //                on kit.buses.ambience updated from the frame loop, that need to know when to schedule.
+//   sfx.settled  true while a one-shot asked for now would be heard at once, the master fader all the way up.
 // A continuous layer's own nodes stay connected to its bus: the master chain fades and suspends them with
 // everything else, so it need only stop scheduling new sounds while sfx.audible is false.
 
@@ -140,7 +141,7 @@ export function createKit(mixer, { budget = NODE_BUDGET } = {}) {
 
 /**
  * @typedef {{
- *   kit: Kit|null, audible: boolean,
+ *   kit: Kit|null, audible: boolean, settled: boolean,
  *   define: (name: string, shot: { gap: number, play: (kit: Kit, at: number, level: number) => boolean|void }) => void,
  *   play: (name: string, delay?: number, level?: number) => boolean,
  *   depart: () => void, arrive: () => void, finale: () => void,
@@ -253,6 +254,13 @@ export function createSfx(music, { now = () => performance.now() } = {}) {
     },
     get audible() {
       return audible();
+    },
+    /**
+     * True while a one-shot asked for now would be heard at once: the sound is on, not still coming on, and the master
+     * fader all the way up. The finale's cues skip what falls when it is not (cueSounds.js), rather than bunch up.
+     */
+    get settled() {
+      return audible() && !music.waking && up() === 0;
     },
     define(name, { gap, play }) {
       shots.set(name, { gate: createGate(gap), play });

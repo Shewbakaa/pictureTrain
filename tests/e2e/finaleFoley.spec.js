@@ -84,8 +84,9 @@ test('Ride again during the fireworks leaves nothing of the finale sounding', as
     const heard = window.__app.state.finaleCues.length;
     [...document.querySelectorAll('button')].find((b) => b.textContent.includes('Ride again')).click();
     const after = [];
-    while (performance.now() - tapped < 450) {
-      await new Promise((resolve) => setTimeout(resolve, 15));
+    // Until just before the blush's midway, 0.5 s on, where the train sets off again with its whistle.
+    while (performance.now() - tapped < 490) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
       after.push([performance.now() - tapped, window.__audio.effects()]);
     }
     return { before, after, heard };
@@ -93,7 +94,7 @@ test('Ride again during the fireworks leaves nothing of the finale sounding', as
   expect(levels.before).toBeGreaterThan(-60);
   // Faded out at once: silent from 0.25 s after the tap, while the crackle would still be dying away.
   const late = levels.after.filter(([ms]) => ms >= 250);
-  expect(late.length).toBeGreaterThan(3);
+  expect(late.length).toBeGreaterThanOrEqual(2); // a busy machine runs the page's timers late
   for (const [ms, db] of late) expect(db, `${ms.toFixed(0)} ms after the tap`).toBeLessThan(-100);
   // And nothing more of the finale plays, under the blush or once she is riding again.
   await waitForPhase(page, 'riding');

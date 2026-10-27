@@ -262,3 +262,18 @@ test('a sound that does not fit in the budget is skipped', () => {
   t.advance(11);
   assert.equal(t.sfx.play('whistle'), true);
 });
+
+test('settled: only once the sound is on, not still coming on, and the master fader all the way up', () => {
+  const stub = stubContext();
+  const player = { mixer: createMixer(stub.ctx), audible: false, waking: false };
+  const effects = createSfx(player, { now: () => 0 });
+  assert.equal(effects.settled, false, 'the sound is off');
+  stub.ctx.state = 'running';
+  player.audible = true;
+  player.mixer.fade(true, 0.4);
+  assert.equal(effects.settled, false, 'the fader is rising');
+  stub.advance(0.4);
+  assert.equal(effects.settled, true);
+  player.waking = true;
+  assert.equal(effects.settled, false, 'the browser is still answering a request to sound');
+});

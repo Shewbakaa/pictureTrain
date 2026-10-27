@@ -13,7 +13,7 @@
 // (tests/e2e/finaleFoleyLevels.spec.js): the station bell peaks about −22 dBFS, the shop bell about −26, and the rest
 // about −30: soft, under the music, the whistle and the fireworks.
 
-import { fallen, voiceParts } from './voiceParts.js';
+import { fallen, TAIL, toSilence, voiceParts } from './voiceParts.js';
 import { STATION_BELL } from './sfxTiming.js';
 import { FOLEY } from '../finale/foleyTiming.js';
 
@@ -54,27 +54,33 @@ const JINGLE = {
 
 /**
  * A step on the wooden platform: a soft, low thud (a sine dropping from THUD to THUD_TO Hz) with the board's hollow
- * knock (noise through a bandpass at KNOCK) and a little click of the heel (noise above CLICK), each dying away over
- * its own decay (s, to −60 dB). His are heavier and lower; hers, the tap as she lands from her hop, lighter. Each
- * step varies a little (VARY) in pitch and weight.
+ * knock (noise through a bandpass at KNOCK), which is what a phone's speaker plays of it, and a little click of the
+ * heel (noise above CLICK), each at its own share (_GAIN) and dying away over its own decay (s, to −60 dB). His are heavier and lower; hers, the tap as she lands from her hop, lighter. His feet
+ * take turns, the left a little lower and heavier than the right (FOOT, of pitch and of weight), and each step varies
+ * a little more (VARY) in pitch and weight.
  */
 const STEP = {
   his: {
-    LEVEL: 0.0105, THUD: 125, THUD_TO: 82, THUD_DECAY: 0.11, KNOCK: 650, KNOCK_Q: 1.6, KNOCK_DECAY: 0.05, KNOCK_GAIN: 0.55,
-    CLICK: 3200, CLICK_DECAY: 0.014, CLICK_GAIN: 0.22, VARY: 0.12,
+    LEVEL: 0.0131, THUD: 125, THUD_TO: 82, THUD_DECAY: 0.11, THUD_GAIN: 0.7, KNOCK: 650, KNOCK_Q: 1.6, KNOCK_DECAY: 0.05, KNOCK_GAIN: 1,
+    CLICK: 3200, CLICK_DECAY: 0.014, CLICK_GAIN: 0.22, VARY: 0.06, FOOT: 0.05,
   },
   hers: {
-    LEVEL: 0.0092, THUD: 185, THUD_TO: 120, THUD_DECAY: 0.08, KNOCK: 900, KNOCK_Q: 1.6, KNOCK_DECAY: 0.04, KNOCK_GAIN: 0.6,
-    CLICK: 3800, CLICK_DECAY: 0.012, CLICK_GAIN: 0.3, VARY: 0.05,
+    LEVEL: 0.0092, THUD: 185, THUD_TO: 120, THUD_DECAY: 0.08, THUD_GAIN: 1, KNOCK: 900, KNOCK_Q: 1.6, KNOCK_DECAY: 0.04, KNOCK_GAIN: 0.6,
+    CLICK: 3800, CLICK_DECAY: 0.012, CLICK_GAIN: 0.3, VARY: 0.05, FOOT: 0,
   },
 };
 
 /**
- * A heartbeat: a low "lub" and FOLEY.HEART.DUB later a softer, a little higher "dub" (DUB_SHARE), each a thump of a
- * triangle under a lowpass (LOW), its pitch sagging from the first number of LUB or DUB to the second, rising over
- * ATTACK and gone RING seconds after it began. Felt more than heard.
+ * A heartbeat: a "lub" and FOLEY.HEART.DUB later a softer, a little higher "dub" (DUB_SHARE), each a thump rising over
+ * ATTACK and gone RING seconds after it began. Each thump is a low part, felt more than heard (a triangle under a
+ * lowpass, LOW, its pitch sagging from the first number of LUB or DUB to the second), with a body a phone's speaker
+ * can play (a sine, BODY as loud, sagging from the first number of BODY_LUB or BODY_DUB to the second) and a faint
+ * knock (noise through a bandpass at KNOCK, KNOCK_SHARE as loud, dying away over KNOCK_DECAY).
  */
-const HEART = { LEVEL: 0.0118, LUB: [56, 46], DUB: [64, 52], DUB_SHARE: 0.7, ATTACK: 0.012, LUB_RING: 0.15, LOW: 150 };
+const HEART = {
+  LEVEL: 0.00645, LUB: [56, 46], DUB: [64, 52], DUB_SHARE: 0.7, ATTACK: 0.012, LUB_RING: 0.15, LOW: 150,
+  BODY: 1, BODY_LUB: [230, 175], BODY_DUB: [250, 190], KNOCK: 420, KNOCK_Q: 1.4, KNOCK_SHARE: 0.5, KNOCK_DECAY: 0.05,
+};
 
 /**
  * Her hop: a breath of noise through a bandpass that sweeps from FROM up to PEAK Hz as she rises (RISE of her time in
@@ -108,20 +114,48 @@ const CREAK = { LEVEL: 0.0116, FROM: 420, TO: 640, LENGTH: 0.55, ATTACK: 0.07, R
 /**
  * Doves flying off the station roof: COUNT of them, each setting off AFTER seconds after the first, beating its wings
  * BEATS times (between the two numbers), RATE a second at first and slowing to SLOW of that, each beat a puff of noise
- * through the dove's own bandpass (BAND, between the two numbers) BEAT seconds long. The first beats clap; each one
- * after is FADE softer as they fly off, from over the station house (PAN's first number) away to one side.
+ * dying away over BEAT seconds, through a bandpass tuned to the dove (BAND, between the two numbers) as its wings
+ * beat. The first beats clap; each one after is FADE softer as they fly off, from over the station house (PAN's first
+ * number) away to one side. All their beats share one envelope, struck afresh at each beat, to keep the node count low.
  */
 const DOVES = {
-  LEVEL: 0.0173, COUNT: 3, AFTER: [0, 0.09, 0.2], BEATS: [8, 11], RATE: 9, SLOW: 0.7, BAND: [850, 1500], Q: 0.9,
+  LEVEL: 0.0152, COUNT: 3, AFTER: [0, 0.09, 0.2], BEATS: [8, 11], RATE: 9, SLOW: 0.7, BAND: [850, 1500], Q: 0.9,
   BEAT: 0.06, FADE: 0.15, PAN: [0.15, 0.6],
 };
+
+/** How many audio nodes a brush of shape `B` (BRUSH's) holds while it plays. */
+export function brushNodes(B) {
+  return 4 + (B.HISS === 1 ? 0 : 1) + (B.DUST > 0 ? (B.DUST === 1 ? 1 : 2) : 0);
+}
+
+/**
+ * A brush of fabric or paper on `kit` into `out`: `(B, at, level)` plays one of shape `B` (BRUSH's, or the card's
+ * rustle, cueSounds.js) and returns false, playing nothing, at no level or when the kit's node budget has no room.
+ * @param {import('./sfx.js').Kit} kit
+ * @param {AudioNode} out
+ */
+export function createBrush(kit, out) {
+  const parts = voiceParts(kit);
+  return (B, at, level = 1) => {
+    const nodes = brushNodes(B);
+    if (!(level > 0) || !kit.room(nodes)) return false;
+    const end = at + B.LENGTH + TAIL;
+    const env = parts.gain(0, out);
+    env.gain.setValueAtTime(0, at);
+    for (const [t, share] of B.GRAINS) if (t > 0) env.gain.linearRampToValueAtTime(B.LEVEL * level * share, at + t);
+    const high = parts.filter('highpass', B.HIGH, 0.7, parts.filter('bandpass', B.BAND, B.Q, env));
+    const noise = parts.source(kit.noise, at, end);
+    noise.connect(B.HISS === 1 ? high : parts.gain(B.HISS, high));
+    if (B.DUST > 0) parts.source(kit.dust, at, end).connect(B.DUST === 1 ? high : parts.gain(B.DUST, high));
+    kit.track(noise, nodes, env);
+    return true;
+  };
+}
 
 /** How long each bell rings after its last strike: its longest-ringing partial's decay (s). */
 const BELL_RING = Math.max(...BELL.PARTIALS.map((p) => p.decay));
 const JINGLE_RING = Math.max(...JINGLE.PARTIALS.map((p) => p.decay));
 
-/** Every envelope closes with a ramp this long (s) down to exactly zero before its sources stop. */
-const TAIL = 0.02;
 
 /** How many audio nodes each sound holds while it plays, counted against the kit's budget. */
 const NODES = Object.freeze({
@@ -129,18 +163,16 @@ const NODES = Object.freeze({
   'shop-bell': 2 * JINGLE.PARTIALS.length + 2,
   step: 8,
   land: 8,
-  heartbeat: 3,
+  heartbeat: 9,
   hop: 3,
-  dress: 4,
-  crinkle: 6,
+  dress: brushNodes(BRUSH.dress),
+  crinkle: brushNodes(BRUSH.crinkle),
   door: 6,
-  doves: 1 + 2 * DOVES.COUNT + 1,
+  doves: 4,
 });
 
 /** The names of the finale's foley voices, as cueSounds.js plays them. */
 export const FOLEY_NAMES = Object.freeze(Object.keys(NODES));
-
-const toSilence = (decay) => decay / Math.log(1000);
 
 /**
  * The finale's foley voices on `kit`, into `out`, by cue name: each `(at, level)` returns false, playing nothing, at
@@ -161,6 +193,24 @@ export function createFoleySounds(kit, out) {
   const joining = ({ into, joint }) => (joint === out ? into : joint);
 
   /**
+   * Strikes `param` at each of `strikes` ([time, peak], in time order) times `scale`: up to the peak over `attack`,
+   * then dying away with time constant `tau`. A strike that lands while the last still rings starts from where that
+   * has fallen to.
+   */
+  function strike(param, strikes, scale, attack, tau) {
+    let ringing = 0;
+    let struck = -Infinity;
+    for (const [t, peak] of strikes) {
+      ringing = struck > -Infinity ? fallen(ringing, t - struck, tau) : 0;
+      param.setValueAtTime(ringing, t);
+      param.linearRampToValueAtTime(peak * scale, t + attack);
+      param.setTargetAtTime(0, t + attack, tau);
+      ringing = peak * scale;
+      struck = t + attack;
+    }
+  }
+
+  /**
    * A bell's `partials` of `note` struck at each of `strikes` ([time, strength]) into `into`, from `at` until `end`.
    * Returns one of its oscillators (they all stop at `end`).
    */
@@ -168,17 +218,7 @@ export function createFoleySounds(kit, out) {
     let osc = null;
     for (const partial of partials) {
       const env = parts.gain(0, into);
-      const tau = toSilence(partial.decay);
-      let ringing = 0;
-      let struck = -Infinity;
-      for (const [t, strength] of strikes) {
-        ringing = struck > -Infinity ? fallen(ringing, t - struck, tau) : 0;
-        env.gain.setValueAtTime(ringing, t);
-        env.gain.linearRampToValueAtTime(partial.gain * strength, t + attack);
-        env.gain.setTargetAtTime(0, t + attack, tau);
-        ringing = partial.gain * strength;
-        struck = t + attack;
-      }
+      strike(env.gain, strikes, partial.gain, attack, toSilence(partial.decay));
       osc = parts.tone('sine', note * partial.ratio, env, at, end);
     }
     return osc;
@@ -192,16 +232,20 @@ export function createFoleySounds(kit, out) {
     param.linearRampToValueAtTime(0, t + decay + TAIL);
   }
 
+  let left = false; // his feet take turns
+
   function step(kind, name) {
     return (at, level = 1) => {
       if (!(level > 0) || !kit.room(NODES[name])) return false;
       const S = STEP[kind];
-      const weight = S.LEVEL * level * (1 - S.VARY * kit.random());
-      const pitch = 1 + S.VARY * (kit.random() - 0.5);
+      left = !left;
+      const foot = left ? 1 : -1;
+      const weight = S.LEVEL * level * (1 + (S.FOOT * foot) / 2) * (1 - S.VARY * kit.random());
+      const pitch = (1 - S.FOOT * foot) * (1 + S.VARY * (kit.random() - 0.5));
       const end = at + Math.max(S.THUD_DECAY, S.KNOCK_DECAY, S.CLICK_DECAY) + TAIL;
       const into = parts.gain(weight, out);
       const thud = parts.gain(0, into);
-      hit(thud.gain, at, 1, 0.004, S.THUD_DECAY);
+      hit(thud.gain, at, S.THUD_GAIN, 0.004, S.THUD_DECAY);
       const low = parts.tone('sine', S.THUD * pitch, thud, at, end);
       low.frequency.setValueAtTime(S.THUD * pitch, at);
       low.frequency.exponentialRampToValueAtTime(S.THUD_TO * pitch, at + S.THUD_DECAY * 0.6);
@@ -217,23 +261,7 @@ export function createFoleySounds(kit, out) {
     };
   }
 
-  function brush(name) {
-    return (at, level = 1) => {
-      if (!(level > 0) || !kit.room(NODES[name])) return false;
-      const B = BRUSH[name];
-      const end = at + B.LENGTH + TAIL;
-      const env = parts.gain(0, out);
-      env.gain.setValueAtTime(0, at);
-      for (const [t, share] of B.GRAINS) if (t > 0) env.gain.linearRampToValueAtTime(B.LEVEL * level * share, at + t);
-      const high = parts.filter('highpass', B.HIGH, 0.7, parts.filter('bandpass', B.BAND, B.Q, env));
-      const noise = parts.source(kit.noise, at, end);
-      if (B.HISS === 1) noise.connect(high);
-      else noise.connect(parts.gain(B.HISS, high));
-      if (B.DUST > 0) parts.source(kit.dust, at, end).connect(B.DUST === 1 ? high : parts.gain(B.DUST, high));
-      kit.track(noise, NODES[name], env);
-      return true;
-    };
-  }
+  const brush = createBrush(kit, out);
 
   return {
     bell(at, level = 1) {
@@ -267,16 +295,24 @@ export function createFoleySounds(kit, out) {
       const { DUB, RING } = FOLEY.HEART;
       const dub = at + DUB;
       const end = dub + RING;
-      const env = parts.gain(0, out);
-      const peak = H.LEVEL * level;
-      hit(env.gain, at, peak, H.ATTACK, H.LUB_RING - TAIL);
-      hit(env.gain, dub, peak * H.DUB_SHARE, H.ATTACK, RING - TAIL);
-      const osc = parts.tone('triangle', H.LUB[0], parts.filter('lowpass', H.LOW, 0.7, env), at, end);
-      osc.frequency.setValueAtTime(H.LUB[0], at);
-      osc.frequency.exponentialRampToValueAtTime(H.LUB[1], at + H.LUB_RING);
-      osc.frequency.setValueAtTime(H.DUB[0], dub);
-      osc.frequency.exponentialRampToValueAtTime(H.DUB[1], end);
-      kit.track(osc, NODES.heartbeat, env);
+      const into = parts.gain(H.LEVEL * level, out);
+      const thump = parts.gain(0, into);
+      hit(thump.gain, at, 1, H.ATTACK, H.LUB_RING - TAIL);
+      hit(thump.gain, dub, H.DUB_SHARE, H.ATTACK, RING - TAIL);
+      const low = parts.tone('triangle', H.LUB[0], parts.filter('lowpass', H.LOW, 0.7, thump), at, end);
+      const body = parts.tone('sine', H.BODY_LUB[0], parts.gain(H.BODY, thump), at, end);
+      for (const [osc, lub, dubs] of [[low, H.LUB, H.DUB], [body, H.BODY_LUB, H.BODY_DUB]]) {
+        osc.frequency.setValueAtTime(lub[0], at);
+        osc.frequency.exponentialRampToValueAtTime(lub[1], at + H.LUB_RING);
+        osc.frequency.setValueAtTime(dubs[0], dub);
+        osc.frequency.exponentialRampToValueAtTime(dubs[1], end);
+      }
+      const knock = parts.gain(0, into);
+      hit(knock.gain, at, H.KNOCK_SHARE, 0.003, H.KNOCK_DECAY);
+      hit(knock.gain, dub, H.KNOCK_SHARE * H.DUB_SHARE, 0.003, H.KNOCK_DECAY);
+      const src = parts.source(kit.noise, at, end);
+      src.connect(parts.filter('bandpass', H.KNOCK, H.KNOCK_Q, knock));
+      kit.track(src, NODES.heartbeat, into);
       return true;
     },
 
@@ -300,8 +336,8 @@ export function createFoleySounds(kit, out) {
       return true;
     },
 
-    dress: brush('dress'),
-    crinkle: brush('crinkle'),
+    dress: (at, level) => brush(BRUSH.dress, at, level),
+    crinkle: (at, level) => brush(BRUSH.crinkle, at, level),
 
     door(at, level = 1) {
       if (!(level > 0) || !kit.room(NODES.door)) return false;
@@ -326,33 +362,31 @@ export function createFoleySounds(kit, out) {
     doves(at, level = 1) {
       if (!(level > 0) || !kit.room(NODES.doves)) return false;
       const D = DOVES;
-      // Every dove's wingbeats, worked out first so the sound knows when its last one ends.
-      const flights = [];
-      let end = at;
+      // Every dove's wingbeats ([time, peak, the dove's band]), in time order.
+      const beats = [];
       for (let d = 0; d < D.COUNT; d++) {
-        const beats = Math.floor(between(D.BEATS[0], D.BEATS[1] + 1));
-        const times = [];
+        const count = Math.floor(between(D.BEATS[0], D.BEATS[1] + 1));
+        const band = between(D.BAND[0], D.BAND[1]);
         let t = at + D.AFTER[d];
-        for (let i = 0; i < beats; i++) {
-          times.push(t);
-          t += (1 / D.RATE) / (1 - (1 - D.SLOW) * (i / (beats - 1)));
+        for (let i = 0; i < count; i++) {
+          beats.push([t, D.LEVEL * level * (1 - D.FADE) ** i * between(0.8, 1), band]);
+          t += (1 / D.RATE) / (1 - (1 - D.SLOW) * (i / (count - 1)));
         }
-        flights.push({ times, band: between(D.BAND[0], D.BAND[1]) });
-        end = Math.max(end, times[times.length - 1] + D.BEAT + TAIL);
       }
+      beats.sort((a, b) => a[0] - b[0]);
+      const end = beats[beats.length - 1][0] + D.BEAT + TAIL;
       const joint = parts.pan(D.PAN[0], out);
-      const into = joint === out ? parts.gain(1, out) : joint;
       if (joint !== out) {
         joint.pan.setValueAtTime(D.PAN[0], at);
         joint.pan.linearRampToValueAtTime(D.PAN[1], end);
       }
+      const env = parts.gain(0, joint);
+      strike(env.gain, beats, 1, 0.008, toSilence(D.BEAT));
+      const band = parts.filter('bandpass', beats[0][2], D.Q, env);
+      for (const [t, , hz] of beats) band.frequency.setValueAtTime(hz, t);
       const src = parts.source(kit.noise, at, end);
-      for (const { times, band } of flights) {
-        const env = parts.gain(0, into);
-        times.forEach((t, i) => hit(env.gain, t, D.LEVEL * level * (1 - D.FADE) ** i * between(0.8, 1), 0.008, D.BEAT));
-        src.connect(parts.filter('bandpass', band, D.Q, env));
-      }
-      kit.track(src, NODES.doves, into);
+      src.connect(band);
+      kit.track(src, NODES.doves, joint === out ? env : joint);
       return true;
     },
   };
