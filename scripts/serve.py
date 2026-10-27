@@ -13,6 +13,7 @@ import argparse
 import functools
 import os
 import re
+import sys
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 RANGE = re.compile(r'bytes=(\d*)-(\d*)$')
@@ -80,6 +81,13 @@ class RangeRequestHandler(SimpleHTTPRequestHandler):
 class Server(ThreadingHTTPServer):
     request_queue_size = 128
     daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        # A browser hangs up partway through a file whenever it no longer wants the rest: a song it has buffered
+        # enough of, one it has switched away from, a video it seeks in. That is normal, not a fault worth a traceback.
+        if isinstance(sys.exc_info()[1], (BrokenPipeError, ConnectionResetError)):
+            return
+        super().handle_error(request, client_address)
 
 
 def main():
