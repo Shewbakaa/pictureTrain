@@ -7,7 +7,9 @@
 //
 // On top of it sits the ride UI: the intro card, a card at every stop, the timeline, the controls and the progress
 // pill, with the furthest moment she has reached remembered across reloads. If the phone takes the GPU away
-// mid-ride, a toast offers a fresh start. The music starts with her tap on Begin and has a button of its own.
+// mid-ride, a toast offers a fresh start. The sound starts with her tap on Begin: the music, and the train's own
+// sounds (whistle, steam, chugs and the rail joints' clickety-clack), which follow the ride. One Sound button turns
+// it all on and off.
 //
 // At the Day 365 station the ride ends in the finale (finale/finale.js): under a blush fade her seat gives way to
 // the train seen from outside, the two of them meet on the platform, and his message comes up on a card with the
@@ -45,6 +47,7 @@ import { renderTimeline, timelineItems } from './ui/timeline.js';
 import { initControls } from './ui/controls.js';
 import { showToast } from './ui/toast.js';
 import { createMusic } from './audio/music.js';
+import { createSfx } from './audio/sfx.js';
 import { createVideoDirector, videoToPlay } from './photos/videos.js';
 
 /**
@@ -346,6 +349,15 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   /** Hears the finale's events ('hearts', 'fireworks', 'card'); the ride UI sets it once it is up. */
   let onFinaleEvent = () => {};
 
+  /** The train's sounds (audio/sfx.js), made with the music once the ride UI is up. */
+  let sfx = null;
+
+  /** Metres from `d` to where the moving train stops next (a stop or the finale); Infinity when it is not moving. */
+  function toStop(d) {
+    if (ride.state !== 'moving') return Infinity;
+    return (ride.nextStopIndex >= 0 ? stops[ride.nextStopIndex] : layout.finaleDistance) - d;
+  }
+
   function frame(time) {
     const dt = lastTime === null ? 0 : Math.max(0, (time - lastTime) / 1000);
     lastTime = time;
@@ -371,6 +383,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     particles.update(dt, env, eye);
     dressing.update(dt, elapsed);
     cabin.update(dt, ride.speed, elapsed);
+    if (sfx) sfx.update(ride.speed, d, dt, toStop(d));
     for (const spot of roadside) {
       spot.group.visible = Math.abs(spot.distance - d) < SIGN_RANGE;
       if (!spot.group.visible) continue;
@@ -421,7 +434,8 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     onPauseToggle: () => app.togglePause(),
     onMusicToggle: () => music.toggle(),
   });
-  // Her song if content.js names one, the built-in tune otherwise. It is held while the page is in the background.
+  // Her song if content.js names one, the built-in tune otherwise, and the train's sounds beside it. All of it is
+  // held while the page is in the background, and fades out while a video or Live Photo plays with its sound.
   const music = createMusic({
     src: content.music,
     onChange: () => {
@@ -431,6 +445,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       controls.setMusic(music.state);
     },
   });
+  sfx = createSfx(music);
   document.addEventListener('visibilitychange', () => music.setHidden(document.hidden), { signal });
   onVideoSound = () => {
     appState.videoSound = director.sound;
@@ -481,7 +496,9 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     controls.showTimeline();
   };
 
-  ride.on('arrive', ({ index }) => {
+  ride.on('arrive', ({ index, jumped }) => {
+    // The train sighs as it stands at the stop; a jump puts it there silently, under the blush.
+    if (!jumped) sfx.arrive();
     const stop = layout.stops[index];
     look.setRest(signLookYaw(stop.side));
     // A video moment's clip starts again from the top as the card comes up (it may have been playing on the way in).
@@ -494,7 +511,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
         director.setSound(on);
         return director.sound;
       },
-      // A Live Photo she taps plays with its sound: the music fades out for it and comes back when it ends.
+      // A Live Photo she taps plays with its sound: all sound fades out for it and comes back when it ends.
       onLiveSound: (on) => {
         appState.videoSound = on;
         music.setDucked(on);
@@ -506,12 +523,14 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     mirrorState(); // at once, not at the next frame, so the state agrees with the card that has just come up
   });
   ride.on('depart', () => {
+    sfx.depart();
     director.setSound(false);
     appState.phase = 'riding';
     refreshUi();
   });
   ride.on('finale', () => {
     // The train has pulled in at the Day 365 station: under a blush, her seat gives way to the scene outside.
+    sfx.finale();
     appState.phase = 'finale';
     appState.view = 'finale';
     director.play(-1);
@@ -535,6 +554,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       music.start(); // first, while her tap is still being handled: phones only let sound start from a tap
       hideIntro();
       ride.start();
+      sfx.depart(); // the whistle waits the moment it takes the browser to let the sound run
       enterRide();
     },
     continueRide() {
@@ -579,6 +599,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
         ride.restart();
         ride.setPaused(false);
         ride.start();
+        sfx.depart();
         look.setRest(0);
         look.update(SETTLE_LOOK);
         enterRide();

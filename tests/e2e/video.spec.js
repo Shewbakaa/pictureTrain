@@ -1,9 +1,12 @@
-// Video moments: a clip plays in the stop card, muted, and its speaker turns the sound on (and the music off for it).
+// Video moments: a clip plays in the stop card, muted, and its speaker turns the sound on (and all the ride's other
+// sound off for it: the music, the train and the ambience share one AudioContext, which is suspended meanwhile).
 // The clips are tiny test cards: H.264 for WebKit (the iPhone project), VP8 for Playwright's Chromium, which has no
 // H.264. They are served from tests/fixtures through the same server as the site, which answers range requests as
 // Safari needs.
 import { test, expect } from '@playwright/test';
-import { useFixture, appState, collectConsoleErrors } from './helpers.js';
+import { useFixture, appState, collectConsoleErrors, trackAudio, audioReport } from './helpers.js';
+
+const states = async (page) => (await audioReport(page)).states;
 
 const clip = (browserName) => (browserName === 'webkit' ? '../tests/fixtures/clip.mp4' : '../tests/fixtures/clip.webm');
 
@@ -14,6 +17,7 @@ async function videoFirst(page, photo) {
 
 test('a video moment plays muted in its card, and its speaker turns the sound on until Continue', async ({ page, browserName }) => {
   const errors = collectConsoleErrors(page);
+  await trackAudio(page);
   await videoFirst(page, clip(browserName));
   await page.goto('index.html?speed=25');
   await page.getByRole('button', { name: 'Begin the ride' }).click();
@@ -32,11 +36,13 @@ test('a video moment plays muted in its card, and its speaker turns the sound on
   await expect(page.getByRole('button', { name: 'Turn the video sound off' })).toHaveAttribute('aria-pressed', 'true');
   expect(await video.evaluate((v) => v.muted)).toBe(false);
   expect((await appState(page)).videoSound).toBe(true);
+  await expect.poll(() => states(page)).toEqual(['suspended']); // music, train and ambience all duck for it
 
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect.poll(async () => (await appState(page)).videoSound).toBe(false);
   expect(await page.locator('video.stop-video').evaluate((v) => v.muted)).toBe(true);
   expect((await appState(page)).music).toBe('playing');
+  await expect.poll(() => states(page)).toEqual(['running']);
   expect(errors).toEqual([]);
 });
 
@@ -79,6 +85,7 @@ async function liveFirst(page, browserName) {
 
 test('a Live Photo shows its still with a LIVE badge, plays once silently, and plays with sound when tapped', async ({ page, browserName }) => {
   const errors = collectConsoleErrors(page);
+  await trackAudio(page);
   await liveFirst(page, browserName);
   await page.goto('index.html?speed=25');
   await page.getByRole('button', { name: 'Begin the ride' }).click();
@@ -97,9 +104,11 @@ test('a Live Photo shows its still with a LIVE badge, plays once silently, and p
   await expect(live).toHaveClass(/is-playing/);
   expect(await motion.evaluate((v) => v.muted)).toBe(false);
   await expect.poll(async () => (await appState(page)).videoSound).toBe(true);
+  await expect.poll(() => states(page)).toEqual(['suspended']);
 
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect.poll(async () => (await appState(page)).videoSound).toBe(false);
+  await expect.poll(() => states(page)).toEqual(['running']);
   expect(await motion.evaluate((v) => v.paused && v.muted)).toBe(true);
   expect(errors).toEqual([]);
 });

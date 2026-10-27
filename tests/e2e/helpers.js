@@ -36,3 +36,47 @@ export function appState(page) {
 export async function waitForPhase(page, phase, timeout = 30000) {
   await page.waitForFunction((wanted) => window.__app?.state.phase === wanted, phase, { timeout });
 }
+
+/**
+ * Before page.goto: keeps the page's AudioContexts and notes when each noise-based sound (an AudioBufferSourceNode:
+ * the train's chugs, clicks, steam and whistle breath; the built-in tune uses oscillators only) starts. Read it with
+ * audioReport(page).
+ */
+export async function trackAudio(page) {
+  await page.addInitScript(() => {
+    const contexts = [];
+    const starts = [];
+    window.__audio = { contexts, starts };
+    const Base = window.AudioContext || window.webkitAudioContext;
+    if (!Base) return;
+    class Tracked extends Base {
+      constructor(...args) {
+        super(...args);
+        contexts.push(this);
+      }
+    }
+    window.AudioContext = Tracked;
+    if (window.webkitAudioContext) window.webkitAudioContext = Tracked;
+    const start = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function (...args) {
+      starts.push(performance.now());
+      return start.apply(this, args);
+    };
+  });
+}
+
+/**
+ * What trackAudio saw: `states`, each AudioContext's state; `sounds`, how many noise-based sounds have started; and
+ * `busiest`, the most that started within any one second.
+ */
+export function audioReport(page) {
+  return page.evaluate(() => {
+    const { contexts, starts } = window.__audio;
+    let busiest = 0;
+    for (let i = 0, j = 0; i < starts.length; i++) {
+      while (starts[i] - starts[j] > 1000) j++;
+      busiest = Math.max(busiest, i - j + 1);
+    }
+    return { states: contexts.map((c) => c.state), sounds: starts.length, busiest };
+  });
+}

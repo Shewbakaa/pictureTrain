@@ -1,7 +1,10 @@
-// The ride's controls: the progress pill and the music button along the top, the pause button beside the
+// The ride's controls: the progress pill and the Sound button along the top, the pause button beside the
 // timeline along the bottom. The app tells them what to show; they tell the app when they are tapped. Once the
-// ride is over, the timeline comes back under the finale's card, and the music button with it, since the music
+// ride is over, the timeline comes back under the finale's card, and the Sound button with it, since the music
 // plays on; the pill and the pause button stay away, with no stop left to count down to and nothing to pause.
+//
+// The Sound button (#music-toggle) turns all the ride's sound on and off together: the music, the train and the
+// ambience. Its label says which it is, "Sound on" or "Sound off", and it reads as pressed while the sound is on.
 
 import { dismiss, reveal, setChildren, svgEl } from './dom.js';
 
@@ -16,7 +19,7 @@ const playIcon = () => icon([
   svgEl('path', { d: 'M8.5 5.9v12.2c0 .9 1 1.4 1.7.9l9.3-6.1a1.1 1.1 0 0 0 0-1.8l-9.3-6.1c-.7-.5-1.7 0-1.7.9z' }),
 ]);
 
-/** Two beamed notes; struck through when the music is off. */
+/** Two beamed notes; struck through when the sound is off. */
 const musicIcon = (on) => icon([
   svgEl('g', { opacity: on ? 1 : 0.55 }, [
     svgEl('circle', { cx: 6.8, cy: 17.2, r: 2.6 }),
@@ -48,7 +51,6 @@ export function initControls({ onPauseToggle, onMusicToggle }) {
   const music = document.getElementById('music-toggle');
 
   pill.setAttribute('role', 'status'); // read out as it changes: "Next stop · 3 of 10"
-  music.setAttribute('aria-label', 'Music');
   pause.addEventListener('click', () => onPauseToggle());
   music.addEventListener('click', () => onMusicToggle());
 
@@ -66,6 +68,7 @@ export function initControls({ onPauseToggle, onMusicToggle }) {
       if (on === shownMusic) return;
       shownMusic = on;
       setChildren(music, musicIcon(on));
+      music.setAttribute('aria-label', on ? 'Sound on' : 'Sound off');
       music.setAttribute('aria-pressed', String(on));
     },
     setProgress(text) {
@@ -80,7 +83,7 @@ export function initControls({ onPauseToggle, onMusicToggle }) {
     showTimeline() {
       pill.hidden = true;  // no next stop once the ride is over
       pause.hidden = true; // and nothing to pause
-      reveal(topbar);      // but the music plays on, so its button comes back
+      reveal(topbar);      // but the music plays on, so the Sound button comes back
       reveal(bottombar);
     },
     hide() {

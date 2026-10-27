@@ -6,7 +6,8 @@ A little website you send as a link. She taps "Begin the ride" and a cosy cartoo
 five scenes (spring, summer, autumn, winter and an evening town). It slows down beside a photo sign for each
 moment you chose (ten to start with), and a card slides up with the photo, the date and your words. The
 last stop is the Day 365 station, where your message to her appears. It is built for phones held upright,
-plays a soft music-box tune (or your own song), and works on a computer too.
+plays a soft music-box tune (or your own song) with the little train's own sounds, and works on a computer
+too.
 
 It is a plain folder of files: no accounts, no server and no tracking. Nothing is fetched from anywhere
 else when she opens it.
@@ -99,7 +100,8 @@ photo: 'photos/03.mp4',
 
 The clip plays on the moment's sign as the train comes in, and again from the start in the card when the
 train stops. It plays silently and loops; she taps the round speaker on the card to hear it, and the music
-fades out while it plays and comes back when she taps Continue. Only one clip plays at a time.
+and the train's sounds fade out while it plays and come back when she taps Continue. Only one clip plays at a
+time.
 
 iPhone videos are large, and Android phones cannot play every iPhone video, so convert each clip before you
 add it. This command comes with every Mac. It makes a phone-sized MP4 that plays everywhere, and
@@ -118,7 +120,7 @@ file, as for photos.
 A Live Photo is a still picture plus about three seconds of motion, and the ride can show it the way her
 iPhone does. The card shows the still with a small LIVE badge; the motion plays once, silently, as the card
 comes up and then settles back to the still; and when she taps the picture it plays again with its sound (the
-music fades out for it). The sign beside the track shows the still.
+music and the train's sounds fade out for it). The sign beside the track shows the still.
 
 Browsers cannot open a Live Photo directly, so export its two halves and convert them:
 
@@ -148,8 +150,9 @@ instead, put an mp3 at `site/music/our-song.mp3` and set this in `content.js`:
 music: 'music/our-song.mp3',
 ```
 
-It starts when she taps "Begin the ride", loops, and she can switch it off and on with the music button at
-the top. If the file is missing or will not play, the built-in tune plays instead and the console says why.
+It starts when she taps "Begin the ride", loops, and she can switch it off and on with the Sound button at
+the top, which also switches the train's sounds (its whistle, steam, chugs and the clickety-clack of the rails).
+If the file is missing or will not play, the built-in tune plays instead and the console says why.
 Keep the file to a few MB (a 128 kbps mp3 is about 1 MB per minute).
 
 Her song is played at a little over half volume on Android and computers, but iPhones ignore the page's
@@ -202,12 +205,14 @@ second.)
   second, so the `?stats=1` line shows about 30, and the ride should still feel smooth.
 - The cards are readable and the Continue button is easy to reach with a thumb, including with your longest
   caption.
-- Music starts after you tap Begin.
-- On iPhones before iOS 17, the silent switch mutes the built-in tune. Test with the switch on and off. If
-  she keeps hers on, tell her to flip it off (or give her your own song, which normally still plays).
+- Music starts after you tap Begin, and the train whistles as it sets off. Listen once with the phone's
+  speaker: the train's sounds should sit softly under the music.
+- On iPhones before iOS 17, the silent switch mutes the built-in tune and the train's sounds. Test with the
+  switch on and off. If she keeps hers on, tell her to flip it off (or give her your own song, which normally
+  still plays, though the train's sounds stay muted).
 - Her own song plays at the phone's volume on iPhones (see section 4).
-- After the phone is locked and unlocked again, the music may need one tap on the music button to come back.
-- A phone call or a Siri interruption can leave the music button showing the wrong state until you tap it.
+- After the phone is locked and unlocked again, the sound may need one tap on the Sound button to come back.
+- A phone call or a Siri interruption can leave the Sound button showing the wrong state until you tap it.
 - The finale plays: the train pulls into the Day 365 station, fireworks go off, and your message appears.
 - Try it inside the app you will send the link with. Instagram and WhatsApp open links in their own small
   browser, which can behave a little differently. iMessage opens Safari, so that one is the same as above.

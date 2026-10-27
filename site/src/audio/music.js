@@ -1,34 +1,38 @@
-// The soundtrack: her song when content.js names one, otherwise the built-in tune (compose.js) played live with
-// Web Audio, a soft music-box bell with a little echo over a warm pad and bass, quiet behind the ride.
+// The soundtrack and the switch for every sound in the ride: her song when content.js names one, otherwise the
+// built-in tune (compose.js) played live with Web Audio, a soft music-box bell with a little echo over a warm pad
+// and bass, quiet behind the ride.
+//
+// It owns the ride's one AudioContext and its master chain (mixer.js). The built-in tune plays into the chain's
+// music bus; the train's sounds and the ambience (sfx.js) play into its other buses. The Sound button, a video's
+// sound and the page going into the background move the chain's master fader, so they turn everything on and off
+// together. Her song is an audio element beside the chain, faded and paused along with it.
 //
 // Phones only let sound start from a tap, so start() is called while her tap on "Begin the ride" is being handled
-// and makes its browser calls before it returns. If the browser holds the sound back anyway, the music shows as
-// off ('blocked') and a tap on the music button tries again. When the page goes into the background (another app,
+// and makes its browser calls before it returns. If the browser holds the sound back anyway, the sound shows as
+// off ('blocked') and a tap on the Sound button tries again. When the page goes into the background (another app,
 // a locked phone) the sound is held, and it comes back as she left it.
 //
-// The built-in tune's AudioContext is unlocked by that same tap even when her song is the one playing, so that if
-// the song cannot play (a mistyped file name, say) the tune can take over without asking for another tap. That is
-// certain only when the song fails at the start; if it fails mid-song, the browser may refuse to wake the tune
-// without a tap, and then the music shows as off ('blocked') until she taps the music button.
+// The AudioContext is unlocked by that same tap even when her song is the one playing: the train's sounds play on
+// it beside the song, and if the song cannot play (a mistyped file name, say) the tune can take over without asking
+// for another tap. That is certain only when the song fails at the start; if it fails mid-song, the browser may
+// refuse to wake the tune without a tap, and then the sound shows as off ('blocked') until she taps the Sound
+// button.
 
 import { composeLoop, midiToFreq } from './compose.js';
-
-/** The built-in tune's overall level, and how long it takes to fade in at the start of the ride (s). */
-const MASTER_GAIN = 0.16;
-const START_FADE = 3;
-
-/** How long the music fades out or in when she taps the music button, or comes back to the page (s). */
-const TOGGLE_FADE = 0.4;
-
-/** How long the built-in tune takes to fall silent when the page goes into the background (s). */
-const HIDE_FADE = 0.04;
+import { createMixer } from './mixer.js';
 
 /**
- * The compressor after the master gain. Web Audio's compressor adds its own makeup gain, which lifts the whole tune
- * by about 10 dB to around −21 dBFS RMS; its threshold sits above the tune, so it leaves the music alone and only
- * catches the loudest bell strikes, by a decibel at most (measured offline).
+ * How long the built-in tune takes to swell in the first time it plays (s). Everything else comes up at once
+ * (FIRST_FADE), so the whistle as the train sets off is heard in full. Its level is the mixer's music bus.
  */
-const COMPRESSOR = { threshold: -20, knee: 6, ratio: 20, attack: 0.01, release: 0.4 };
+const START_FADE = 3;
+const FIRST_FADE = 0.05;
+
+/** How long the sound fades out or in when she taps the Sound button, or comes back to the page (s). */
+const TOGGLE_FADE = 0.4;
+
+/** How long the sound takes to fall silent when the page goes into the background (s). */
+const HIDE_FADE = 0.04;
 
 /**
  * The bell: a sine with a slightly sharp octave partial, a 5 ms strike and a long exponential decay, softened by a
@@ -61,29 +65,36 @@ const RESUME_WAIT_MS = 2000;
 
 /**
  * @typedef {{ state: 'off'|'playing'|'blocked', source: 'generated'|'file', suspended: boolean,
+ *             mixer: import('./mixer.js').Mixer|null, audible: boolean, waking: boolean,
  *             start: () => Promise<void>, toggle: () => Promise<void>, setHidden: (hidden: boolean) => void,
  *             setDucked: (ducked: boolean) => void }} Music
  */
 
 /**
- * The music player. Nothing is created until start().
+ * The music player and sound switch. Nothing is created until start().
  * @param {{ src?: string, onChange?: () => void }} options  `src` is content.music: '' for the built-in tune, or
  *   a path relative to the page. `onChange` hears every change of `state`, `source` or `suspended`.
- * @returns {Music}  `state` is what the music button shows: 'blocked' means the browser held the sound back, and the
- *   button tries again. `suspended` is true while the page is in the background, holding the sound.
+ * @returns {Music}  `state` is what the Sound button shows: 'blocked' means the browser held the sound back, and the
+ *   button tries again. `suspended` is true while the page is in the background, holding the sound. `mixer` is the
+ *   master chain, null until start() has made the AudioContext. `audible` is true while sound is on and may be heard
+ *   (not held for the background or ducked for a video); `waking` while the browser is still answering a request
+ *   to turn it on.
  */
 export function createMusic({ src = '', onChange = () => {} } = {}) {
   let state = 'off';
   let source = src ? 'file' : 'generated';
   let started = false;
   let hidden = false;
-  let ducked = false; // a video's sound is on: the music fades out for it and comes back after
-  let wanted = false; // she wants music: true from start(), then flipped by the music button
+  let ducked = false; // a video's sound is on: all sound fades out for it and comes back after
+  let wanted = false; // she wants sound: true from start(), then flipped by the Sound button
   let heard = false; // the music has played at least once
+  let waking = false; // a request to sound is waiting for the browser's answer
   let request = 0; // counts the requests to sound or to fall quiet: a late answer to an older one is ignored
 
   /** @type {AudioContext|null} */
   let ctx = null;
+  /** @type {import('./mixer.js').Mixer|null} */
+  let mixer = null;
   let synth = null;
   let scheduler = null;
   let quietTimer = 0;
@@ -97,7 +108,7 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
     onChange();
   };
 
-  // The AudioContext, for the built-in tune.
+  // The AudioContext, for the built-in tune and the train's sounds, with the master chain they play through.
 
   function openContext() {
     if (ctx) return true;
@@ -109,6 +120,7 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
       console.warn('[music] This browser cannot play the built-in tune.', error);
       return false;
     }
+    mixer = createMixer(ctx);
     return true;
   }
 
@@ -183,66 +195,80 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
 
   // Either kind.
 
-  /** Makes sound from the source in use; its browser call (resume or play) is made before this returns. */
+  /**
+   * Makes sound from the source in use; its browser calls (resume, and play for her song) are made before this
+   * returns. Her song also wakes the context, for the train's sounds beside it, but does not wait for its answer.
+   */
   function wake() {
-    return source === 'file' ? wakeFile() : wakeContext();
+    if (source !== 'file') return wakeContext();
+    wakeContext();
+    return wakeFile();
   }
 
-  /** Brings the sound up once the browser lets it run. */
-  function sound(fade) {
+  /**
+   * Brings the sound up once the browser lets it run: the source in use over `fade` s, and the master chain with
+   * it. The first time, the tune swells in on its own while the chain comes up at once.
+   */
+  function sound(fade, first) {
     if (source === 'file') {
       fadeVolume(FILE_VOLUME, fade);
-      if (ctx) idleContext(0); // her song plays: the tune's context waits, unlocked, in case it is needed
-      return;
+    } else {
+      if (!synth) {
+        synth = createSynth(ctx, mixer.music);
+        scheduler = createScheduler(ctx, synth, composeLoop());
+      }
+      scheduler.start();
+      synth.fade(true, fade);
     }
-    if (!synth) {
-      synth = createSynth(ctx);
-      scheduler = createScheduler(ctx, synth, composeLoop());
-    }
-    scheduler.start();
-    synth.fade(true, fade);
+    if (mixer) mixer.fade(true, first ? FIRST_FADE : Math.min(fade, TOGGLE_FADE));
   }
 
-  /** Fades the sound out over `fade` s and then lets the browser rest (pauses her song, suspends the context). */
+  /**
+   * Fades the sound out over `fade` s and then lets the browser rest: her song pauses, the master chain falls
+   * silent and the context is suspended.
+   */
   function quiet(fade) {
-    if (source === 'file') {
-      if (audio) fadeVolume(0, fade, () => audio.pause());
-      return;
-    }
-    if (synth) synth.fade(false, fade);
-    if (ctx) idleContext(synth ? fade : 0);
+    if (source === 'file' && audio) fadeVolume(0, fade, () => audio.pause());
+    if (!ctx) return;
+    mixer.fade(false, fade);
+    idleContext(fade);
   }
 
   /** Silences the sound at once for the background. */
   function hold() {
-    if (source === 'file') {
-      clearInterval(volumeTimer);
-      if (audio) {
-        audio.pause();
-        audio.volume = 0; // so it fades back in
-      }
-      return;
+    if (source !== 'file') return quiet(HIDE_FADE);
+    clearInterval(volumeTimer);
+    if (audio) {
+      audio.pause();
+      audio.volume = 0; // so it fades back in
     }
-    quiet(HIDE_FADE);
+    if (ctx) {
+      mixer.fade(false, HIDE_FADE);
+      idleContext(HIDE_FADE);
+    }
   }
 
   function turnOn(fade) {
     const id = ++request;
     wanted = true;
+    waking = true;
     return wake().then((outcome) => {
       if (id !== request) {
         if (!wanted) quiet(0); // she turned it off while the browser was answering
         return;
       }
+      waking = false;
       if (outcome === 'failed') return fallBack();
       if (outcome === 'aborted') return; // a pause for the background interrupted it; it is retried on return
       if (outcome !== 'ok') return setState(outcome === 'blocked' ? 'blocked' : 'off');
+      const first = !heard;
       heard = true;
-      sound(fade);
+      sound(fade, first);
       setState('playing');
       if (hidden) hold();
       else if (ducked) quiet(TOGGLE_FADE);
     }).catch((error) => {
+      if (id === request) waking = false;
       console.warn('[music] The music could not play.', error);
       setState('off');
     });
@@ -251,6 +277,7 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
   function turnOff() {
     request += 1;
     wanted = false;
+    waking = false;
     setState('off');
     quiet(TOGGLE_FADE);
   }
@@ -265,16 +292,24 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
     get suspended() {
       return started && hidden;
     },
+    get mixer() {
+      return mixer;
+    },
+    get audible() {
+      return state === 'playing' && !hidden && !ducked;
+    },
+    get waking() {
+      return waking;
+    },
     /** Call it inside the tap that starts the ride. */
     start() {
       if (started) return Promise.resolve();
       started = true;
       usePlaybackSession();
-      if (source === 'file' && openContext()) ctx.resume().catch(() => {});
       onChange();
       return turnOn(START_FADE);
     },
-    /** The music button. Turning it on is a tap, so it can also start sound the browser held back before. */
+    /** The Sound button. Turning it on is a tap, so it can also start sound the browser held back before. */
     toggle() {
       if (!started) return music.start();
       if (state === 'playing') {
@@ -292,7 +327,7 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
       else if (!hidden && !ducked && wanted && state !== 'blocked') turnOn(TOGGLE_FADE);
       onChange();
     },
-    /** A video's sound is on (true) or off again: the music fades out for it, and back in after, if she wants it. */
+    /** A video's sound is on (true) or off again: all sound fades out for it, and back in after, if she wants it. */
     setDucked(value) {
       const next = Boolean(value);
       if (next === ducked) return;
@@ -313,7 +348,7 @@ function playOutcome(error) {
   return 'failed';
 }
 
-/** iOS 17+: the music plays like a video's sound, through the silent switch, rather than as a page's beeps. */
+/** iOS 17+: the sound plays like a video's sound, through the silent switch, rather than as a page's beeps. */
 function usePlaybackSession() {
   try {
     if (navigator.audioSession && 'type' in navigator.audioSession) navigator.audioSession.type = 'playback';
@@ -323,19 +358,17 @@ function usePlaybackSession() {
 }
 
 /**
- * The built-in tune's instruments on `ctx`, ending in its destination. Exported so the tune can be rendered offline
- * (OfflineAudioContext) to check its levels.
+ * The built-in tune's instruments on `ctx`, playing into `out` (the mixer's music bus) through a fader of their
+ * own, silent until fade(true). Exported so the tune can be rendered offline (OfflineAudioContext) to check its
+ * levels.
  * @param {BaseAudioContext} ctx
+ * @param {AudioNode} out
  * @returns {{ fade: (on: boolean, seconds: number) => void, playNote: (note: import('./compose.js').Note, at: number) => void }}
  */
-export function createSynth(ctx) {
-  const compressor = ctx.createDynamicsCompressor();
-  for (const [name, value] of Object.entries(COMPRESSOR)) compressor[name].value = value;
-  compressor.connect(ctx.destination);
-
+export function createSynth(ctx, out) {
   const master = ctx.createGain();
   master.gain.value = 0;
-  master.connect(compressor);
+  master.connect(out);
 
   const lowpass = (frequency) => {
     const filter = ctx.createBiquadFilter();
@@ -427,8 +460,9 @@ export function createSynth(ctx) {
     },
   };
 
-  // The master level, faded by linear ramps. The level at any moment is worked out here rather than read back from
-  // the AudioParam, which not every browser reports mid-ramp.
+  // The tune's fader, moved by linear ramps between silence and its full level (the music bus sets how loud that
+  // is). The level at any moment is worked out here rather than read back from the AudioParam, which not every
+  // browser reports mid-ramp.
   let from = 0;
   let to = 0;
   let rampStart = 0;
@@ -442,8 +476,8 @@ export function createSynth(ctx) {
       const end = now + Math.max(seconds, 0.01);
       master.gain.cancelScheduledValues(now);
       master.gain.setValueAtTime(level, now);
-      master.gain.linearRampToValueAtTime(on ? MASTER_GAIN : 0, end);
-      [from, to, rampStart, rampEnd] = [level, on ? MASTER_GAIN : 0, now, end];
+      master.gain.linearRampToValueAtTime(on ? 1 : 0, end);
+      [from, to, rampStart, rampEnd] = [level, on ? 1 : 0, now, end];
     },
     playNote(note, at) {
       voices[note.voice](note, at);

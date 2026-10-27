@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { useFixture, appState, waitForPhase } from './helpers.js';
+import { useFixture, appState, waitForPhase, collectConsoleErrors, trackAudio, audioReport } from './helpers.js';
 
 test.beforeEach(async ({ page }) => { await useFixture(page); });
 
@@ -43,6 +43,8 @@ test('jumping from the finale to a moment', async ({ page }) => {
 
 test('full ride end to end', async ({ page, browserName }) => {
   test.skip(browserName === 'webkit', 'one full ride is enough');
+  const errors = collectConsoleErrors(page);
+  await trackAudio(page);
   const titles = ['First coffee', 'Rainy walk', 'Beach day', 'Sunset pier', 'Pumpkin patch', 'Movie night', 'First snow', 'Ice skating', 'City lights', 'Our dinner'];
   await page.goto('index.html?speed=50');
   await page.getByRole('button', { name: 'Begin the ride' }).click();
@@ -52,4 +54,11 @@ test('full ride end to end', async ({ page, browserName }) => {
   }
   await waitForPhase(page, 'done');
   await expect(page.locator('#finale-card')).toContainText('Happy 1 year, Maya');
+  // The train's sounds kept to real time while the ride ran 50 times too fast: they were heard, but never piled up
+  // (it crosses a rail joint every few frames, which would otherwise be dozens of clicks a second).
+  const audio = await audioReport(page);
+  expect(audio.states).toEqual(['running']);
+  expect(audio.sounds).toBeGreaterThan(20);
+  expect(audio.busiest).toBeLessThanOrEqual(12);
+  expect(errors).toEqual([]);
 });

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { useFixture, appState } from './helpers.js';
+import { useFixture, appState, trackAudio, audioReport } from './helpers.js';
 
 const wav = () => {
   const n = 8000, b = Buffer.alloc(44 + n * 2);
@@ -11,15 +11,44 @@ const wav = () => {
 };
 const begin = async (page) => { await page.goto('index.html'); await page.getByRole('button', { name: 'Begin the ride' }).click(); };
 
-test('generated music plays after Begin and toggles', async ({ page }) => {
+const states = async (page) => (await audioReport(page)).states;
+
+test('generated music plays after Begin, and the Sound button turns all sound off and on', async ({ page }) => {
+  await trackAudio(page);
   await useFixture(page);
   await begin(page);
   await expect.poll(async () => (await appState(page)).music).toBe('playing');
   expect((await appState(page)).musicSource).toBe('generated');
-  await page.locator('#music-toggle').click();
+  // One AudioContext for the music and the train's sounds.
+  await expect.poll(() => states(page)).toEqual(['running']);
+  await expect(page.getByRole('button', { name: 'Sound on' })).toHaveAttribute('aria-pressed', 'true');
+
+  await page.getByRole('button', { name: 'Sound on' }).click();
   await expect.poll(async () => (await appState(page)).music).toBe('off');
-  await page.locator('#music-toggle').click();
+  await expect(page.getByRole('button', { name: 'Sound off' })).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(() => states(page)).toEqual(['suspended']);
+
+  await page.getByRole('button', { name: 'Sound off' }).click();
   await expect.poll(async () => (await appState(page)).music).toBe('playing');
+  await expect(page.getByRole('button', { name: 'Sound on' })).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => states(page)).toEqual(['running']);
+});
+
+test('the train whistles as it sets off and chugs along, and is quiet while the sound is off', async ({ page }) => {
+  await trackAudio(page);
+  await useFixture(page);
+  await begin(page);
+  await expect.poll(async () => (await audioReport(page)).sounds).toBeGreaterThanOrEqual(2); // the whistle, the steam
+  await expect.poll(async () => (await audioReport(page)).sounds, { timeout: 10_000 }).toBeGreaterThanOrEqual(5); // chugs
+
+  await page.getByRole('button', { name: 'Sound on' }).click();
+  await expect.poll(() => states(page)).toEqual(['suspended']);
+  const quiet = (await audioReport(page)).sounds;
+  await page.waitForTimeout(2500); // the train rides on: three chugs and a joint's clicks, with the sound on
+  expect((await audioReport(page)).sounds).toBe(quiet);
+
+  await page.getByRole('button', { name: 'Sound off' }).click();
+  await expect.poll(async () => (await audioReport(page)).sounds, { timeout: 5000 }).toBeGreaterThan(quiet);
 });
 
 test('a missing song falls back to the built-in tune', async ({ page }) => {
@@ -31,14 +60,18 @@ test('a missing song falls back to the built-in tune', async ({ page }) => {
   await expect.poll(() => warnings.some((w) => w.includes('music/missing.mp3'))).toBe(true);
 });
 
-test('a song file is used when present', async ({ page }) => {
+test('a song file is used when present, with the train\'s sounds beside it', async ({ page }) => {
+  await trackAudio(page);
   await useFixture(page, { music: 'music/tone.wav' });
   await page.route('**/music/tone.wav', (r) => r.fulfill({ contentType: 'audio/wav', body: wav() }));
   await begin(page);
   await expect.poll(async () => (await appState(page)).musicSource).toBe('file');
+  await expect.poll(async () => (await appState(page)).music).toBe('playing');
+  await expect.poll(() => states(page)).toEqual(['running']);
 });
 
 test('backgrounding suspends and restores audio', async ({ page }) => {
+  await trackAudio(page);
   await useFixture(page);
   await begin(page);
   await expect.poll(async () => (await appState(page)).music).toBe('playing');
@@ -49,7 +82,9 @@ test('backgrounding suspends and restores audio', async ({ page }) => {
   }, hidden);
   await setHidden(true);
   await expect.poll(async () => (await appState(page)).audioSuspended).toBe(true);
+  await expect.poll(() => states(page)).toEqual(['suspended']);
   await setHidden(false);
   await expect.poll(async () => (await appState(page)).audioSuspended).toBe(false);
+  await expect.poll(() => states(page)).toEqual(['running']);
   expect((await appState(page)).music).toBe('playing');
 });
