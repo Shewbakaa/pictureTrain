@@ -301,10 +301,11 @@ export default {
   // ---------------------------------------------------------------------------
   //  Music
   //
-  //  Leave it as '' and the ride plays a soft, gentle tune it makes by itself. To use your own
-  //  song instead, put an mp3 in the music folder (site/music/) and write its path here, like
-  //  'music/our-song.mp3'. It starts when she taps the start button, and she can switch it
-  //  off and on with the music button.
+  //  Leave it as '' and each scene plays its own gentle music (piano pieces by Chopin, and a
+  //  carol in the winter hills). To use your own song instead, put an mp3 in the music folder
+  //  (site/music/) and write its path here, like 'music/our-song.mp3'. It plays through every
+  //  scene, in place of theirs. It starts when she taps the start button, and she can switch
+  //  it off and on with the Sound button.
   // ---------------------------------------------------------------------------
   music: '',
 };

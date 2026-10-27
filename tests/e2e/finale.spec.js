@@ -46,18 +46,22 @@ test('full ride end to end', async ({ page, browserName }) => {
   const errors = collectConsoleErrors(page);
   await trackAudio(page);
   const titles = ['First coffee', 'Rainy walk', 'Beach day', 'Sunset pier', 'Pumpkin patch', 'Movie night', 'First snow', 'Ice skating', 'City lights', 'Our dinner'];
-  // Each stop's zone, whose ambience is playing there; in winter the carol plays in place of the tune.
+  // Each stop's zone, whose ambience and whose own music are playing there: in winter, the carol.
   const zones = ['spring', 'spring', 'summer', 'summer', 'autumn', 'autumn', 'winter', 'winter', 'evening', 'evening'];
   await page.goto('index.html?speed=50');
   await page.getByRole('button', { name: 'Begin the ride' }).click();
   for (const [i, t] of titles.entries()) {
     await expect(page.locator('#stop-card')).toContainText(t);
     await expect.poll(async () => (await appState(page)).ambience).toContain(zones[i]);
+    await expect.poll(async () => (await appState(page)).musicPiece).toBe(zones[i]);
     expect((await appState(page)).carol).toBe(zones[i] === 'winter' ? 1 : 0);
     await page.getByRole('button', { name: 'Continue' }).click();
   }
   await waitForPhase(page, 'done');
   await expect(page.locator('#finale-card')).toContainText('Happy 1 year, Maya');
+  // The evening's nocturne plays on through the finale.
+  expect((await appState(page)).musicPiece).toBe('evening');
+  await expect.poll(async () => (await audioReport(page)).pieces.evening.paused).toBe(false);
   // The fireworks pop over the town (each a puff and a crackle) for as long as the finale plays.
   const popped = (await audioReport(page)).sounds;
   await expect.poll(async () => (await audioReport(page)).sounds - popped, { timeout: 5000 }).toBeGreaterThanOrEqual(6);
@@ -68,5 +72,6 @@ test('full ride end to end', async ({ page, browserName }) => {
   expect(audio.states).toEqual(['running']);
   expect(audio.sounds).toBeGreaterThan(20);
   expect(audio.busiest).toBeLessThanOrEqual(12);
+  expect(audio.mostPieces).toBeLessThanOrEqual(2); // never more than two scenes' pieces at once
   expect(errors).toEqual([]);
 });

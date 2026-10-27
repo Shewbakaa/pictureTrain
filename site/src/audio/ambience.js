@@ -13,7 +13,7 @@
 // nothing), and every TICK of real time it tends the beds (making one as its zone comes near, fading it with the
 // zone, taking it down once its zone has been silent for RELEASE) and books their sound LOOKAHEAD ahead, and steps
 // the events' clocks, which keep to real time (ambienceTiming.js): a ?speed= time warp never piles sounds up.
-// `winter` is the winter hills' weight, for the carol (music.js setWinter).
+// `weights` are the zones' weights, which the scenes' music follows too (music.js setZones).
 
 import { AMBIENCE, bedGain, createChimeTrigger, createEventClock, wavePan, zoneWeights } from './ambienceTiming.js';
 import { BED_ZONES, createBed } from './ambienceBeds.js';
@@ -61,9 +61,11 @@ const NEAR = [0.55, 1];
 const EVENT_SEED = 1026;
 
 /**
- * @typedef {{ readonly winter: number, readonly beds: string[], update: (env: import('../world/environment.js').Env,
- *             yaw: number, seconds: number, distance: number) => void }} Ambience
- *   `beds` lists the zones whose beds are up (for tests and a curious look in the console)
+ * @typedef {{ readonly weights: Readonly<Record<string, number>>, readonly beds: string[],
+ *             update: (env: import('../world/environment.js').Env, yaw: number, seconds: number,
+ *             distance: number) => void }} Ambience
+ *   `weights` is each zone's weight at the last update (zoneWeights), every frame, sound or no sound; `beds` lists
+ *   the zones whose beds are up (for tests and a curious look in the console)
  */
 
 /**
@@ -133,8 +135,8 @@ export function createAmbience(sfx) {
   }
 
   return {
-    get winter() {
-      return weights.winter || 0;
+    get weights() {
+      return weights;
     },
     get beds() {
       return up;

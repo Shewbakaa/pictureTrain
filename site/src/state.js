@@ -5,7 +5,11 @@
 // phase: 'loading' | 'intro' | 'riding' | 'stopped' | 'finale' | 'done' | 'fallback' | 'error'
 // mode:  '3d' | 'fallback' | null (null until the first 3D frame or the fallback page is shown)
 // ambience: the zones whose ambience is playing (their beds are up), e.g. ['spring'] or ['spring', 'summer']
-// carol: how much of the built-in music is the winter carol rather than the tune, 0 to 1
+// musicSource: 'built-in' (each scene's own music) | 'file' (her song) | null before the ride UI is up
+// musicPiece: the loudest piece of music: a scene's own 'spring' | 'summer' | 'autumn' | 'winter' (the carol) |
+//   'evening', 'tune' (the built-in tune, standing in for a scene whose recording cannot play), 'file' (her song),
+//   or null (before Begin, and while nothing plays)
+// carol: how much of the music is the winter carol, 0 to 1
 export const appState = {
   phase: 'loading',
   mode: null,
@@ -21,6 +25,7 @@ export const appState = {
   triangles: 0,
   music: 'off',
   musicSource: null,
+  musicPiece: null,
   audioSuspended: false,
   videoSound: false,
   ambience: [],

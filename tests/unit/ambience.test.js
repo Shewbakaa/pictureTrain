@@ -62,7 +62,8 @@ test('nothing plays, and nothing breaks, before the Begin tap has made the conte
   const ambience = createAmbience(createSfx({ mixer: null, audible: false, waking: false }, { now: () => 0 }));
   const env = envAt(L, middleOf('winter'));
   for (let i = 0; i < 30; i++) ambience.update(env, 0, FRAME, middleOf('winter'));
-  assert.equal(ambience.winter, 1, 'the carol still hears where winter is');
+  assert.equal(ambience.weights.winter, 1, 'the music still hears where each zone is');
+  assert.equal(ambience.weights.spring, 0);
   assert.deepEqual(ambience.beds, []);
 });
 

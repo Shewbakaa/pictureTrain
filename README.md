@@ -6,8 +6,8 @@ A little website you send as a link. She taps "Begin the ride" and a cosy cartoo
 five scenes (spring, summer, autumn, winter and an evening town). It slows down beside a photo sign for each
 moment you chose (ten to start with), and a card slides up with the photo, the date and your words. The
 last stop is the Day 365 station, where your message to her appears. It is built for phones held upright,
-plays a soft music-box tune (or your own song) with the little train's own sounds and the sounds of each
-scene, and works on a computer too.
+plays gentle piano music by Chopin in each scene (or your own song) with the little train's own sounds and
+the sounds of each scene, and works on a computer too.
 
 It is a plain folder of files: no accounts, no server and no tracking. Nothing is fetched from anywhere
 else when she opens it.
@@ -25,7 +25,8 @@ Nothing is sent or published by anything in this folder until you do it yourself
 
 - `site/` is the website. This is the only folder that gets published.
 - `site/content.js` is the one file you edit to make it yours.
-- `site/photos/` and `site/music/` are where your photos and song go.
+- `site/photos/` and `site/music/` are where your photos and song go. Each scene's own music is in
+  `site/music/zones/`.
 - `scripts/`, `tests/` and `package.json` are tools for checking the site and making the link-preview
   picture. She never sees them.
 
@@ -143,31 +144,41 @@ If the motion cannot be played, the moment simply shows its still, and the conso
 
 ## 4. Add your song
 
-The ride makes a soft music-box tune by itself, so you do not need to do anything. To use your own song
-instead, put an mp3 at `site/music/our-song.mp3` and set this in `content.js`:
+Each scene has its own music, so you do not need to do anything. The spring meadow, the summer beach, the
+autumn forest and the evening town each play a piano piece by Chopin: *Wiosna* ("Spring"), the Nocturne in
+E-flat (Op. 9 No. 2), the "Raindrop" Prelude (Op. 28 No. 15) and the Nocturne in D-flat (Op. 27 No. 2), which
+plays on through the finale. In the winter hills *Silent Night* plays faintly on a little music box. As the
+train passes from one scene into the next, one piece fades away and the next begins from its start, and a
+scene that lasts longer than its piece hears it again from the top.
+
+To use your own song instead, put an mp3 at `site/music/our-song.mp3` and set this in `content.js`:
 
 ```js
 music: 'music/our-song.mp3',
 ```
 
-It starts when she taps "Begin the ride", loops, and she can switch it off and on with the Sound button at
-the top, which also switches the ride's other sounds: the train's (its whistle, steam, chugs and the
-clickety-clack of the rails), each scene's (birds and a breeze in the meadow, waves at the beach, rustling
-leaves, a soft wind over the snow, crickets and a clock tower in the evening town), a rustle as each card comes
-up, and the finale's sparkle and fireworks. If the file is missing or will not play, the built-in tune plays
-instead and the console says why.
-
-In the winter hills the built-in tune gives way to *Silent Night*, played faintly on the same music box. That
-happens only with the built-in tune: your own song plays on through winter.
+Your song then replaces them all: it plays throughout, through every scene and the finale, with no scene's
+piece and no carol (and their files are never downloaded). It starts when she taps "Begin the ride", loops,
+and she can switch it off and on with the Sound button at the top, which also switches the ride's other
+sounds: the train's (its whistle, steam, chugs and the clickety-clack of the rails), each scene's (birds and a
+breeze in the meadow, waves at the beach, rustling leaves, a soft wind over the snow, crickets and a clock
+tower in the evening town), a rustle as each card comes up, and the finale's sparkle and fireworks. If the
+file is missing or will not play, each scene's own music plays instead and the console says why.
 Keep the file to a few MB (a 128 kbps mp3 is about 1 MB per minute).
 
 Her song is played at a little over a third of full volume on Android and computers, so the train's sounds can
 be heard under it, but iPhones ignore the page's volume setting, so on an iPhone it plays at whatever the
 phone's volume is. Check how loud it is on a real phone (section 6).
 
-To hear the built-in tune without a phone, open the site and tap Begin. On the computer this was built on
-there is also a one-loop recording of it at `artifacts/music-loop-preview.wav`. That folder is not part of
-the repository, so you will not find it in a fresh download.
+To change one scene's piece, replace the file of the same name in `site/music/zones/` (`spring.mp3`,
+`summer.mp3`, `autumn.mp3` or `evening.mp3`) with another mp3. Each file is turned up by a set amount so the
+four sit at the same loudness, worked out for the file that is there now (`PIECES` in
+`site/src/audio/zoneMusic.js`). If yours sounds much louder or quieter than the others, measure it (for
+example `ffmpeg -i yours.mp3 -af ebur128 -f null -` prints its loudness on the `I:` line, in LUFS) and put that
+number in as its `lufs`. If a scene's file is missing or will not play, that scene plays a soft music-box tune
+made by the ride itself instead, and the console names the file.
+
+To hear the music without a phone, open the site on your computer (section 5) and tap Begin.
 
 ## 5. Preview it on your computer
 
@@ -214,7 +225,10 @@ second.)
 - Music starts after you tap Begin, and the train whistles as it sets off. Listen once with the phone's
   speaker: the train's and the scenery's sounds should sit softly under the music, the birds and crickets
   included, and the carol in the winter hills should be faint.
-- On iPhones before iOS 17, the silent switch mutes the built-in tune and the ride's other sounds. Test with the
+- Ride on past the first scene: the meadow's piece should fade away and the beach's begin. On an iPhone this is
+  the thing to check, since iPhones only let each piece play because of her tap on Begin. If a scene plays the
+  little music-box tune instead of its piano piece, the browser would not play that scene's file.
+- On iPhones before iOS 17, the silent switch mutes the music and the ride's other sounds. Test with the
   switch on and off. If she keeps hers on, tell her to flip it off, or give her your own song, which normally
   still plays. With your song playing, check whether the ride's other sounds are heard too: that can differ
   from phone to phone.
@@ -362,6 +376,8 @@ Made with:
   Licence 1.1, in `site/fonts/LICENSE-cormorant-garamond.txt`.
 - [Nunito](https://github.com/googlefonts/nunito) for the body text and numbers. SIL Open Font Licence 1.1,
   in `site/fonts/LICENSE-nunito.txt`.
+- Music: Frédéric Chopin — recordings from Musopen's Complete Chopin Collection (CC0 1.0),
+  https://archive.org/details/musopen-chopin
 
-The world, the train, the figures and the music are all drawn and composed in code. There are no model
-files and no audio files.
+The world, the train and the figures are all drawn in code, and the winter carol, the music-box tune and every
+sound but the four Chopin recordings in `site/music/zones/` are made in code too. There are no model files.

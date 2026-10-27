@@ -104,3 +104,62 @@ Levels below are targets for the mixed output measured offline (OfflineAudioCont
 - E2E: the Sound button turns everything off and on; video/Live Photo sound ducks ambience and effects too;
   page hidden suspends; no console errors on a full ride (Chromium, speed 50).
 - Real phone (author): listen once on her kind of phone; adjust levels if anything is too loud.
+
+## Addendum: per-zone music
+
+Approved by the author on 2026-10-27: romantic instrumental music for each scene instead of the single built-in
+tune. This replaces "Everything is synthesized with Web Audio … no audio files" above (and the global "no
+third-party audio files" rule) for the music only: the four recordings are public domain (CC0) and served from
+the site itself, like the photos. Everything else here still holds.
+
+| Zone | Music |
+|---|---|
+| Spring meadow | `site/music/zones/spring.mp3`: Chopin, *Wiosna* ("Spring"), 1:27 |
+| Summer beach | `site/music/zones/summer.mp3`: Chopin, Nocturne Op. 9 No. 2, 4:37 |
+| Autumn forest | `site/music/zones/autumn.mp3`: Chopin, Prelude Op. 28 No. 15 "Raindrop", 4:55 |
+| Winter hills | The synthesized music-box *Silent Night* (carol.js), unchanged |
+| Evening town (and the finale) | `site/music/zones/evening.mp3`: Chopin, Nocturne Op. 27 No. 2, 6:18 |
+
+- **Source.** Musopen's Complete Chopin Collection (https://archive.org/details/musopen-chopin, CC0 1.0),
+  loudness-normalised to about −25 to −26 LUFS integrated (peaks ≤ −5.8 dBFS), re-encoded to 96 kbps 44.1 kHz
+  stereo MP3 without metadata. Credited in the README.
+- **One piece per zone, crossfaded by the zone blend** (`audio/zoneMusic.js`). Each piece's share follows its
+  zone's weight (envAt's zoneA/zoneB/t, as the ambience) through the carol's dip: across a boundary the piece
+  behind is gone by the middle of the blend and the piece ahead rises over its last 55%, equal-power, so two
+  melodies are never loud together. The carol now crosses with its neighbours this way (it used to cross with
+  the tune; the curve is the same).
+- **The built-in tune is a fallback only.** A zone whose recording cannot load or play (missing, not audio,
+  refused) plays the tune instead, with `[music] Could not play "music/zones/<zone>.mp3" — the built-in tune
+  plays in this scene instead.` Two neighbouring zones both on the tune play it whole across their boundary.
+- **Her song (content.music) overrides everything**: it plays throughout, with no zone piece and no carol, and
+  no zone file is fetched. If it fails, the zones' music takes over (it used to be the tune).
+- **Starting and stopping.** A piece starts from its top as its zone becomes audible. A recording loops, fading
+  out over its last 3 s and, after the seam, in over 1 s (the files end in 2.6–4.3 s of silence, so the seam is
+  the piece's own ending and a breath). When its share returns to 0 a recording plays on for a 0.5 s tail while
+  its gain eases out, then pauses and rewinds; the carol and the tune stop booking notes at once, as before. At
+  most two pieces play at once: a piece starting while two others play cuts short any fading tail (only a jump
+  from the middle of a blend makes three). Timeline jumps and Ride again simply move the zone weights, so the
+  pieces follow. At the finale the evening piece plays on.
+- **Routing.** `HTMLAudioElement → MediaElementAudioSourceNode → seam gain → share × trim gain → the soundtrack's
+  fader → the music bus`, on the one shared context: the Sound button, ducking, hiding and the master fader
+  apply. Holding the sound (off, ducked, hidden) pauses each element where it is; it plays on from there.
+- **iOS.** Each element needs a tap of its own. All four are created inside the Begin tap with no file, and
+  unlocked there with play() then pause(), so nothing is downloaded. A file is fetched (`preload='auto'`, src set)
+  only once its zone is within 250 m of the train or is the next zone, or when it is first played. Playwright's
+  WebKit does not enforce the gesture rule, so this is checked on a real iPhone (README section 6).
+- **Levels.** The tune comes out of its instruments at −13.46 LUFS (both speakers, measured offline); each
+  recording gets a trim of 10^((−13.46 − its LUFS)/20), +11.5 to +12.9 dB, before the music bus. Through the
+  master chain (offline, whole files): tune −22.75 LUFS / −25.21 dBFS RMS; recordings −22.74 to −22.94 LUFS /
+  −25.65 to −25.94 dBFS RMS, peaks −7.2 to −5.8 dBFS. Their loudest chords (short-term max −16.3 to −16.9 LUFS,
+  against the tune's −20.0) reach the compressor, which takes up to about 3 dB off their peaks and 0.1–0.2 LU off
+  their loudness. Measured again in real time in Chromium (AnalyserNodes on the music bus, the first 40 s, through
+  the real MediaElementSource path): the same as offline within 0.05 dB.
+- **State.** `appState.musicPiece`: the loudest piece ('spring'|'summer'|'autumn'|'winter'|'evening'|'tune'|
+  'file'|null). `appState.musicSource` is now 'built-in' or 'file' (it was 'generated' or 'file').
+
+Acceptance: unit tests for the N-piece dip at every zone pair, the start/stop/rewind and tail decisions, at most
+two pieces, the loop-seam timing, the preload distance and the fallback choice (`zoneMusic.test.js`,
+`soundtrack.test.js`, `recording.test.js`); an offline level test of every recording against the tune
+(`zoneMusicLevels.spec.js`); E2E on both engines for spring giving way to summer (≤ 2 playing), the carol after a
+jump into winter, a 404 giving the tune with the warning, Sound off, ducking and hiding pausing the pieces, her
+song staying 'file' through every zone, and no console errors on a full ride at speed 50 (Chromium).

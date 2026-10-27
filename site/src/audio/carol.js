@@ -1,8 +1,8 @@
 // The winter carol: Silent Night (Franz Gruber, 1818, public domain), written out for the built-in tune's
 // instruments (music.js): the melody on the music-box bell, a pad holding each bar's chord, and a soft bass rocking
-// between root and fifth, in 6/8 at a slow lilt and in the tune's key, F major. It plays faintly in place of the
-// tune in the winter hills (only with the built-in tune: her own song carries on through winter), crossfading with
-// it across the zone boundary (carolMix), so the two melodies never clash.
+// between root and fifth, in 6/8 at a slow lilt and in the tune's key, F major. It is the winter hills' music,
+// played faintly (her own song, when there is one, carries on through winter instead), and dips with the music of
+// the scenes either side across their boundaries (zoneMusic.js pieceShare), so two melodies never clash.
 //
 // Pure and DOM-free, so the Node unit tests can import it.
 
@@ -42,9 +42,6 @@ const CHORDS = [[F], [F], [C], [F], [B_FLAT], [F], [B_FLAT], [F], [C], [F], [F, 
 
 /** Bars of the melody that swell a little (the climb to "sleep in heavenly peace") or settle (the last line). */
 const SHAPE = [1, 1, 1.04, 1, 1, 0.97, 1, 0.97, 1.08, 1.06, 0.95, 0.9];
-
-/** Across the winter boundary the tune fades over the first MIX_OVERLAP of the blend, the carol rises over the last. */
-const MIX_OVERLAP = 0.55;
 
 /** A breath of one bar, the home chord alone, before the carol begins again. */
 const BREATH_BARS = 1;
@@ -110,21 +107,4 @@ function accompany(notes, chords, start, length, level) {
 /** Pitch class `pc` in the octave starting at MIDI note `low`. */
 function inOctaveFrom(pc, low) {
   return low + ((((pc - low) % 12) + 12) % 12);
-}
-
-/**
- * How much of the tune and of the carol play (gain shares, 0 to 1) when the winter hills' weight is `winter`
- * (zoneWeights): all tune outside winter, all carol inside it. Across the boundary the tune fades away first and the
- * carol rises after it (equal-power curves over overlapping halves of the blend), so the two are never heard
- * clearly together and never louder together than either alone. Writes into `out` and returns it.
- * @param {number} winter
- * @param {{ tune?: number, carol?: number }} [out]
- * @returns {{ tune: number, carol: number }}
- */
-export function carolMix(winter, out = {}) {
-  const w = clamp(winter, 0, 1);
-  out.tune = Math.cos((Math.PI / 2) * clamp(w / MIX_OVERLAP, 0, 1));
-  out.carol = Math.sin((Math.PI / 2) * clamp((w - (1 - MIX_OVERLAP)) / MIX_OVERLAP, 0, 1));
-  if (w >= MIX_OVERLAP) out.tune = 0; // cos(π/2) is not quite 0 in floating point
-  return out;
 }

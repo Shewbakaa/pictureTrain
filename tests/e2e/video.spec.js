@@ -37,7 +37,8 @@ test('a video moment plays muted in its card, and its speaker turns the sound on
   expect(await video.evaluate((v) => v.muted)).toBe(false);
   expect((await appState(page)).videoSound).toBe(true);
   await expect.poll(() => states(page)).toEqual(['suspended']); // music, train and ambience all duck for it
-  // Nothing starts while it plays aloud: not the tune, not the train, not the meadow's birds or breeze.
+  await expect.poll(async () => (await audioReport(page)).pieces.spring.paused).toBe(true); // the meadow's piece too
+  // Nothing starts while it plays aloud: not the music, not the train, not the meadow's birds or breeze.
   const ducked = await audioReport(page);
   await page.waitForTimeout(3000);
   const later = await audioReport(page);
@@ -50,6 +51,7 @@ test('a video moment plays muted in its card, and its speaker turns the sound on
   expect(await page.locator('video.stop-video').evaluate((v) => v.muted)).toBe(true);
   expect((await appState(page)).music).toBe('playing');
   await expect.poll(() => states(page)).toEqual(['running']);
+  await expect.poll(async () => (await audioReport(page)).pieces.spring.paused).toBe(false);
   // The sound comes back in time for the train to whistle as it sets off.
   await expect.poll(async () => (await audioReport(page)).whistles, { timeout: 1500 }).toBe(whistled + 1);
   expect(errors).toEqual([]);

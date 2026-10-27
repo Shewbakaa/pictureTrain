@@ -1,30 +1,38 @@
-// The soundtrack and the switch for every sound in the ride: her song when content.js names one, otherwise the
-// built-in tune (compose.js) played live with Web Audio, a soft music-box bell with a little echo over a warm pad
-// and bass, quiet behind the ride. In the winter hills the built-in tune gives way to Silent Night (carol.js) on the
-// same instruments, crossfading with the scenery (setWinter); her own song carries on through winter instead.
+// The soundtrack and the switch for every sound in the ride: her song when content.js names one, otherwise each
+// scene's own music (zoneMusic.js), quiet behind the ride. Spring, summer, autumn and the evening town play a
+// recording of a piece by Chopin (recording.js); the winter hills play Silent Night (carol.js) on a soft music box
+// played live with Web Audio, a bell with a little echo over a warm pad and bass. Each piece follows its zone's
+// weight in the scenery's blend, and two pieces dip across a boundary rather than play over each other (setZones).
+// A scene whose recording cannot be played has the built-in tune (compose.js) on the music box instead. Her own
+// song plays on through every scene instead of all of them.
 //
-// It owns the ride's one AudioContext and its master chain (mixer.js). The built-in tune plays into the chain's
-// music bus; the train's sounds and the ambience (sfx.js) play into its other buses. The Sound button, a video's
-// sound and the page going into the background move the chain's master fader, so they turn everything on and off
-// together. Her song is an audio element beside the chain, faded and paused along with it.
+// It owns the ride's one AudioContext and its master chain (mixer.js). The scenes' music plays into the chain's
+// music bus, the recordings through it too (element → MediaElementAudioSourceNode); the train's sounds and the
+// ambience (sfx.js) play into its other buses. The Sound button, a video's sound and the page going into the
+// background move the chain's master fader, so they turn everything on and off together. Her song is an audio
+// element beside the chain, faded and paused along with it.
 //
 // Phones only let sound start from a tap, so start() is called while her tap on "Begin the ride" is being handled
-// and makes its browser calls before it returns. If the browser holds the sound back anyway, the sound shows as
-// off ('blocked') and a tap on the Sound button tries again. When the page goes into the background (another app,
-// a locked phone) the sound is held, and it comes back as she left it.
+// and makes its browser calls before it returns: it wakes the context and unlocks every scene's recording, one by
+// one, as phones ask (without fetching a file: each is fetched as its scene comes near). If the browser holds the
+// sound back anyway, the sound shows as off ('blocked') and a tap on the Sound button tries again. When the page
+// goes into the background (another app, a locked phone) the sound is held, and it comes back as she left it.
 //
-// The AudioContext is unlocked by that same tap even when her song is the one playing: the train's sounds play on
-// it beside the song, and if the song cannot play (a mistyped file name, say) the tune can take over without asking
-// for another tap. That is certain only when the song fails at the start; if it fails mid-song, the browser may
-// refuse to wake the tune without a tap, and then the sound shows as off ('blocked') until she taps the Sound
-// button.
+// The AudioContext and the recordings are unlocked by that same tap even when her song is the one playing: the
+// train's sounds play on the context beside the song, and if the song cannot play (a mistyped file name, say) the
+// scenes' music can take over without asking for another tap. That is certain only when the song fails at the
+// start; if it fails mid-song, the browser may refuse to wake the context without a tap, and then the sound shows
+// as off ('blocked') until she taps the Sound button.
 
 import { composeLoop, midiToFreq } from './compose.js';
-import { CAROL, carolMix, composeCarol } from './carol.js';
+import { CAROL, composeCarol } from './carol.js';
 import { createFader, createMixer } from './mixer.js';
+import { createRecording } from './recording.js';
+import { PIECES, PIECE_NAMES, ZONE_MUSIC, pieceShares } from './zoneMusic.js';
+import { ZONE_IDS } from '../content/normalize.js';
 
 /**
- * How long the built-in tune takes to swell in the first time it plays (s). Everything else comes up at once
+ * How long the scenes' music takes to swell in the first time it plays (s). Everything else comes up at once
  * (FIRST_FADE), so the whistle as the train sets off is heard in full. Its level is the mixer's music bus.
  */
 const START_FADE = 3;
@@ -63,8 +71,8 @@ const LOOKAHEAD = 0.25;
 const INTERVAL = Object.freeze({ start: (tick) => setInterval(tick, TICK_MS), stop: (id) => clearInterval(id) });
 
 /**
- * How quickly the tune and the carol follow the winter blend (s, a time constant), so a jump along the timeline
- * into or out of winter eases across rather than clicks.
+ * How quickly each piece follows the zone blend (s, a time constant), so a jump along the timeline from one scene
+ * to another eases across rather than clicks.
  */
 const CROSSFADE_EASE = 0.12;
 
@@ -73,7 +81,7 @@ const SHARE_STEP = 0.01;
 
 /**
  * Her song's volume: 0.37, a third down on the 0.55 it had before the train's sounds joined it, like the built-in
- * tune. iPhones ignore it: there the song plays at the phone's own volume.
+ * music. iPhones ignore it: there the song plays at the phone's own volume.
  */
 const FILE_VOLUME = 0.37;
 
@@ -81,26 +89,29 @@ const FILE_VOLUME = 0.37;
 const RESUME_WAIT_MS = 2000;
 
 /**
- * @typedef {{ state: 'off'|'playing'|'blocked', source: 'generated'|'file', suspended: boolean,
+ * @typedef {{ state: 'off'|'playing'|'blocked', source: 'built-in'|'file', suspended: boolean,
  *             mixer: import('./mixer.js').Mixer|null, audible: boolean, waking: boolean,
- *             carol: number, start: () => Promise<void>, toggle: () => Promise<void>,
+ *             carol: number, piece: string|null, start: () => Promise<void>, toggle: () => Promise<void>,
  *             setHidden: (hidden: boolean) => void, setDucked: (ducked: boolean) => void,
- *             setWinter: (weight: number) => void }} Music
+ *             setZones: (weights: Record<string, number>, near?: Record<string, boolean>) => void }} Music
  */
 
 /**
  * The music player and sound switch. Nothing is created until start().
- * @param {{ src?: string, onChange?: () => void }} options  `src` is content.music: '' for the built-in tune, or
- *   a path relative to the page. `onChange` hears every change of `state`, `source` or `suspended`.
+ * @param {{ src?: string, onChange?: () => void }} options  `src` is content.music: '' for each scene's own music,
+ *   or a path relative to the page. `onChange` hears every change of `state`, `source` or `suspended`.
  * @returns {Music}  `state` is what the Sound button shows: 'blocked' means the browser held the sound back, and the
- *   button tries again. `suspended` is true while the page is in the background, holding the sound. `mixer` is the
- *   master chain, null until start() has made the AudioContext. `audible` is true while sound is on and may be heard
- *   (not held for the background or ducked for a video); `waking` while the browser is still answering a request
- *   to turn it on. `carol` is how much of the built-in music is the winter carol (0 to 1).
+ *   button tries again. `source` is 'file' while her song is the music, 'built-in' while the scenes' is.
+ *   `suspended` is true while the page is in the background, holding the sound. `mixer` is the master chain, null
+ *   until start() has made the AudioContext. `audible` is true while sound is on and may be heard (not held for the
+ *   background or ducked for a video); `waking` while the browser is still answering a request to turn it on.
+ *   `carol` is how much of the scenes' music is the winter carol (0 to 1). `piece` is the loudest piece: a zone's
+ *   own ('spring' to 'evening', 'winter' being the carol), 'tune' where the built-in tune stands in for a zone's
+ *   recording, 'file' for her song; null before start() and while nothing plays.
  */
 export function createMusic({ src = '', onChange = () => {} } = {}) {
   let state = 'off';
-  let source = src ? 'file' : 'generated';
+  let source = src ? 'file' : 'built-in';
   let started = false;
   let hidden = false;
   let ducked = false; // a video's sound is on: all sound fades out for it and comes back after
@@ -114,8 +125,11 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
   /** @type {import('./mixer.js').Mixer|null} */
   let mixer = null;
   /** @type {Soundtrack|null} */
-  let soundtrack = null; // the built-in tune and the carol, made the first time the built-in music plays
-  let winter = 0; // how much of the winter hills the train is in (0 to 1): the carol's share of the built-in music
+  let soundtrack = null; // the scenes' music, made the first time it plays
+  /** @type {Record<string, import('./recording.js').Recording>|null} */
+  let recordings = null; // each scene's recording, made and unlocked by the Begin tap
+  /** @type {Record<string, number>} */
+  const weights = {}; // each zone's weight in the scenery's blend, as last heard (setZones)
   let quietTimer = 0;
 
   /** @type {HTMLAudioElement|null} */
@@ -127,7 +141,7 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
     onChange();
   };
 
-  // The AudioContext, for the built-in tune and the train's sounds, with the master chain they play through.
+  // The AudioContext, for the scenes' music and the train's sounds, with the master chain they play through.
 
   function openContext() {
     if (ctx) return true;
@@ -136,7 +150,7 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
     try {
       ctx = new AudioContextClass({ latencyHint: 'playback' });
     } catch (error) {
-      console.warn('[music] This browser cannot play the built-in tune.', error);
+      console.warn('[music] This browser cannot play the ride\'s sound.', error);
       return false;
     }
     mixer = createMixer(ctx);
@@ -201,15 +215,30 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
     step();
   }
 
-  /** Her song could not be played: say which file, and play the built-in tune instead. */
+  /** Her song could not be played: say which file, and play each scene's own music instead. */
   function fallBack() {
     if (source !== 'file') return;
-    console.warn(`[music] Could not play "${src}" — using the built-in tune.`);
+    console.warn(`[music] Could not play "${src}" — each scene's own music plays instead.`);
     clearInterval(volumeTimer);
     audio.pause();
-    source = 'generated';
+    source = 'built-in';
     onChange();
     if (wanted) turnOn(START_FADE);
+  }
+
+  // The scenes' recordings.
+
+  /**
+   * Makes every scene's recording on the context and unlocks it, so each can play later without a tap: call it
+   * inside the Begin tap, after the context is made. No file is fetched yet.
+   */
+  function makeRecordings() {
+    if (recordings || !ctx) return;
+    recordings = {};
+    for (const zone of Object.keys(PIECES)) {
+      recordings[zone] = createRecording(ctx, zone, PIECES[zone]);
+      recordings[zone].unlock();
+    }
   }
 
   // Either kind.
@@ -226,14 +255,14 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
 
   /**
    * Brings the sound up once the browser lets it run: the source in use over `fade` s, and the master chain with
-   * it. The first time, the tune swells in on its own while the chain comes up at once.
+   * it. The first time, the music swells in on its own while the chain comes up at once.
    */
   function sound(fade, first) {
     if (source === 'file') {
       fadeVolume(FILE_VOLUME, fade);
     } else {
-      if (!soundtrack) soundtrack = createSoundtrack(ctx, mixer.music);
-      soundtrack.setWinter(winter);
+      if (!soundtrack) soundtrack = createSoundtrack(ctx, mixer.music, { recordings: recordings || {} });
+      soundtrack.setZones(weights);
       soundtrack.play();
       soundtrack.fade(true, fade);
     }
@@ -319,15 +348,22 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
       return waking;
     },
     get carol() {
-      return soundtrack ? soundtrack.shares.carol : 0;
+      return soundtrack ? soundtrack.shares.winter : 0;
+    },
+    get piece() {
+      if (!started) return null;
+      if (source === 'file') return 'file';
+      return soundtrack ? soundtrack.loudest : null;
     },
     /** Call it inside the tap that starts the ride. */
     start() {
       if (started) return Promise.resolve();
       started = true;
       usePlaybackSession();
+      const on = turnOn(START_FADE); // makes the context and asks it to run, before it returns
+      makeRecordings();
       onChange();
-      return turnOn(START_FADE);
+      return on;
     },
     /** The Sound button. Turning it on is a tap, so it can also start sound the browser held back before. */
     toggle() {
@@ -357,12 +393,15 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
       else turnOn(TOGGLE_FADE);
     },
     /**
-     * Every frame: how much of the winter hills the train is in (the winter zone's weight, 0 to 1). The built-in
-     * tune gives way to the carol there; her own song plays on.
+     * Every frame: each zone's weight in the scenery's blend (ambienceTiming.js zoneWeights), which the scenes'
+     * music follows, and the zones whose recordings should be loading by now (zoneMusic.js zonesToLoad). Her own
+     * song plays on through every zone, and no recording is fetched for it.
      */
-    setWinter(weight) {
-      winter = weight;
-      if (soundtrack) soundtrack.setWinter(weight);
+    setZones(next, near) {
+      for (let i = 0; i < ZONE_IDS.length; i++) weights[ZONE_IDS[i]] = next[ZONE_IDS[i]] || 0;
+      if (soundtrack) soundtrack.setZones(weights);
+      if (!near || !recordings || source === 'file') return;
+      for (const zone in recordings) if (near[zone]) recordings[zone].load();
     },
   };
   return music;
@@ -498,93 +537,186 @@ export function createSynth(ctx, out) {
 
 /**
  * @typedef {{ play: () => void, pause: () => void, fade: (on: boolean, seconds: number) => void,
- *             setWinter: (weight: number) => void, readonly shares: { tune: number, carol: number } }} Soundtrack
+ *             setZones: (weights: Record<string, number>) => void, readonly shares: Record<string, number>,
+ *             readonly loudest: string|null, gainOf: (name: string) => GainNode|null }} Soundtrack
  */
 
 /**
- * The built-in music on `ctx`, into `out` (the mixer's music bus): the tune (compose.js) and, in the winter hills,
- * Silent Night in its place (carol.js), each on instruments of its own (createSynth) behind a gain that follows the
- * winter blend (carolMix). A piece whose share is 0 books no notes, and one that comes back after being silent
- * begins again from its top: the carol from "Silent night" as the train rolls into winter, the tune from its
- * opening as it rolls out. The carol is written out and given its instruments the first time winter comes near.
+ * The scenes' music on `ctx`, into `out` (the mixer's music bus): each zone's piece (zoneMusic.js), behind a gain
+ * that follows the zone blend (pieceShares) and then one fader for them all. The recordings are `recordings`
+ * (recording.js), each at its share times its trim; the winter carol (carol.js) and the built-in tune (compose.js),
+ * the stand-in for a scene whose recording cannot play, are each on instruments of their own (createSynth), made
+ * the first time they are heard.
  *
- * `play()` and `pause()` run and stop the booking of notes (pause once the sound has faded out); `fade` swells the
- * instruments in (the tune's first 3 s) or out; `setWinter` takes the winter zone's weight, every frame. `shares`
- * is how much of each piece is playing (0 to 1, where its gain is heading; the carol's gain is CAROL.LEVEL at
- * most). Exported so the unit tests and offline renders can drive it with their own `timer` ({ start(tick) → id,
- * stop(id) }).
+ * A piece starts from its top as its zone becomes audible (its share rises from 0): the carol from "Silent night"
+ * as the train rolls into winter, a recording from its first note. Once its share has fallen back to 0 a carol or
+ * tune books no more notes (those booked ring out), and a recording plays on for ZONE_MUSIC.TAIL while its gain
+ * eases out, then pauses and goes back to its top. No more than ZONE_MUSIC.MAX_PLAYING pieces play at once: a piece
+ * starting while two others play cuts short the tails of those fading out (only a jump along the timeline from the
+ * middle of a blend makes three).
+ *
+ * `play()` and `pause()` run and hold the pieces (pause once the sound has faded out: each recording pauses where
+ * it is, and plays on from there); `fade` swells the music in (its first 3 s) or out; `setZones` takes each zone's
+ * weight, every frame. `shares` is how much of each piece (PIECE_NAMES) is playing (0 to 1, where its gain is
+ * heading; the carol's gain is CAROL.LEVEL at most, a recording's its trim), and `loudest` names the piece with the
+ * largest share, or null while none is heard. `gainOf(name)` is a piece's gain, null until it is first heard.
+ * Exported so the unit tests and offline renders can drive it with their own `timer` ({ start(tick) → id,
+ * stop(id) }) and recordings.
  * @param {BaseAudioContext} ctx
  * @param {AudioNode} out
- * @param {{ start: (tick: () => void) => unknown, stop: (id: unknown) => void }} [timer]
+ * @param {{ timer?: { start: (tick: () => void) => unknown, stop: (id: unknown) => void },
+ *           recordings?: Record<string, import('./recording.js').Recording> }} [options]
  * @returns {Soundtrack}
  */
-export function createSoundtrack(ctx, out, timer = INTERVAL) {
-  const shares = { tune: 0, carol: 0 };
-  const piece = (name, loop, level) => {
+export function createSoundtrack(ctx, out, { timer = INTERVAL, recordings = {} } = {}) {
+  const faded = ctx.createGain();
+  faded.connect(out);
+  const fader = createFader(ctx, faded.gain);
+
+  /** A piece's gain: silent until it has a share. */
+  const shareGain = () => {
     const gain = ctx.createGain();
     gain.gain.value = 0;
-    gain.connect(out);
-    const synth = createSynth(ctx, gain);
-    return { name, level, gain, synth, scheduler: createScheduler(ctx, synth, loop, timer), share: 0, fromTop: true };
+    gain.connect(faded);
+    return gain;
   };
-  const tune = piece('tune', composeLoop(), 1);
-  let carol = null;
-  const mix = carolMix(0);
-  let playing = false;
-  let first = true; // until the first winter weight, shares are set at once; after it they ease
+  /** A piece played on instruments of its own: the carol, or the tune. */
+  const played = (name, loop, level) => () => {
+    const gain = shareGain();
+    const synth = createSynth(ctx, gain);
+    synth.fade(true, 0.01); // the soundtrack's fader swells it in, and its share brings it in and out
+    const scheduler = createScheduler(ctx, synth, loop, timer);
+    return { name, level, gain, tails: false, start: scheduler.start, stop: scheduler.stop, update() {} };
+  };
+  /** A scene's recording: it plays on through a tail as its share falls to 0. */
+  const recorded = (recording) => () => {
+    const gain = shareGain();
+    recording.output.connect(gain);
+    return {
+      name: recording.name,
+      level: recording.trim,
+      gain,
+      tails: true,
+      start: (fromTop) => recording.start(fromTop),
+      stop: (rewind) => recording.stop(rewind),
+      update: () => recording.update(),
+    };
+  };
+  /** @type {Record<string, () => object>} how to make each piece, the first time it is heard */
+  const makers = { tune: played('tune', composeLoop(), 1), winter: played('winter', composeCarol(), CAROL.LEVEL) };
+  for (const zone of Object.keys(recordings)) makers[zone] = recorded(recordings[zone]);
 
-  /** Books the piece's notes while the music plays and the piece is heard; from its top if it was silent. */
+  const pieces = {}; // name to piece, once made
+  const made = []; // the same, as a list
+  const shares = {};
+  for (const name of PIECE_NAMES) shares[name] = 0;
+  const weights = {};
+  const mix = {}; // every piece's share for the weights, worked out each frame
+  let playing = false;
+  let first = true; // until the first weights, shares are set at once; after them they ease
+
+  /**
+   * Starts or stops the piece for its share: playing while the music plays and the piece is heard, from its top if
+   * it was silent; a recording whose share has just fallen to 0 plays on through its tail.
+   */
   function run(p) {
     if (playing && p.share > 0) {
-      p.scheduler.start(p.fromTop);
+      p.tailEnd = 0;
+      if (!p.on) {
+        makeRoom(p);
+        p.start(p.fromTop);
+        p.on = true;
+      }
       p.fromTop = false;
+    } else if (playing && p.share === 0 && p.on && p.tails) {
+      if (!p.tailEnd) p.tailEnd = ctx.currentTime + ZONE_MUSIC.TAIL;
     } else {
-      p.scheduler.stop();
-      if (p.share === 0) p.fromTop = true;
+      halt(p);
     }
   }
 
-  function setShare(p, share) {
+  /** Stops the piece: back to its top if its share is 0 (even while held), else where it is. */
+  function halt(p) {
+    const silent = p.share === 0;
+    if (p.on || (silent && !p.fromTop)) p.stop(silent);
+    p.on = false;
+    p.tailEnd = 0;
+    if (silent) p.fromTop = true;
+  }
+
+  /** Before `p` starts: if two others are playing, those fading out stop now. */
+  function makeRoom(p) {
+    let on = 0;
+    for (const q of made) if (q !== p && q.on) on += 1;
+    if (on < ZONE_MUSIC.MAX_PLAYING) return;
+    for (const q of made) if (q !== p && q.on && q.share === 0) halt(q);
+  }
+
+  function setShare(name, share) {
+    let p = pieces[name];
+    if (!p) {
+      if (!(share > 0) || !makers[name]) return;
+      p = pieces[name] = makers[name]();
+      Object.assign(p, { share: 0, on: false, fromTop: true, tailEnd: 0 });
+      made.push(p);
+    }
     const change = Math.abs(share - p.share);
     if (change === 0 || (change < SHARE_STEP && share > 0 && share < 1)) return;
     p.share = share;
-    shares[p.name] = share;
+    shares[name] = share;
     if (first) p.gain.gain.value = share * p.level;
     else p.gain.gain.setTargetAtTime(share * p.level, ctx.currentTime, CROSSFADE_EASE);
     run(p);
   }
 
-  const soundtrack = {
+  return {
     get shares() {
       return shares;
     },
+    get loudest() {
+      let loudest = null;
+      let top = 0;
+      for (const p of made) {
+        if (p.share > top) {
+          top = p.share;
+          loudest = p.name;
+        }
+      }
+      return loudest;
+    },
+    gainOf(name) {
+      return pieces[name] ? pieces[name].gain : null;
+    },
     play() {
       playing = true;
-      run(tune);
-      if (carol) run(carol);
+      for (const p of made) run(p);
     },
     pause() {
       playing = false;
-      run(tune);
-      if (carol) run(carol);
+      for (const p of made) run(p);
     },
     fade(on, seconds) {
-      tune.synth.fade(on, seconds);
-      if (carol) carol.synth.fade(on, seconds);
+      fader.fade(on, seconds);
     },
-    setWinter(weight) {
-      carolMix(weight, mix);
-      if (mix.carol > 0 && !carol) {
-        carol = piece('carol', composeCarol(), CAROL.LEVEL);
-        carol.synth.fade(true, 0.01); // it swells in on its share of the crossfade instead
+    setZones(next) {
+      for (let i = 0; i < ZONE_IDS.length; i++) weights[ZONE_IDS[i]] = next[ZONE_IDS[i]] || 0;
+      pieceShares(weights, recordings, mix);
+      // The pieces fading first, then those rising, so a piece starting finds the room it needs.
+      for (let i = 0; i < PIECE_NAMES.length; i++) {
+        if (mix[PIECE_NAMES[i]] <= shares[PIECE_NAMES[i]]) setShare(PIECE_NAMES[i], mix[PIECE_NAMES[i]]);
       }
-      setShare(tune, mix.tune);
-      if (carol) setShare(carol, mix.carol);
+      for (let i = 0; i < PIECE_NAMES.length; i++) {
+        if (mix[PIECE_NAMES[i]] > shares[PIECE_NAMES[i]]) setShare(PIECE_NAMES[i], mix[PIECE_NAMES[i]]);
+      }
       first = false;
+      const now = ctx.currentTime;
+      for (let i = 0; i < made.length; i++) {
+        const p = made[i];
+        if (p.tailEnd && now >= p.tailEnd) halt(p);
+        if (p.on) p.update();
+      }
     },
   };
-  setShare(tune, 1); // the tune until it hears otherwise; the first winter weight it hears is set at once too
-  return soundtrack;
 }
 
 /**

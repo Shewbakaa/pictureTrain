@@ -9,9 +9,10 @@
 // pill, with the furthest moment she has reached remembered across reloads. If the phone takes the GPU away
 // mid-ride, a toast offers a fresh start. The sound starts with her tap on Begin: the music, the train's own sounds
 // (whistle, steam, chugs and the rail joints' clickety-clack), which follow the ride, and each zone's ambience
-// (birds, waves, leaves, wind, crickets...), which follows the scenery; in the winter hills the built-in tune gives
-// way to a carol. A card rustles as it comes up, and the finale's hearts and fireworks are heard. One Sound button
-// turns it all on and off.
+// (birds, waves, leaves, wind, crickets...), which follows the scenery. The music follows the scenery too: each
+// scene has a piece of its own (Chopin, and a carol in the winter hills), unless her own song plays throughout.
+// A card rustles as it comes up, and the finale's hearts and fireworks are heard. One Sound button turns it all on
+// and off.
 //
 // At the Day 365 station the ride ends in the finale (finale/finale.js): under a blush fade her seat gives way to
 // the train seen from outside, the two of them meet on the platform, and his message comes up on a card with the
@@ -49,6 +50,7 @@ import { renderTimeline, timelineItems } from './ui/timeline.js';
 import { initControls } from './ui/controls.js';
 import { showToast } from './ui/toast.js';
 import { createMusic } from './audio/music.js';
+import { zonesToLoad } from './audio/zoneMusic.js';
 import { createSfx } from './audio/sfx.js';
 import { createAmbience } from './audio/ambience.js';
 import { createCues } from './audio/cueSounds.js';
@@ -336,6 +338,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     if (ambience) {
       appState.ambience = ambience.beds;
       appState.carol = music.carol;
+      appState.musicPiece = music.piece;
     }
     appState.finaleTime = finale.active ? finale.time : null;
     appState.quality = governor.tier;
@@ -364,6 +367,8 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   let sfx = null;
   let ambience = null;
   let cues = null;
+  /** The zones whose music should be loading, worked out every frame (zoneMusic.js zonesToLoad). */
+  const musicNear = {};
 
   /** Metres from `d` to where the moving train stops next (a stop or the finale); Infinity when it is not moving. */
   function toStop(d) {
@@ -400,7 +405,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     if (sfx) {
       sfx.update(ride.speed, d, dt, toStop(d));
       ambience.update(env, look.yaw, dt, d);
-      music.setWinter(ambience.winter); // the carol in place of the built-in tune in the winter hills
+      music.setZones(ambience.weights, zonesToLoad(layout.zones, d, musicNear)); // each scene's own music
     }
     for (const spot of roadside) {
       spot.group.visible = Math.abs(spot.distance - d) < SIGN_RANGE;
@@ -452,8 +457,8 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     onPauseToggle: () => app.togglePause(),
     onMusicToggle: () => music.toggle(),
   });
-  // Her song if content.js names one, the built-in tune otherwise, and the train's sounds beside it. All of it is
-  // held while the page is in the background, and fades out while a video or Live Photo plays with its sound.
+  // Her song if content.js names one, each scene's own music otherwise, and the train's sounds beside it. All of it
+  // is held while the page is in the background, and fades out while a video or Live Photo plays with its sound.
   const music = createMusic({
     src: content.music,
     onChange: () => {

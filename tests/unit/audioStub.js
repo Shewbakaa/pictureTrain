@@ -1,7 +1,7 @@
 // A stand-in for an AudioContext, for the sound unit tests: enough of the Web Audio API for the master chain, the
-// train's sounds, the ambience and the cues. It logs every sound source's start, and throws where browsers do on
-// a misuse the tests should catch: stopping a source twice or at a time that is not finite, and automation curves
-// (setValueCurveAtTime) that overlap each other on one parameter.
+// music, the train's sounds, the ambience and the cues. It logs every sound source's start, and throws where
+// browsers do on a misuse the tests should catch: stopping a source twice or at a time that is not finite, and
+// automation curves (setValueCurveAtTime) that overlap each other on one parameter.
 
 /**
  * @param {{ panning?: boolean }} [options]  `panning: false` leaves out StereoPannerNode, as an old browser would
@@ -72,6 +72,7 @@ export function stubContext({ panning = true } = {}) {
     createBufferSource: () => source('noise', { buffer: null, loop: false, playbackRate: param(1) }),
     createOscillator: () => source('osc', { type: 'sine', frequency: param(440), detune: param() }),
     createDelay: () => node({ delayTime: param() }),
+    createMediaElementSource: (mediaElement) => node({ mediaElement }),
     createBuffer: (channels, length, rate) => {
       const data = new Float32Array(length);
       return { duration: length / rate, getChannelData: () => data };

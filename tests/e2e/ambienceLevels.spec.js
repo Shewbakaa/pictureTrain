@@ -21,7 +21,7 @@ test('the ambience, the carol and the cues sit at their targets, under the music
     const { createBed } = await import('./src/audio/ambienceBeds.js');
     const { createNatureSounds } = await import('./src/audio/natureSounds.js');
     const { createCueSounds } = await import('./src/audio/cueSounds.js');
-    const { carolMix } = await import('./src/audio/carol.js');
+    const { pieceShares } = await import('./src/audio/zoneMusic.js');
     const { chugInterval, chugLevel } = await import('./src/audio/sfxTiming.js');
     const { RIDE } = await import('./src/ride/rideController.js');
 
@@ -125,20 +125,22 @@ test('the ambience, the carol and the cues sit at their targets, under the music
       out[name] = measure(channels);
     }
 
-    // The carol in place of the tune, and the two crossfading as the train rolls into winter (the blend's 30 m at
-    // the cruise speed, about 4.6 s, eased as envAt eases it), through the real soundtrack and its scheduler.
+    // The carol, and the tune crossfading into it as the train rolls into winter (the blend's 30 m at the cruise
+    // speed, about 4.6 s, eased as envAt eases it), through the real soundtrack and its scheduler. No recordings
+    // here (they cannot play offline), so the autumn forest plays the tune, as it does if its recording fails.
     const manual = () => {
       const ticks = new Set();
       return { start: (fn) => { ticks.add(fn); return fn; }, stop: (fn) => ticks.delete(fn), tick: () => ticks.forEach((fn) => fn()) };
     };
     const soundtrack = (winterAt) => async (seconds) => render(seconds, (ctx, mixer) => {
       const timer = manual();
-      const music = createSoundtrack(ctx, mixer.music, timer);
-      music.setWinter(winterAt(0));
+      const music = createSoundtrack(ctx, mixer.music, { timer });
+      const zones = (w) => ({ autumn: 1 - w, winter: w });
+      music.setZones(zones(winterAt(0)));
       music.play();
       music.fade(true, 0.01);
       return (t) => {
-        music.setWinter(winterAt(t));
+        music.setZones(zones(winterAt(t)));
         timer.tick();
       };
     });
@@ -159,7 +161,8 @@ test('the ambience, the carol and the cues sit at their targets, under the music
     };
     out.crossfadeLoudestSecondDb = db(secondly(crossing, blendFrom - 1, blendFrom + blend + 1));
     out.piecesLoudestSecondDb = db(Math.max(secondly(tuneAlone, 1, 20), secondly(carolAlone, 1, 20)));
-    out.crossfadeHalfway = carolMix(0.5, {});
+    const halfway = pieceShares({ autumn: 0.5, winter: 0.5 }, {}, {});
+    out.crossfadeHalfway = { tune: halfway.tune, carol: halfway.winter };
 
     // Busy moments, everything at once: riding through the meadow, and the finale.
     const meadow = await render(14, (ctx, mixer, kit) => {

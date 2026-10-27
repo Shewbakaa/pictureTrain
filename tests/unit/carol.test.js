@@ -2,7 +2,8 @@
 // out for the built-in tune's music box, and how it takes over from the tune across the winter boundary.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CAROL, carolMix, composeCarol } from '../../site/src/audio/carol.js';
+import { CAROL, composeCarol } from '../../site/src/audio/carol.js';
+import { pieceShares } from '../../site/src/audio/zoneMusic.js';
 import { MUSIC } from '../../site/src/audio/compose.js';
 
 const loop = composeCarol();
@@ -92,15 +93,21 @@ test('a slow lilt, sorted, and loopable: it ends at home and starts again from t
 });
 
 test('the carol takes over from the tune across the winter boundary, never both at once', () => {
+  // The autumn forest without its recording plays the tune: the carol's crossing as it was before the scenes had
+  // pieces of their own (zoneMusic.js pieceShares, the same dip at every boundary).
+  const carolMix = (w) => {
+    const shares = pieceShares({ autumn: 1 - w, winter: w }, {}, {});
+    return { tune: shares.tune, carol: shares.winter };
+  };
   const mix = carolMix(0);
   assert.equal(mix.tune, 1);
   assert.equal(mix.carol, 0);
-  const winter = carolMix(1, {});
+  const winter = carolMix(1);
   assert.ok(close(winter.tune, 0) && close(winter.carol, 1));
   let tune = 1;
   let carol = 0;
   for (let w = 0; w <= 1.0001; w += 0.01) {
-    const m = carolMix(w, {});
+    const m = carolMix(w);
     assert.ok(m.tune <= tune + 1e-12 && m.carol >= carol - 1e-12, `the tune only fades and the carol only grows (${w})`);
     tune = m.tune;
     carol = m.carol;
@@ -108,11 +115,6 @@ test('the carol takes over from the tune across the winter boundary, never both 
     if (m.tune > 0.25 && m.carol > 0.25) assert.fail(`both clearly heard at ${w}`);
   }
   // Outside the middle of the blend only one of them is heard.
-  assert.equal(carolMix(0.35, {}).carol, 0);
-  assert.equal(carolMix(0.65, {}).tune, 0);
-});
-
-test('carolMix writes into the object it is given', () => {
-  const out = {};
-  assert.equal(carolMix(0.5, out), out);
+  assert.equal(carolMix(0.35).carol, 0);
+  assert.equal(carolMix(0.65).tune, 0);
 });

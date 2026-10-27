@@ -39,10 +39,12 @@ export async function waitForPhase(page, phase, timeout = 30000) {
 
 /**
  * Before page.goto: keeps the page's AudioContexts and notes when each noise-based sound (an AudioBufferSourceNode:
- * the train's chugs, clicks, steam and whistle breath, the ambience's noise and the fireworks; the built-in tune
- * uses oscillators only) starts, how many oscillators start (the tune's notes, the birds and bells, the whistle),
- * and when each whistle does (its vibrato is the only oscillator below 20 Hz: no other sound in the ride starts one
- * that low). Read it with audioReport(page).
+ * the train's chugs, clicks, steam and whistle breath, the ambience's noise and the fireworks; the carol and the
+ * built-in tune use oscillators only) starts, how many oscillators start (the carol's and the tune's notes, the
+ * birds and bells, the whistle), and when each whistle does (its vibrato is the only oscillator below 20 Hz: no
+ * other sound in the ride starts one that low). It also keeps every media element ever played (the scenes'
+ * recordings are among them from the Begin tap, which unlocks each), and every 50 ms counts the scenes' recordings
+ * playing at once. Read it with audioReport(page).
  */
 export async function trackAudio(page) {
   await page.addInitScript(() => {
@@ -50,7 +52,19 @@ export async function trackAudio(page) {
     const starts = [];
     const whistles = [];
     const tones = { count: 0 };
-    window.__audio = { contexts, starts, whistles, tones };
+    const media = new Set();
+    const pieces = { most: 0 };
+    window.__audio = { contexts, starts, whistles, tones, media, pieces };
+    const play = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function (...args) {
+      media.add(this);
+      return play.apply(this, args);
+    };
+    setInterval(() => {
+      let playing = 0;
+      for (const m of media) if (!m.paused && m.src.includes('/music/zones/')) playing += 1;
+      pieces.most = Math.max(pieces.most, playing);
+    }, 50);
     const Base = window.AudioContext || window.webkitAudioContext;
     if (!Base) return;
     class Tracked extends Base {
@@ -77,17 +91,29 @@ export async function trackAudio(page) {
 
 /**
  * What trackAudio saw: `states`, each AudioContext's state; `sounds`, how many noise-based sounds have started;
- * `busiest`, the most that started within any one second; `tones`, how many oscillators have started; and
- * `whistles`, how many whistles have blown.
+ * `busiest`, the most that started within any one second; `tones`, how many oscillators have started; `whistles`,
+ * how many whistles have blown; `pieces`, each scene's recording that has a file, by zone ({ paused, time }: whether
+ * it is paused, and where it is, s); `unloaded`, how many recordings have none yet; and `mostPieces`, the most
+ * recordings seen playing at once.
  */
 export function audioReport(page) {
   return page.evaluate(() => {
-    const { contexts, starts, whistles, tones } = window.__audio;
+    const { contexts, starts, whistles, tones, media, pieces: seen } = window.__audio;
     let busiest = 0;
     for (let i = 0, j = 0; i < starts.length; i++) {
       while (starts[i] - starts[j] > 1000) j++;
       busiest = Math.max(busiest, i - j + 1);
     }
-    return { states: contexts.map((c) => c.state), sounds: starts.length, busiest, tones: tones.count, whistles: whistles.length };
+    const pieces = {};
+    let unloaded = 0;
+    for (const m of media) {
+      const zone = /\/music\/zones\/(\w+)\.mp3$/.exec(m.src);
+      if (zone) pieces[zone[1]] = { paused: m.paused, time: m.currentTime };
+      else if (!m.src) unloaded += 1;
+    }
+    return {
+      states: contexts.map((c) => c.state), sounds: starts.length, busiest, tones: tones.count, whistles: whistles.length,
+      pieces, unloaded, mostPieces: seen.most,
+    };
   });
 }
