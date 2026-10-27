@@ -11,6 +11,9 @@
 //   built-in tune, standing in for a scene whose recording cannot play or is held back), 'file' (her song), or null
 //   (before Begin, and until the scenes' music has first been allowed to play)
 // carol: how much of the music is the winter carol, 0 to 1
+// finaleCues: the finale's own sounds played since the train last pulled in at the Day 365 station, in order, by name
+//   ('bell', 'hop', 'land', 'dress', 'door', 'shop-bell', 'step', 'heartbeat', 'crinkle', 'sparkle', 'doves',
+//   'firework'), the first 64 of them; [] before
 export const appState = {
   phase: 'loading',
   mode: null,
@@ -31,6 +34,7 @@ export const appState = {
   videoSound: false,
   ambience: [],
   carol: 0,
+  finaleCues: [],
   finaleTime: null,
   view: 'cabin',
 };

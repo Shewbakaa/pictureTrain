@@ -176,3 +176,55 @@ two pieces, the loop-seam timing, the preload distance and the fallback choice (
 (`zoneMusicLevels.spec.js`); E2E on both engines for spring giving way to summer (≤ 2 playing), the carol after a
 jump into winter, a 404 giving the tune with the warning, Sound off, ducking and hiding pausing the pieces, her
 song staying 'file' through every zone, and no console errors on a full ride at speed 50 (Chromium).
+
+## Addendum: finale foley
+
+Approved by the author on 2026-10-27: the little real-world sounds of the two of them meeting on the platform at the
+Day 365 station, soft, under the music, the whistle and the fireworks. Synthesized with Web Audio like the other
+effects (no files), on the effects bus.
+
+| When | Sound | Peak (offline, after the master chain) |
+|---|---|---|
+| The train pulls in: 1.39 s after it stops, 0.3 s into the whistle's long last toot | The platform bell, "ding-ding": two strikes 0.38 s apart of a small brass bell on C6 (in the whistle's F major), the second softer | −22 dBFS |
+| She hops down (finale 3.15 s, her hop's take-off key) | A whoosh: swept band-passed noise, lasting while she is in the air (to 3.7 s) | −30 |
+| She lands (3.7 s, her hop's landing key) | A light tap on the wooden boards (the footstep voice, lighter), and a little rustle of her dress (soft filtered noise) | −30 each |
+| He sets off from the station house door (4.0 s, his walk's start) | The door's gentle creak (a soft FM squeak, its pitch rising as the door swings) and, 0.1 s later, the shop bell over it jingling (a tiny bell on F7 on a spring, bouncing) | −30; the bell −26 |
+| His walk (4.65 to 6.29 s) | A footstep each time one of his legs swings out (12): a soft low thud with the board's knock and a little click, slow as he sets off, quick as he hurries over, slowing and softer as he arrives, none once he stands | −30 |
+| They face each other (5.86 and 6.66 s) | Two heartbeats, "lub-dub" (the dub 0.2 s after), 0.8 s apart, the second gone as the hand-off begins (7.0 s): a low lowpassed triangle, felt more than heard | −30 |
+| He holds out the bouquet (7.0 s, the hand-off) | The paper's crinkle: the dust's crackles and a breath of noise, high-passed | −30 |
+| The hearts rise (8.0 s) | The sparkle, as before | −18 |
+| The fireworks start (8.5 s) | A few doves (three) flying off the station roof: wingbeats of band-passed noise, clapping at first, slowing and fading as they fly off to one side (sound only) | −30 |
+
+- **Timing is the choreography's, not set by hand** (`finale/foleyTiming.js`, pure and unit-tested against the real
+  finale tracks and the finale's own posed figure): the hop and landing are the keys of her hop; the door his walk's
+  start; each footstep the moment his walk's phase (distance walked × stride, as finale.js passes it to walkPose)
+  passes a quarter turn, where his legs are spread widest, so long as they still swing out a quarter of their full
+  swing; the heartbeats are placed back from the hand-off. The finale's choreography numbers moved from finale.js to
+  `finale/finaleTimes.js` so the sounds can share them without the scene.
+- **The bell rings with the whistle** rather than before it (a ding-ding against the short toots would be lost) or after
+  it (it would crowd her hop): the arrival then is sigh, toot-toot-tooot, and the bell over the long toot.
+- **Driven by the finale's clock, a frame's step at a time.** The cues play from the frame loop
+  (`cues.finale(time, bursts)`), each played back to its own time (a frame late at most). A clock that moves on by
+  more than a frame's step (0.1 s, the most finale.js moves it) is a jump (`?ft=`, skipTo) and plays nothing of what
+  it passed over; a frozen clock plays nothing. The hearts' sparkle and the fireworks now keep to the same rule (the
+  sparkle used to follow the 'hearts' event, which a jump reports late, in a burst).
+- **Hushed as she leaves.** All of the finale's sounds (the bell, the foley, the sparkle, the fireworks) go through one
+  gain of their own into the effects bus. Ride again or a jump from the finale fades it to silence over 0.15 s as she
+  taps, while the blush covers the screen, and nothing more of the finale plays until the train next pulls in there.
+- **Budget.** The voices hold 3 to 10 nodes each (a footstep 8, the bell 10, the doves 8); the busiest moment (the
+  sparkle, the doves, the evening's crickets and the first firework at 9.2 s) holds 39 of the 40.
+- **Levels.** Measured offline (`tests/e2e/finaleFoleyLevels.spec.js`): every voice within 0.05 dB of its target
+  peak, each far under the music at its loudest (50 ms RMS −30.1 dBFS for the bell, the loudest, against the music's
+  −17.3); the whole finale (music, the crickets, sigh, whistle, bell, all the foley, sparkle and four bursts of
+  fireworks) peaks at −9.6 dBFS, well under clipping.
+- **State.** `appState.finaleCues`: the finale's sounds played since the train last pulled in at the station, by name,
+  in order (the first 64), for the tests.
+
+Acceptance: unit tests for every cue's time against the real finale tracks and posed figure (`foleyTiming.test.js`),
+the voices' node accounting, timing and routing (`foleySounds.test.js`), and the driver's order, skip, freeze, hush and
+slow-frame behaviour (`cues.test.js`); offline levels (`finaleFoleyLevels.spec.js`); E2E in Chromium
+(`finaleFoley.spec.js`): riding into the station with the sound on plays the bell, hop, landing, door, footsteps,
+heartbeats, crinkle, sparkle and doves once each (the footsteps and heartbeats as many as the timing says) and in
+order; `?ft=9.6` plays only the arrival's bell; Ride again leaves the effects bus silent from 0.25 s after the tap; no
+console errors. (`?finale=1` puts the train at the station before any tap, with the Sound button hidden through the
+finale, so it cannot be heard there: the E2E rides in from `?at=` just short of the station instead.)

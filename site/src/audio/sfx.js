@@ -35,7 +35,7 @@
 // everything else, so it need only stop scheduling new sounds while sfx.audible is false.
 
 import {
-  TRAIN, bogieDelay, chugLevel, clickLevel, createChugClock, createGate, isBraking, jointCrossed,
+  FINALE_WHISTLE_AFTER, TRAIN, bogieDelay, chugLevel, clickLevel, createChugClock, createGate, isBraking, jointCrossed,
 } from './sfxTiming.js';
 import { createTrainSounds } from './trainSounds.js';
 import { RIDE } from '../ride/rideController.js';
@@ -65,9 +65,8 @@ const NOISE_SEED = 29;
 const DUST_DENSITY = 900;
 const DUST_SEED = 31;
 
-/** When the steam puffs after the whistle as the train sets off, and the finale's whistle after its sigh (s). */
+/** When the steam puffs after the whistle as the train sets off (s). The finale's whistle is in sfxTiming.js. */
 const PUFF_AFTER = 0.95;
-const FINALE_WHISTLE_AFTER = 0.35;
 
 /** Beyond this distance from its stop (m) the train cannot be braking yet: the brake hiss is ready for the stop. */
 const BRAKE_ARM = (RIDE.CRUISE * RIDE.CRUISE) / (2 * RIDE.BRAKE) + 1;

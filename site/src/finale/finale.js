@@ -35,34 +35,17 @@ import { clamp, smoothstep } from '../util/math.js';
 import { createRng, rngRange } from '../util/rng.js';
 import { createTimeline } from './timeline.js';
 import { FIREWORK_TIMING } from './fireworkTiming.js';
+import {
+  FINALE_TIMES, FULL_SWING, HER, HIM, HOP, MAX_STEP, PACE_SPAN, STRIDE, WALK_EASE,
+} from './finaleTimes.js';
 
-/** When things happen (s from the start of the finale). */
-export const FINALE_TIMES = Object.freeze({
-  cameraDone: 2.6, herStepStart: 2.6, herStepEnd: 4.2, himWalkStart: 4.0, himWalkEnd: 7.0,
-  handoffStart: 7.0, handoffEnd: 8.0, hearts: 8.0, fireworks: FIREWORK_TIMING.START, card: 9.5, end: 12,
-});
+// When things happen, her hop and where the two of them go are in finaleTimes.js, which the finale's sounds share.
+export { FINALE_TIMES };
 
 const T = FINALE_TIMES;
 
 /** What `update` reports, and when. */
 const EVENTS = Object.freeze([{ name: 'hearts', t: T.hearts }, { name: 'fireworks', t: T.fireworks }, { name: 'card', t: T.card }]);
-
-/**
- * Her hop off the carriage (s): she steps to the edge of the doorway, crouches, takes off, is at the top of her
- * hop, lands with a little squash and takes two small steps further onto the platform by herStepEnd.
- */
-const HOP = Object.freeze({
-  edge: T.herStepStart + 0.4, takeoff: T.herStepStart + 0.55, apex: T.herStepStart + 0.8,
-  land: T.herStepStart + 1.1, settle: T.herStepStart + 1.25,
-});
-
-/** Where she goes [along, right, up]: from beside her seat to the platform, by way of the top of her hop. */
-const HER = Object.freeze({
-  seat: [0.4, 1.0, 0.9], edge: [0.4, 1.3, 0.9], apex: [0.4, 2.2, 1.2], land: [0.4, 2.95, 0.6], end: [0.4, 3.4, 0.6],
-});
-
-/** Where he goes: from just outside the station house door (R27: its face is 6.9 m out) to beside her. */
-const HIM = Object.freeze({ door: [7.5, 6.6, 0.6], end: [1.2, 3.6, 0.6] });
 
 /** The bouquet in his hand, from his feet, and in her hands at the end. */
 const HAND = Object.freeze([-0.3, -0.25, 0.65]);
@@ -157,11 +140,11 @@ export function finaleTracks(path, finaleDistance) {
       ],
     },
     { key: 'herUp', keys: [num(HOP.takeoff, HER.seat[2]), num(HOP.apex, HER.apex[2], 'out'), num(HOP.land, HER.land[2], 'in')] },
-    { key: 'him', keys: [key(0, HIM.door), key(T.himWalkStart, HIM.door), key(T.himWalkEnd, HIM.end, 'inOut')] },
+    { key: 'him', keys: [key(0, HIM.door), key(T.himWalkStart, HIM.door), key(T.himWalkEnd, HIM.end, WALK_EASE)] },
     {
       key: 'bouquet',
       keys: [
-        key(0, add3(HIM.door, HAND)), key(T.himWalkStart, add3(HIM.door, HAND)), key(T.himWalkEnd, add3(HIM.end, HAND), 'inOut'),
+        key(0, add3(HIM.door, HAND)), key(T.himWalkStart, add3(HIM.door, HAND)), key(T.himWalkEnd, add3(HIM.end, HAND), WALK_EASE),
         key(T.handoffEnd, HER_HANDS, 'inOut'),
       ],
     },
@@ -475,9 +458,6 @@ function reachFor(figure, side, target, weight) {
   arm.rotation.z += (z - arm.rotation.z) * weight;
 }
 
-/** How far a walk swings per metre walked (rad), for his stride and her shorter one. */
-const STRIDE = Object.freeze({ HIM: (Math.PI * 2) / 1.15, HER: (Math.PI * 2) / 0.6 });
-
 /**
  * The finale.
  * @param {{ stage: import('../render/stage.js').Stage, path: import('../world/trackPath.js').TrackPath,
@@ -561,10 +541,10 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
 
   /** How fast (m/s, across the ground) a position track is moving at t. */
   function speedOf(name, t) {
-    timeline.sample(t - 0.05, before);
-    timeline.sample(t + 0.05, after);
+    timeline.sample(t - PACE_SPAN, before);
+    timeline.sample(t + PACE_SPAN, after);
     const a = before[name], b = after[name];
-    return Math.hypot(b[0] - a[0], b[2] - a[2]) / 0.1;
+    return Math.hypot(b[0] - a[0], b[2] - a[2]) / (2 * PACE_SPAN);
   }
 
   function placeCamera() {
@@ -613,7 +593,7 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
     if (!airborne && ((t > T.herStepStart && t < HOP.takeoff) || (t > HOP.settle && t < T.herStepEnd + 0.1))) {
       // Little steps: to the edge of the doorway, and on along the platform after landing.
       const walked = Math.hypot(s.her[0] - herStart.x, s.her[2] - herStart.z);
-      Object.assign(herPose, walkPose(walked * STRIDE.HER, clamp(speedOf('her', t) / 0.8, 0, 1)));
+      Object.assign(herPose, walkPose(walked * STRIDE.HER, clamp(speedOf('her', t) / FULL_SWING.HER, 0, 1)));
     }
     if (t >= HOP.edge && t < HOP.takeoff) {
       // Crouching to spring, arms swung back.
@@ -677,7 +657,7 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
     const speed = speedOf('him', t);
     if (t > T.himWalkStart && t < T.himWalkEnd) {
       const walked = Math.hypot(s.him[0] - hisStart.x, s.him[2] - hisStart.z);
-      Object.assign(hisPose, walkPose(walked * STRIDE.HIM, clamp(speed / 0.9, 0, 1)));
+      Object.assign(hisPose, walkPose(walked * STRIDE.HIM, clamp(speed / FULL_SWING.HIM, 0, 1)));
       // A happy bounce in his step.
       hisPose.bob *= 1.6;
     } else {
@@ -842,7 +822,7 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
     },
     update(dt) {
       if (!active) return [];
-      if (!frozen && dt > 0) time += Math.min(dt, 0.1);
+      if (!frozen && dt > 0) time += Math.min(dt, MAX_STEP);
       draw(time);
       const fired = timeline.events(heard, time);
       heard = Math.max(heard, time);

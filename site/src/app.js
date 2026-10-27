@@ -11,8 +11,9 @@
 // (whistle, steam, chugs and the rail joints' clickety-clack), which follow the ride, and each zone's ambience
 // (birds, waves, leaves, wind, crickets...), which follows the scenery. The music follows the scenery too: each
 // scene has a piece of its own (Chopin, and a carol in the winter hills), unless her own song plays throughout.
-// A card rustles as it comes up, and the finale's hearts and fireworks are heard. One Sound button turns it all on
-// and off.
+// A card rustles as it comes up. At the Day 365 station a bell rings as the train pulls in, and the finale has its own
+// little sounds (her hop down, his door and footsteps, heartbeats, the bouquet's paper, doves), its hearts' sparkle
+// and its fireworks, all hushed again as she rides again or jumps back. One Sound button turns it all on and off.
 //
 // At the Day 365 station the ride ends in the finale (finale/finale.js): under a blush fade her seat gives way to
 // the train seen from outside, the two of them meet on the platform, and his message comes up on a card with the
@@ -339,6 +340,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       appState.ambience = ambience.beds;
       appState.carol = music.carol;
       appState.musicPiece = music.piece;
+      appState.finaleCues = cues.heard;
     }
     appState.finaleTime = finale.active ? finale.time : null;
     appState.quality = governor.tier;
@@ -389,7 +391,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     if (finale.active) {
       // The finale moves the camera itself.
       for (const name of finale.update(dt)) onFinaleEvent(name);
-      if (cues) cues.fireworks(finale.time, finale.bursts);
+      if (cues) cues.finale(finale.time, finale.bursts); // its own sounds, the sparkle and the fireworks, on its clock
     } else {
       camera.rotation.set(look.pitch, look.yaw, 0, 'YXZ');
     }
@@ -511,10 +513,9 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     appState.view = 'cabin';
   }
 
-  // The hearts sparkle as they rise; the finale's card comes up over the fireworks, with the timeline below it to go
-  // back to any moment.
+  // The finale's card comes up over the fireworks, with the timeline below it to go back to any moment. (Its sounds,
+  // the hearts' sparkle among them, keep to its clock: cues.finale in the frame loop.)
   onFinaleEvent = (name) => {
-    if (name === 'hearts') cues.hearts();
     if (name !== 'card' || !finale.active) return;
     appState.phase = 'done';
     showFinaleCard(content, { onRideAgain: () => app.rideAgain() });
@@ -560,6 +561,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   ride.on('finale', () => {
     // The train has pulled in at the Day 365 station: under a blush, her seat gives way to the scene outside.
     sfx.finale();
+    cues.arrival(); // the station bell rings, and the finale's own sounds are ready
     appState.phase = 'finale';
     appState.view = 'finale';
     director.play(-1);
@@ -600,6 +602,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       if (!(Number.isInteger(index) && index >= 0 && index <= ride.reachedMax)) return;
       jumping = true;
       const fromFinale = appState.phase === 'done';
+      if (fromFinale) cues.silence(); // the fireworks and the rest of the finale hush as the blush comes over
       fadeThrough(JUMP_FADE_MS, () => {
         // The train reached the end while the screen was covered: the finale goes on instead.
         if (appState.phase === 'finale') return;
@@ -622,6 +625,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     rideAgain() {
       if (jumping || appState.phase !== 'done') return;
       jumping = true;
+      cues.silence(); // the fireworks and the rest of the finale hush as the blush comes over
       fadeThrough(RIDE_AGAIN_FADE_MS, () => {
         // Back to the Day 1 station under the cover, in her seat, looking ahead, and off again (R31).
         leaveFinale();

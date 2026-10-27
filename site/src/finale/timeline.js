@@ -18,7 +18,7 @@ import { easeInOutCubic, easeOutCubic } from '../util/math.js';
  */
 
 /** The eases, each taking a share of the way through a run (0 to 1) to a share of the change. */
-const EASES = Object.freeze({
+export const EASES = Object.freeze({
   linear: (u) => u,
   in: (u) => u * u * u,
   out: easeOutCubic,

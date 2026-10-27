@@ -38,7 +38,9 @@ export async function waitForPhase(page, phase, timeout = 30000) {
 }
 
 /**
- * Before page.goto: keeps the page's AudioContexts and notes when each noise-based sound (an AudioBufferSourceNode:
+ * Before page.goto: keeps the page's AudioContexts (with the first four gains each makes: the ride's master chain makes
+ * its master fader and then its music, ambience and effects buses, audio/mixer.js) and notes when each noise-based
+ * sound (an AudioBufferSourceNode:
  * the train's chugs, clicks, steam and whistle breath, the ambience's noise and the fireworks; the carol and the
  * built-in tune use oscillators only) starts, how many oscillators start (the carol's and the tune's notes, the
  * birds and bells, the whistle), and when each whistle does (its vibrato is the only oscillator below 20 Hz: no
@@ -71,6 +73,13 @@ export async function trackAudio(page) {
       constructor(...args) {
         super(...args);
         contexts.push(this);
+        this.firstGains = [];
+      }
+
+      createGain(...args) {
+        const gain = super.createGain(...args);
+        if (this.firstGains.length < 4) this.firstGains.push(gain);
+        return gain;
       }
     }
     window.AudioContext = Tracked;
@@ -115,5 +124,29 @@ export function audioReport(page) {
       states: contexts.map((c) => c.state), sounds: starts.length, busiest, tones: tones.count, whistles: whistles.length,
       pieces, unloaded, mostPieces: seen.most,
     };
+  });
+}
+
+/**
+ * After the sound has come on (trackAudio before page.goto): meters the effects bus of the ride's master chain (the
+ * train's sounds and the cues, the finale's among them), before the master fader. Then `window.__audio.effects()`
+ * in the page gives its level now: dB RMS over its last 1024 samples (−200 for silence). Returns the music bus's gain,
+ * which says the buses were found where the mixer makes them (0.105, mixer.js BUS.MUSIC).
+ */
+export function meterEffects(page) {
+  return page.evaluate(() => {
+    const ctx = window.__audio.contexts[0];
+    const [, music, , effects] = ctx.firstGains;
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 1024;
+    effects.connect(analyser);
+    const data = new Float32Array(analyser.fftSize);
+    window.__audio.effects = () => {
+      analyser.getFloatTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+      return 10 * Math.log10(sum / data.length + 1e-20);
+    };
+    return music.gain.value;
   });
 }

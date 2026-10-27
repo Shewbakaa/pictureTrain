@@ -1,13 +1,24 @@
-// Sounds that answer something on screen: a quiet paper rustle as a stop's card slides up, a sparkle of high bell
-// notes as the hearts rise between the two of them at the finale, and a soft pop and crackle for each of the
-// finale's fireworks, in time with their bursts (finale/fireworkTiming.js), for as long as the finale plays.
+// Sounds that answer something on screen: a quiet paper rustle as a stop's card slides up, and the finale's own sounds
+// on its clock. As the train pulls in at the Day 365 station the platform bell rings ("ding-ding") with the whistle;
+// then, as the finale plays, its foley (foleySounds.js, at the times in finale/foleyTiming.js: her hop and landing,
+// his door and his footsteps, two heartbeats, the bouquet's paper, doves taking off), a sparkle of high bell notes as
+// the hearts rise between the two of them, and a soft pop and crackle for each of the fireworks, in time with their
+// bursts (finale/fireworkTiming.js), for as long as the finale plays.
 //
 // They play into the effects bus through the sound effects' one-shots (sfx.js), so they keep to the Sound button,
-// a video's sound and the page going into the background like every other sound. The levels are set for the mix
-// after the master chain and measured there offline (tests/e2e/ambienceLevels.spec.js): the pops and the sparkle,
-// the celebration, peak about −18 dBFS so they are clearly heard under the music; the rustle is far quieter.
+// a video's sound and the page going into the background like every other sound. The finale's own go through a bus
+// of their own on the way, which Ride again or a jump from the finale fades out at once (silence), so nothing of the
+// finale goes on sounding into the ride. The finale's clock drives them every frame (finale(time, bursts)), and only
+// a frame's step of it at a time: a clock that jumps (?ft=, skipTo) or stands still (freeze) plays nothing of what it
+// passed over, never a burst. The levels are set for the mix after the master chain and measured there offline
+// (tests/e2e/ambienceLevels.spec.js and finaleFoleyLevels.spec.js): the pops and the sparkle, the celebration, peak
+// about −18 dBFS so they are clearly heard under the music; the rustle and the foley are far quieter.
 
 import { fireworkBlooms, FIREWORK_TIMING } from '../finale/fireworkTiming.js';
+import { foleyCues } from '../finale/foleyTiming.js';
+import { MAX_STEP } from '../finale/finaleTimes.js';
+import { createFoleySounds, FOLEY_NAMES } from './foleySounds.js';
+import { STATION_BELL } from './sfxTiming.js';
 import { voiceParts } from './voiceParts.js';
 
 /** The stop card rises a beat after the train stops (styles.css: #stop-card's 0.6 s animation delay). */
@@ -52,14 +63,30 @@ const midiToHz = (midi) => 440 * 2 ** ((midi - 69) / 12);
 const toSilence = (decay) => decay / Math.log(1000);
 
 /**
- * The cue sounds' voices on `kit`, each starting at context time `at` at `level` (0 to 1) and returning false,
- * playing nothing, at no level or when the kit's node budget has no room for it. Exported so they can be rendered
- * offline.
- * @param {import('./sfx.js').Kit} kit
+ * How the finale's foley one-shots are gated (s between plays, sfx.define): his footsteps are paced by his walk
+ * (and a slow frame can hold two), and the two heartbeats come 0.8 s apart.
  */
-export function createCueSounds(kit) {
+const FOLEY_GAP = Object.freeze({ step: 0, heartbeat: 0.5, bell: 3, doves: 2 });
+const FOLEY_GAP_ELSE = 1;
+
+/** Ride again or a jump from the finale fades the finale's sounds out over this long (s), under the blush. */
+const HUSH = 0.15;
+
+/** The finale's clock moving on by more than this in a frame is a jump (finale.js moves it MAX_STEP at most). */
+const FRAME_STEP = MAX_STEP + 1e-6;
+
+/** The most of the finale's sounds `heard` lists (app state's finaleCues), from the station bell on. */
+const HEARD_MAX = 64;
+
+/**
+ * The cue sounds' voices on `kit`, into `out` (the effects bus unless given), each starting at context time `at` at
+ * `level` (0 to 1) and returning false, playing nothing, at no level or when the kit's node budget has no room for
+ * it. Exported so they can be rendered offline.
+ * @param {import('./sfx.js').Kit} kit
+ * @param {AudioNode} [out]
+ */
+export function createCueSounds(kit, out = kit.buses.effects) {
   const parts = voiceParts(kit);
-  const out = kit.buses.effects;
 
   return {
     rustle(at, level = 1) {
@@ -137,39 +164,97 @@ export function createCueSounds(kit) {
 }
 
 /**
- * The cues, played through `sfx`'s one-shots once the sound is on: `card()` as a stop's card comes up, `hearts()` at
- * the finale's 'hearts' event, and `fireworks(time, bursts)` every frame while the finale plays, with its clock and
- * how many bursts are going (finale.time, finale.bursts), to pop with each bloom.
+ * The cues, played through `sfx`'s one-shots once the sound is on: `card()` as a stop's card comes up; `arrival()` as
+ * the train pulls in at the Day 365 station (the station bell, and the finale's sounds back on); `finale(time,
+ * bursts)` every frame while the finale plays, with its clock and how many firework bursts are going (finale.time,
+ * finale.bursts); and `silence()` as she rides again or jumps back from the finale. `heard` lists the finale's
+ * sounds played since the train pulled in, by name ('bell', 'hop', ..., 'step', ..., 'firework'), the first
+ * HEARD_MAX of them, for app state. The frame loop's call allocates nothing unless a sound starts.
  * @param {import('./sfx.js').Sfx} sfx
  */
 export function createCues(sfx) {
-  let voices = null;
-  const voice = (kit) => voices || (voices = createCueSounds(kit));
-  sfx.define('rustle', { gap: 0.5, play: (kit, at, level) => voice(kit).rustle(at, level) });
-  sfx.define('sparkle', { gap: 2, play: (kit, at, level) => voice(kit).sparkle(at, level) });
+  /** @type {GainNode|null} */
+  let bus = null; // the finale's own bus, into the effects bus: made with its first sound
+  let busCtx = null;
+  let card = null;
+  let celebration = null;
+  let foley = null;
+  const finaleBus = (kit) => {
+    if (!bus) {
+      busCtx = kit.ctx;
+      bus = kit.ctx.createGain();
+      bus.connect(kit.buses.effects);
+    }
+    return bus;
+  };
+  const cardVoice = (kit) => card || (card = createCueSounds(kit));
+  const finaleVoice = (kit) => celebration || (celebration = createCueSounds(kit, finaleBus(kit)));
+  const foleyVoice = (kit) => foley || (foley = createFoleySounds(kit, finaleBus(kit)));
+
+  sfx.define('rustle', { gap: 0.5, play: (kit, at, level) => cardVoice(kit).rustle(at, level) });
+  sfx.define('sparkle', { gap: 2, play: (kit, at, level) => finaleVoice(kit).sparkle(at, level) });
+  for (const name of FOLEY_NAMES) {
+    const gap = name in FOLEY_GAP ? FOLEY_GAP[name] : FOLEY_GAP_ELSE;
+    sfx.define(name, { gap, play: (kit, at, level) => foleyVoice(kit)[name](at, level) });
+  }
   // One per burst, each in its own place across the sky; a burst blooms every FIREWORK_TIMING.PERIOD.
   const bursts = FIREWORK.PANS.map((pan, b) => {
     const name = `firework-${b}`;
-    sfx.define(name, { gap: FIREWORK_TIMING.PERIOD / 2, play: (kit, at, level) => voice(kit).firework(at, level, pan) });
+    sfx.define(name, { gap: FIREWORK_TIMING.PERIOD / 2, play: (kit, at, level) => finaleVoice(kit).firework(at, level, pan) });
     return name;
   });
 
-  let last = 0; // the finale time the fireworks were last heard to
-  const pop = (b) => {
-    sfx.play(bursts[b % bursts.length]);
+  const heard = [];
+  let heardTo = 0; // the finale time its sounds were last heard to
+  let now = 0; // the finale time of this frame
+  let hushed = false; // since silence(), until the train next pulls in at the Day 365 station
+
+  const note = (name) => {
+    if (heard.length < HEARD_MAX) heard.push(name);
+  };
+  // A sound due at finale time `t` is played back to then (a frame late at most).
+  const hear = (name, t, level) => {
+    if (sfx.play(name, t - now, level)) note(name);
+  };
+  const pop = (b, t) => {
+    if (sfx.play(bursts[b % bursts.length], t - now)) note('firework');
   };
 
   return {
     card() {
       sfx.play('rustle', CARD_RISES_AFTER);
     },
-    hearts() {
-      sfx.play('sparkle');
+    arrival() {
+      hushed = false;
+      heardTo = 0;
+      heard.length = 0;
+      if (bus) {
+        bus.gain.cancelScheduledValues(busCtx.currentTime);
+        bus.gain.setValueAtTime(1, busCtx.currentTime);
+      }
+      if (sfx.play('bell', STATION_BELL.AFTER)) note('bell');
     },
-    fireworks(time, count) {
-      // A finale clock that has gone back (riding again ends in another finale) reports nothing for that frame.
-      fireworkBlooms(last, time, count, pop);
-      last = time;
+    finale(time, count) {
+      now = time;
+      const step = time - heardTo;
+      // A clock gone back (riding again ends in another finale), jumped or held reports nothing for that frame.
+      if (!hushed && step > 0 && step <= FRAME_STEP) {
+        foleyCues(heardTo, time, hear);
+        fireworkBlooms(heardTo, time, count, pop);
+      }
+      heardTo = time;
+    },
+    silence() {
+      if (hushed) return;
+      hushed = true;
+      if (!bus) return;
+      const at = busCtx.currentTime;
+      bus.gain.cancelScheduledValues(at);
+      bus.gain.setValueAtTime(1, at);
+      bus.gain.linearRampToValueAtTime(0, at + HUSH);
+    },
+    get heard() {
+      return heard;
     },
   };
 }

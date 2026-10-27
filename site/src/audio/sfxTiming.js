@@ -125,3 +125,18 @@ export const WHISTLE = Object.freeze({
   depart: Object.freeze([toot(0, 0.3), toot(0.42, 0.45)]),
   finale: Object.freeze([toot(0, 0.25), toot(0.37, 0.25), toot(0.74, 1.5)]),
 });
+
+/** At the Day 365 station the whistle blows this long after the steam's sigh, which comes as the train stops (s). */
+export const FINALE_WHISTLE_AFTER = 0.35;
+
+const longToot = WHISTLE.finale[WHISTLE.finale.length - 1];
+
+/**
+ * The station bell as the train pulls in at the Day 365 station: two strikes ("ding-ding") APART seconds apart, the
+ * first AFTER seconds after the train stops, which is 0.3 s into the whistle's long last toot: bell and whistle ring
+ * out together, and the strikes are not lost among the short toots.
+ */
+export const STATION_BELL = Object.freeze({
+  APART: 0.38,
+  AFTER: FINALE_WHISTLE_AFTER + longToot.t + 0.3,
+});

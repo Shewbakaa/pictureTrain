@@ -1,5 +1,6 @@
 // A stand-in for an AudioContext, for the sound unit tests: enough of the Web Audio API for the master chain, the
-// music, the train's sounds, the ambience and the cues. It logs every sound source's start, and throws where
+// music, the train's sounds, the ambience and the cues. It logs every sound source's start, every node made with
+// what it was connected to, and every automation call on a parameter; and it throws where
 // browsers do on a misuse the tests should catch: stopping a source twice or at a time that is not finite, and
 // automation curves (setValueCurveAtTime) that overlap each other on one parameter.
 
@@ -16,14 +17,16 @@ export function stubContext({ panning = true } = {}) {
       value,
       events: 0,
       target: value, // the value setTargetAtTime last aimed for
-      setValueAtTime() { this.events++; return this; },
-      linearRampToValueAtTime() { this.events++; return this; },
-      exponentialRampToValueAtTime(v) {
+      log: [], // [method, value, time] of every automation call, in order
+      setValueAtTime(v, at) { this.log.push(['set', v, at]); this.events++; return this; },
+      linearRampToValueAtTime(v, at) { this.log.push(['linear', v, at]); this.events++; return this; },
+      exponentialRampToValueAtTime(v, at) {
         if (!(v > 0)) throw new RangeError('exponentialRampToValueAtTime needs a positive value');
+        this.log.push(['exponential', v, at]);
         this.events++;
         return this;
       },
-      setTargetAtTime(v) { this.target = v; this.events++; return this; },
+      setTargetAtTime(v, at) { this.log.push(['target', v, at]); this.target = v; this.events++; return this; },
       setValueCurveAtTime(curve, at, duration) {
         for (const [from, to] of curves) {
           if (at < to && at + duration > from) throw new Error(`NotSupportedError: curve at ${at} overlaps one at ${from}`);
@@ -32,17 +35,21 @@ export function stubContext({ panning = true } = {}) {
         this.events++;
         return this;
       },
-      cancelScheduledValues() { return this; },
+      cancelScheduledValues(at) { this.log.push(['cancel', null, at]); return this; },
     };
   };
+  const made = []; // every node, in the order made
   const node = (extra) => {
     nodes += 1;
-    return {
+    const n = {
       disconnected: false,
-      connect(target) { return target; },
+      outputs: [], // the nodes and params it was connected to
+      connect(target) { this.outputs.push(target); return target; },
       disconnect() { this.disconnected = true; },
       ...extra,
     };
+    made.push(n);
+    return n;
   };
   const source = (type, extra) => {
     const n = node({
@@ -97,5 +104,5 @@ export function stubContext({ panning = true } = {}) {
       }
     }
   };
-  return { ctx, starts, sources, panners, advance, get nodes() { return nodes; } };
+  return { ctx, starts, sources, panners, made, advance, get nodes() { return nodes; } };
 }
