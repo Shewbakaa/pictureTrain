@@ -22,9 +22,9 @@ import { clamp } from '../util/math.js';
  * creaking its bell jingles, as the door swings into it (s). HEART: two beats APART seconds apart (a heart quickened a
  * little), each a "lub" and, DUB seconds later, a softer "dub" that has died away RING seconds after it; the second
  * has died away as the hand-off begins. Set so that his footsteps fall between the beats, none within 0.15 s of one:
- * his last step comes between the first beat and the second, as he reaches her. STEP: his footsteps, the first OFF seconds after he sets off, then SLOW steps a second rising to
- * FAST with his pace (in full from FULL_PACE m/s), and none once his pace falls under STILL m/s; each softer the
- * slower he goes, SOFT of full at a standstill.
+ * his last step comes between the first beat and the second, as he reaches her. STEP: his footsteps, the first OFF
+ * seconds after he sets off, then SLOW steps a second rising to FAST with his pace (in full from FULL_PACE m/s), and
+ * none once his pace falls under STILL m/s; each softer the slower he goes, SOFT of full at a standstill.
  */
 export const FOLEY = Object.freeze({
   AIRTIME: HOP.land - HOP.takeoff,
