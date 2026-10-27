@@ -5,6 +5,7 @@
 /**
  * @typedef {{
  *   ctx: BaseAudioContext,
+ *   readonly made: number,
  *   source: (buffer: AudioBuffer, at: number, end?: number) => AudioBufferSourceNode,
  *   filter: (type: BiquadFilterType, frequency: number, q: number, into: AudioNode) => BiquadFilterNode,
  *   gain: (value: number, into: AudioNode) => GainNode,
@@ -14,7 +15,7 @@
  */
 
 /**
- * Builders on `kit`'s context.
+ * Builders on `kit`'s context. `made` counts the audio nodes they have made, for the kit's node budget.
  * @param {import('./sfx.js').Kit} kit
  * @returns {VoiceParts}
  */
@@ -22,11 +23,19 @@ export function voiceParts(kit) {
   const { ctx } = kit;
   // Safari has had StereoPannerNode since 14.1, but a browser without one simply plays the sound unpanned.
   const panning = typeof ctx.createStereoPanner === 'function';
+  let made = 0;
+  const count = (node) => {
+    made += 1;
+    return node;
+  };
   return {
     ctx,
+    get made() {
+      return made;
+    },
     /** `buffer` (the kit's noise or dust) looping from a random point, from `at`, until `end` if given. */
     source(buffer, at, end) {
-      const src = ctx.createBufferSource();
+      const src = count(ctx.createBufferSource());
       src.buffer = buffer;
       src.loop = true;
       src.start(at, kit.random() * buffer.duration);
@@ -34,7 +43,7 @@ export function voiceParts(kit) {
       return src;
     },
     filter(type, frequency, q, into) {
-      const node = ctx.createBiquadFilter();
+      const node = count(ctx.createBiquadFilter());
       node.type = type;
       node.frequency.value = frequency;
       node.Q.value = q;
@@ -42,14 +51,14 @@ export function voiceParts(kit) {
       return node;
     },
     gain(value, into) {
-      const node = ctx.createGain();
+      const node = count(ctx.createGain());
       node.gain.value = value;
       node.connect(into);
       return node;
     },
     /** An oscillator starting at `frequency` (set before it starts), from `at`, until `end` if given. */
     tone(type, frequency, into, at, end) {
-      const osc = ctx.createOscillator();
+      const osc = count(ctx.createOscillator());
       osc.type = type;
       osc.frequency.value = frequency;
       osc.connect(into);
@@ -60,7 +69,7 @@ export function voiceParts(kit) {
     /** A stereo pan (−1 left to 1 right) into `into`; without StereoPannerNode, `into` itself. */
     pan(value, into) {
       if (!panning) return into;
-      const node = ctx.createStereoPanner();
+      const node = count(ctx.createStereoPanner());
       node.pan.value = value;
       node.connect(into);
       return node;

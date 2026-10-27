@@ -1,13 +1,13 @@
 // Sounds that answer something on screen: a quiet paper rustle as a stop's card slides up, a sparkle of high bell
 // notes as the hearts rise between the two of them at the finale, and a soft pop and crackle for each of the
-// finale's fireworks, in time with their bursts (finale.js fireworkBlooms), for as long as the finale plays.
+// finale's fireworks, in time with their bursts (finale/fireworkTiming.js), for as long as the finale plays.
 //
 // They play into the effects bus through the sound effects' one-shots (sfx.js), so they keep to the Sound button,
 // a video's sound and the page going into the background like every other sound. The levels are set for the mix
-// after the master chain and measured there offline (tests/e2e/audioLevels.spec.js): the pops and the sparkle peak
-// about −24 dBFS, the rustle well under that.
+// after the master chain and measured there offline (tests/e2e/ambienceLevels.spec.js): the pops and the sparkle,
+// the celebration, peak about −18 dBFS so they are clearly heard under the music; the rustle is far quieter.
 
-import { fireworkBlooms, FIREWORKS } from '../finale/finale.js';
+import { fireworkBlooms, FIREWORK_TIMING } from '../finale/fireworkTiming.js';
 import { voiceParts } from './voiceParts.js';
 
 /** The stop card rises a beat after the train stops (styles.css: #stop-card's 0.6 s animation delay). */
@@ -27,7 +27,7 @@ const RUSTLE = {
  * a bell with a quick strike and a DECAY (to −60 dB), softer as they climb.
  */
 const SPARKLE = {
-  LEVEL: 0.0128, NOTES: [84, 89, 93, 96, 101], STEP: 0.075, JITTER: 0.012, ATTACK: 0.003, DECAY: 0.9, FALL: 0.12,
+  LEVEL: 0.0256, NOTES: [84, 89, 93, 96, 101], STEP: 0.075, JITTER: 0.012, ATTACK: 0.003, DECAY: 0.9, FALL: 0.12,
 };
 
 /**
@@ -36,7 +36,7 @@ const SPARKLE = {
  * of the finale sits at its own place across the sky (PANS, by burst).
  */
 const FIREWORK = {
-  LEVEL: 0.0238, THUMP: 95, THUMP_TO: 45, THUMP_LENGTH: 0.18, THUMP_GAIN: 0.8,
+  LEVEL: 0.0476, THUMP: 95, THUMP_TO: 45, THUMP_LENGTH: 0.18, THUMP_GAIN: 0.8,
   POP: { LOW: 1200, ATTACK: 0.004, DECAY: 0.35 },
   CRACKLE: { HIGH: 2500, AFTER: 0.12, RISE: 0.1, DECAY: 1.1, GAIN: 0.7 },
   PANS: [-0.35, 0.3, -0.1, 0.45],
@@ -147,10 +147,10 @@ export function createCues(sfx) {
   const voice = (kit) => voices || (voices = createCueSounds(kit));
   sfx.define('rustle', { gap: 0.5, play: (kit, at, level) => voice(kit).rustle(at, level) });
   sfx.define('sparkle', { gap: 2, play: (kit, at, level) => voice(kit).sparkle(at, level) });
-  // One per burst, each in its own place across the sky; a burst blooms every FIREWORKS.PERIOD.
+  // One per burst, each in its own place across the sky; a burst blooms every FIREWORK_TIMING.PERIOD.
   const bursts = FIREWORK.PANS.map((pan, b) => {
     const name = `firework-${b}`;
-    sfx.define(name, { gap: FIREWORKS.PERIOD / 2, play: (kit, at, level) => voice(kit).firework(at, level, pan) });
+    sfx.define(name, { gap: FIREWORK_TIMING.PERIOD / 2, play: (kit, at, level) => voice(kit).firework(at, level, pan) });
     return name;
   });
 

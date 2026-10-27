@@ -1,40 +1,12 @@
 // The built-in soundtrack (music.js createSoundtrack): the tune, and Silent Night in its place in the winter hills,
-// crossfading with the winter blend. On a stub AudioContext that logs every oscillator's start, with the
-// scheduler's timer ticked by hand.
+// crossfading with the winter blend. On the stub AudioContext (audioStub.js), with the scheduler's timer ticked by
+// hand.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSoundtrack } from '../../site/src/audio/music.js';
 import { composeCarol } from '../../site/src/audio/carol.js';
 import { composeLoop } from '../../site/src/audio/compose.js';
-
-function stubContext() {
-  const starts = []; // { at, freq }
-  const param = (value = 0) => ({
-    value,
-    target: value, // where its automation last aimed
-    setValueAtTime(v) { this.target = v; return this; },
-    linearRampToValueAtTime(v) { this.target = v; return this; },
-    exponentialRampToValueAtTime(v) { this.target = v; return this; },
-    setTargetAtTime(v) { this.target = v; return this; },
-    cancelScheduledValues() { return this; },
-  });
-  const node = (extra) => ({ connect(target) { return target; }, disconnect() {}, ...extra });
-  const ctx = {
-    currentTime: 0,
-    createGain: () => node({ gain: param(1) }),
-    createBiquadFilter: () => node({ type: 'lowpass', frequency: param(350), Q: param(1) }),
-    createDelay: () => node({ delayTime: param() }),
-    createOscillator: () => {
-      const osc = node({
-        type: 'sine', frequency: param(440), detune: param(), onended: null,
-        start(at) { starts.push({ at, freq: osc.frequency.value }); },
-        stop() {},
-      });
-      return osc;
-    },
-  };
-  return { ctx, starts };
-}
+import { stubContext } from './audioStub.js';
 
 /** A timer the test ticks by hand: tick() runs every scheduler that is running. */
 function manualTimer() {
@@ -60,7 +32,7 @@ function setup() {
     }
   };
   /** The oscillators started at or after `from`, as offsets from `origin`. */
-  const since = (from, origin = from) => starts.filter((s) => s.at >= from - 1e-9).map((s) => s.at - origin);
+  const since = (from, origin = from) => starts.filter((s) => s.type === 'osc' && s.at >= from - 1e-9).map((s) => s.at - origin);
   return { ctx, starts, soundtrack, timer, runTo, since };
 }
 
@@ -98,7 +70,7 @@ test('into the winter hills: the tune stops and the carol begins from its first 
   const offsets = t.since(entered + 0.3, entered);
   assert.ok(offsets.length > 40);
   assert.ok(onGrid(offsets, carolLoop), 'every note from here on is the carol\'s, from its top');
-  const first = t.starts.filter((s) => Math.abs(s.at - (entered + 0.05)) < 1e-9).map((s) => Math.round(s.freq * 100) / 100);
+  const first = t.starts.filter((s) => Math.abs(s.at - (entered + 0.05)) < 1e-9).map((s) => Math.round(s.node.frequency.value * 100) / 100);
   assert.ok(first.includes(523.25), 'its first note: C5, "Si-"');
   assert.ok(first.includes(174.61) && first.includes(220) && first.includes(261.63), 'over F major');
   assert.equal(t.timer.count, 1, 'the tune\'s scheduler has stopped');

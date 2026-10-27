@@ -34,11 +34,12 @@ import { mergeParts, moveParts, part, triangleSoup } from '../util/geo.js';
 import { clamp, smoothstep } from '../util/math.js';
 import { createRng, rngRange } from '../util/rng.js';
 import { createTimeline } from './timeline.js';
+import { FIREWORK_TIMING } from './fireworkTiming.js';
 
 /** When things happen (s from the start of the finale). */
 export const FINALE_TIMES = Object.freeze({
   cameraDone: 2.6, herStepStart: 2.6, herStepEnd: 4.2, himWalkStart: 4.0, himWalkEnd: 7.0,
-  handoffStart: 7.0, handoffEnd: 8.0, hearts: 8.0, fireworks: 8.5, card: 9.5, end: 12,
+  handoffStart: 7.0, handoffEnd: 8.0, hearts: 8.0, fireworks: FIREWORK_TIMING.START, card: 9.5, end: 12,
 });
 
 const T = FINALE_TIMES;
@@ -248,33 +249,16 @@ function createHearts() {
 // --- Fireworks ---------------------------------------------------------------------------------------------------
 
 /**
- * Soft pastel fireworks over the town: up to MAX bursts, one every STAGGER seconds, each relaunching every PERIOD.
- * A burst's shell rises for RISE seconds from LAUNCH metres below where it blooms, then SPARKS sparks spread to
- * RADIUS metres, droop and fade out over FADE seconds. Each relaunch blooms somewhere new in the AREA (along,
- * right and up ranges in the station's frame: across the track and well beyond it, over the rooftops).
+ * Soft pastel fireworks over the town: up to MAX bursts, one every STAGGER seconds, each relaunching every PERIOD
+ * (their timing is fireworkTiming.js's, which the ride's sounds share). A burst's shell rises for RISE seconds from
+ * LAUNCH metres below where it blooms, then SPARKS sparks spread to RADIUS metres, droop and fade out over FADE
+ * seconds. Each relaunch blooms somewhere new in the AREA (along, right and up ranges in the station's frame:
+ * across the track and well beyond it, over the rooftops).
  */
-export const FIREWORKS = Object.freeze({
-  MAX: 4, LOW: 2, STAGGER: 0.8, PERIOD: 3.2, RISE: 0.7, LAUNCH: 7, TRAIL: 8, SPARKS: 110, RADIUS: 5.4, FADE: 2.3,
+const FIREWORKS = Object.freeze({
+  ...FIREWORK_TIMING, LAUNCH: 7, TRAIL: 8, SPARKS: 110, RADIUS: 5.4, FADE: 2.3,
   SIZE: 1.25, AREA: { along: [24, 44], right: [-34, -56], up: [6, 9.5] },
 });
-
-/**
- * The fireworks' blooms (each moment a burst's shell bursts into sparks) after finale time `from` and up to `to`,
- * with `bursts` bursts going (the finale's `bursts`, fewer on the low tier): calls `visit(burst, t)` for each,
- * burst by burst. Burst b first blooms a shell's RISE after it launches, STAGGER × b after the 'fireworks' event,
- * and again every PERIOD, as updateFireworks draws them. The ride's sounds (audio/cueSounds.js) pop with them.
- * @param {number} from
- * @param {number} to
- * @param {number} bursts
- * @param {(burst: number, t: number) => void} visit
- */
-export function fireworkBlooms(from, to, bursts, visit) {
-  for (let b = 0; b < bursts; b++) {
-    const first = T.fireworks + b * FIREWORKS.STAGGER + FIREWORKS.RISE;
-    const k = Math.max(0, Math.floor((from - first) / FIREWORKS.PERIOD) + 1);
-    for (let t = first + k * FIREWORKS.PERIOD; t <= to; t += FIREWORKS.PERIOD) visit(b, t);
-  }
-}
 
 /**
  * Colour pairs; a spark's colour lies between its burst's two. They are deeper than pastel because they are added
@@ -844,7 +828,7 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
   return {
     get active() { return active; },
     get time() { return time; },
-    /** How many firework bursts are going (fewer on the low tier), for fireworkBlooms. */
+    /** How many firework bursts are going (fewer on the low tier), for fireworkTiming.js's fireworkBlooms. */
     get bursts() { return bursts; },
     begin() {
       active = true;

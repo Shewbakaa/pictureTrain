@@ -9,7 +9,8 @@
 // the same.
 //
 // The levels are set for the mix after the master chain and measured there offline
-// (tests/e2e/audioLevels.spec.js): the loudest of them peak about −24 dBFS, the bee and the burner softer.
+// (tests/e2e/ambienceLevels.spec.js): the loudest of them peak about −24 dBFS, the bee and the burner softer, and
+// the sleigh bells about 6 dB louder, to be heard through their quick, light rings.
 
 import { fallen, voiceParts } from './voiceParts.js';
 
@@ -27,10 +28,11 @@ const CALM = { SLOW: 1.3, LOW: 0.88, SOFT: 0.8 };
 
 /**
  * The gull: a nasal, falling "kyow" (a sawtooth through a bandpass), CALLS of them in a row, each a little lower
- * than the one before, far off (a lowpass). LEVEL is its peak gain.
+ * than the one before, far off (a lowpass), out over the sea (its pan, give or take SPREAD). LEVEL is its peak gain.
  */
 const GULL = {
   LEVEL: 0.0268, CALLS: [2, 4], FROM: 720, TOP: 1080, TO: 620, LENGTH: [0.26, 0.34], GAP: [0.1, 0.18], BAND: 1500, FAR: 2600,
+  SPREAD: 0.15,
 };
 
 /** The bee: a buzzing sawtooth flying past, pitch falling a little as it goes and the pan sweeping across. */
@@ -47,7 +49,7 @@ const BURNER = { LEVEL: 0.031, BAND: 450, LOW: 1600, ATTACK: 0.12, HOLD: [1, 1.8
  * from one side to the other, loudest in the middle.
  */
 const SLEIGH = {
-  LEVEL: 0.0098, BELLS: [2950, 3870, 5230], DETUNE: 0.02, RATTLE: 0.6, RATTLE_HIGH: 5500, HIGH: 2000,
+  LEVEL: 0.0196, BELLS: [2950, 3870, 5230], DETUNE: 0.02, RATTLE: 0.6, RATTLE_HIGH: 5500, HIGH: 2000,
   PAIRS: [3, 5], PAIR: 0.13, STRIDE: [0.38, 0.46], RING: [0.08, 0.11], JITTER: 0.012, SWEEP: 0.6,
 };
 // A bell's ring must end before its next shake (PAIR − JITTER away at the soonest), or their envelopes interleave.
@@ -67,6 +69,9 @@ const CHIME = {
     { ratio: 2, gain: 0.35, decay: 1.4 }, // the nominal, an octave up
   ],
 };
+
+/** How long the chime's longest-ringing partial (the hum) rings after the last strike (s). */
+const CHIME_RING = Math.max(...CHIME.PARTIALS.map((p) => p.decay));
 
 /** Every envelope closes with a ramp this long (s) down to exactly zero before its sources stop. */
 const TAIL = 0.02;
@@ -165,7 +170,7 @@ const SHAPES = {
 /**
  * @typedef {{
  *   bird: (zone: 'spring'|'autumn', at: number, level: number) => boolean,
- *   gull: (at: number, level: number) => boolean, bee: (at: number, level: number) => boolean,
+ *   gull: (at: number, level: number, pan?: number) => boolean, bee: (at: number, level: number) => boolean,
  *   burner: (at: number, level: number) => boolean, sleigh: (at: number, level: number) => boolean,
  *   chime: (at: number, level: number) => boolean,
  * }} NatureSounds
@@ -222,10 +227,11 @@ export function createNatureSounds(kit) {
       return true;
     },
 
-    gull(at, level) {
+    /** `pan` is where the sea is from where she is looking (ambienceTiming.js wavePan). */
+    gull(at, level, pan = 0) {
       if (!(level > 0) || !kit.room(NODES.gull)) return false;
       const G = GULL;
-      const sound = outlet(between(-0.8, -0.2)); // over the sea, on her left as the ride runs along the beach
+      const sound = outlet(Math.max(-1, Math.min(1, pan + between(-G.SPREAD, G.SPREAD))));
       const env = sound.into.gain;
       const voice = parts.filter('bandpass', G.BAND, 1.2, parts.filter('lowpass', G.FAR, 0.7, sound.into));
       const count = Math.floor(between(G.CALLS[0], G.CALLS[1] + 1));
@@ -351,8 +357,7 @@ export function createNatureSounds(kit) {
       const C = CHIME;
       const strikes = [];
       for (let i = 0; i < C.STRIKES; i++) strikes.push(at + i * C.EVERY);
-      const longest = Math.max(...C.PARTIALS.map((p) => p.decay));
-      const end = strikes[strikes.length - 1] + longest + TAIL;
+      const end = strikes[strikes.length - 1] + CHIME_RING + TAIL;
       const sound = outlet(C.PAN);
       sound.into.gain.value = C.LEVEL * level;
       const far = parts.filter('lowpass', C.FAR, 0.7, sound.into);

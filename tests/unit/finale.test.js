@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FINALE_TIMES, finaleTracks } from '../../site/src/finale/finale.js';
 import { createTimeline } from '../../site/src/finale/timeline.js';
-import { createTrackPath } from '../../site/src/world/trackPath.js';
 import { STATION } from '../../site/src/world/stations.js';
 import * as THREE from '../../site/src/three.js';
+import { FINALE_PATH, finaleOnStage } from './finaleStage.js';
 
 const T = FINALE_TIMES;
-const path = createTrackPath(1030, 7, { straightRanges: [[0, 120], [870, 1100]] });
+const path = FINALE_PATH;
 const tl = createTimeline(finaleTracks(path, 960));
 const v = (a) => new THREE.Vector3(...a);
 
@@ -42,23 +42,9 @@ test('camera starts at the seat and pulls out to see both', () => {
 
 // Beyond the brief.
 
-import { createFinale } from '../../site/src/finale/finale.js';
 import { createTrainExterior, EXTERIOR } from '../../site/src/train/exterior.js';
 import { triangleCount } from '../../site/src/util/geo.js';
 
-const LOOKS = { her: { skin: '#f2c9a5', hair: '#3b2416', outfit: '#e98aa6' }, you: { skin: '#e8b994', hair: '#2a1a10', outfit: '#5b7fc4' } };
-
-function finaleOnStage() {
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(80, 390 / 844, 0.1, 400);
-  const rig = new THREE.Object3D();
-  rig.add(camera);
-  scene.add(rig);
-  const cabin = { shown: true, setVisible(v) { this.shown = v; } };
-  const exterior = createTrainExterior();
-  const finale = createFinale({ stage: { scene, camera, rig }, path, layout: { finaleDistance: 960 }, content: { characters: LOOKS }, cabin, exterior });
-  return { scene, camera, rig, cabin, exterior, finale };
-}
 
 test('the finale swaps her seat for the scene outside, reports each event once, and swaps back', () => {
   const { scene, camera, rig, cabin, exterior, finale } = finaleOnStage();
@@ -142,7 +128,7 @@ test('the train outside: locomotive ahead, carriage round her seat, an open door
 
 // The fireworks' sound keeps time with their blooms (audio/cueSounds.js plays a pop for each).
 
-import { FIREWORKS, fireworkBlooms } from '../../site/src/finale/finale.js';
+import { FIREWORK_TIMING as FIREWORKS, fireworkBlooms } from '../../site/src/finale/fireworkTiming.js';
 
 /**
  * Runs the finale for `seconds` of 60 fps frames, and for each frame lists the bursts whose sparks came out in it,

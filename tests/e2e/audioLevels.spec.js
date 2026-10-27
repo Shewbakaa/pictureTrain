@@ -45,7 +45,9 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
       synth.fade(true, 0.01);
       for (const note of loop.notes) if (note.t < SECONDS) synth.playNote(note, note.t + 0.05);
     };
-    const train = (mixer) => createTrainSounds(createKit(mixer));
+    // Every sound is booked before any plays, so none frees its nodes in time: no budget here (else the busy mix
+    // would silently drop the sounds that come last).
+    const train = (mixer) => createTrainSounds(createKit(mixer, { budget: Infinity }));
     // Cruising from `from` s to the end: a chug every interval, a joint's two clicks every 12 m.
     const chugs = (sounds, from) => {
       for (let t = from; t < SECONDS - 0.3; t += chugInterval(RIDE.CRUISE)) sounds.chug(t, chugLevel(RIDE.CRUISE));
@@ -141,7 +143,9 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
   expect(musicDrop).toBeLessThanOrEqual(4);
   expect(Math.abs(m.whistlePeakDb - -20)).toBeLessThanOrEqual(2);
   expect(m.whistleFinalePeakDb).toBeLessThanOrEqual(-18);
-  expect(Math.abs(m.chugRmsDb - -37)).toBeLessThanOrEqual(2); // 3 dB under the design's −34, so the whistle stands out
+  // About 6 dB under the design's first −34, so the whistle's loudest moment is clearly above the chug's.
+  expect(Math.abs(m.chugRmsDb - -40)).toBeLessThanOrEqual(2);
+  expect(m.whistleLoudestDb).toBeGreaterThanOrEqual(m.chugLoudestDb + 1);
   expect(m.clickRmsDb).toBeLessThan(m.chugRmsDb - 3);
   // Every effect's loudest moment stays below the music's: they sit under it.
   for (const key of ['whistleLoudestDb', 'chugLoudestDb', 'clickLoudestDb', 'puffLoudestDb', 'brakeLoudestDb', 'sighLoudestDb']) {

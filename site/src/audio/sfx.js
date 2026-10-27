@@ -14,7 +14,8 @@
 // The app drives it: depart(), arrive() and finale() from the ride's events, and update(speed, distance, seconds,
 // toStop) every frame, which allocates nothing unless a sound starts. Its timing keeps to real time under a
 // ?speed= time warp and skips rather than bursts (sfxTiming.js), and every sound plays at most once per its own
-// gap. All the sounds together hold at most NODE_BUDGET audio nodes at a time; one that does not fit is skipped.
+// gap. All the sounds together, the ambience's beds included, hold at most NODE_BUDGET audio nodes at a time: a
+// passing sound that does not fit is skipped, and a bed waits until there is room for it.
 //
 // The ambience and the cues use it this way:
 //   sfx.kit      null until the Begin tap has made the AudioContext; then what a sound needs to make itself (Kit,
@@ -23,7 +24,8 @@
 //   sfx.define(name, { gap, play(kit, at, level) })
 //                adds a one-shot. `play` builds its nodes to start at context time `at`, counts them with
 //                kit.room() and kit.track(), and returns false if it played nothing. It plays at most once per
-//                `gap` seconds of real time.
+//                `gap` seconds of real time. A continuous sound (an ambience bed) counts its nodes with kit.hold()
+//                for as long as it stays, and gives them back with kit.release().
 //   sfx.play(name, delay = 0, level = 1)
 //                plays a one-shot `delay` seconds from now (later, if the master fader is still coming up), if the
 //                sound is on and its gap allows.
@@ -42,7 +44,7 @@ import { createRng } from '../util/rng.js';
 /** Sounds are booked this far ahead of the context's clock (s), so none starts late. */
 const LEAD = 0.05;
 
-/** The most audio nodes all the effects and the ambience may hold at once. */
+/** The most audio nodes all the effects and the ambience (its beds and its passing sounds) may hold at once. */
 const NODE_BUDGET = 40;
 
 /** A one-shot asked for while the sound is coming on plays if it comes on within this (s); later, it is dropped. */
@@ -80,15 +82,20 @@ const BRAKE_ARM = (RIDE.CRUISE * RIDE.CRUISE) / (2 * RIDE.BRAKE) + 1;
  * @property {(nodes: number) => boolean} room  whether a sound of `nodes` audio nodes fits in the budget now
  * @property {(source: AudioScheduledSourceNode, nodes: number, last: AudioNode) => void} track
  *   counts a sound's `nodes` until `source` ends, then disconnects `last` (the node joining it to its bus)
+ * @property {(nodes: number) => boolean} hold  counts a continuous sound's `nodes` until release(), if they fit
+ *   (false, counting nothing, if they do not)
+ * @property {(nodes: number) => void} release  stops counting `nodes` that hold() counted
  * @property {number} live  audio nodes playing now
  */
 
 /**
  * What the sounds need, on `mixer`'s context. Exported so the sounds can be rendered offline.
  * @param {import('./mixer.js').Mixer} mixer
+ * @param {{ budget?: number }} [options]  the most nodes held at once: NODE_BUDGET in the ride. An offline render,
+ *   which books every sound before any has played (so none has ended to free its nodes), lifts it to Infinity.
  * @returns {Kit}
  */
-export function createKit(mixer) {
+export function createKit(mixer, { budget = NODE_BUDGET } = {}) {
   const { ctx } = mixer;
   const random = createRng(NOISE_SEED);
   const noise = ctx.createBuffer(1, Math.round(NOISE_SECONDS * ctx.sampleRate), ctx.sampleRate);
@@ -110,7 +117,15 @@ export function createKit(mixer) {
     noise,
     dust,
     random,
-    room: (nodes) => live + nodes <= NODE_BUDGET,
+    room: (nodes) => live + nodes <= budget,
+    hold(nodes) {
+      if (live + nodes > budget) return false;
+      live += nodes;
+      return true;
+    },
+    release(nodes) {
+      live -= nodes;
+    },
     track(source, nodes, last) {
       live += nodes;
       source.onended = () => {
@@ -176,11 +191,16 @@ export function createSfx(music, { now = () => performance.now() } = {}) {
     return Boolean(ready()) && music.audible && kit.ctx.state === 'running';
   }
 
-  /** Plays `shot` `delay` s from now (context time), if its gap allows. Assumes audible(). */
+  /**
+   * Plays `shot` `delay` s from now (context time), if its gap allows. Assumes audible(). One that plays nothing
+   * (no room in the node budget) does not use up its gap.
+   */
   function fire(shot, delay, level) {
     const time = kit.ctx.currentTime;
     if (!shot.gate.open(time)) return false;
-    return shot.play(kit, Math.max(time, time + LEAD + delay), level) !== false;
+    if (shot.play(kit, Math.max(time, time + LEAD + delay), level) !== false) return true;
+    shot.gate.reset();
+    return false;
   }
 
   /** Whether the sound is on its way: the browser is still answering, or the context has yet to start running. */

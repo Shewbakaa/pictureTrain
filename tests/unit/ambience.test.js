@@ -3,7 +3,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createAmbience } from '../../site/src/audio/ambience.js';
-import { createSfx } from '../../site/src/audio/sfx.js';
+import { BED_NODES, BED_ZONES, createBed } from '../../site/src/audio/ambienceBeds.js';
+import { createNatureSounds } from '../../site/src/audio/natureSounds.js';
+import { createKit, createSfx } from '../../site/src/audio/sfx.js';
 import { createMixer } from '../../site/src/audio/mixer.js';
 import { AMBIENCE } from '../../site/src/audio/ambienceTiming.js';
 import { envAt } from '../../site/src/world/environment.js';
@@ -129,6 +131,30 @@ test('the clock tower strikes once as the train rolls into the evening; a jump t
   assert.equal(u.named('chime').length, 0);
 });
 
+test('a clock-tower chime with no room in the node budget waits a moment for it rather than being lost', () => {
+  const t = setup();
+  t.on();
+  t.ride(1, zone('evening').start - 20);
+  const busy = t.sfx.kit.ctx.createBufferSource();
+  t.sfx.kit.track(busy, 30, t.sfx.kit.ctx.createGain());
+  t.ride(30 / 6.5, zone('evening').start - 15, { speed: 6.5 }); // rolls into the evening: no room for 13 nodes
+  assert.equal(t.named('chime').length, 0);
+  busy.onended();
+  t.ride(0.5, zone('evening').start + 15);
+  assert.equal(t.named('chime').length, 1, 'it strikes once there is room');
+
+  const u = setup();
+  u.on();
+  u.ride(1, zone('evening').start - 20);
+  const stuck = u.sfx.kit.ctx.createBufferSource();
+  u.sfx.kit.track(stuck, 30, u.sfx.kit.ctx.createGain());
+  u.ride(30 / 6.5, zone('evening').start - 15, { speed: 6.5 });
+  u.ride(5, zone('evening').start + 15);
+  stuck.onended();
+  u.ride(5, zone('evening').start + 15);
+  assert.equal(u.named('chime').length, 0, 'not long after: it is skipped, not saved up');
+});
+
 test('the waves come from the sea on her left, and move round as she turns her head', () => {
   const t = setup();
   t.on();
@@ -138,6 +164,21 @@ test('the waves come from the sea on her left, and move round as she turns her h
   assert.ok(Math.abs(pan.pan.target - -AMBIENCE.WAVE_WIDTH) < 1e-9, `looking ahead: ${pan.pan.target}`);
   t.ride(0.5, middleOf('summer'), { yaw: Math.PI / 2 });
   assert.ok(Math.abs(pan.pan.target) < 1e-9, 'facing the sea');
+});
+
+test('the gulls call from over the sea, wherever she looks, like the waves', () => {
+  const gullPans = (yaw) => {
+    const t = setup();
+    t.on();
+    t.ride(150, middleOf('summer'), { yaw });
+    assert.ok(t.named('gull').length >= 2);
+    // The waves' pan moves with her look (automation); each gull's is set once, as it calls.
+    return t.panners.filter((p) => p.pan.events === 0).map((p) => p.pan.value);
+  };
+  const ahead = gullPans(0);
+  assert.ok(ahead.length >= 2 && ahead.every((p) => p <= -0.5 && p >= -0.9), `looking ahead: ${ahead}`);
+  const facing = gullPans(Math.PI / 2);
+  assert.ok(facing.length >= 2 && facing.every((p) => Math.abs(p) <= 0.2), `facing the sea: ${facing}`);
 });
 
 test('without StereoPannerNode the sounds play unpanned', () => {
@@ -185,8 +226,54 @@ test('a ?speed=50 ride through every zone never piles sounds up, and keeps the n
     busiest = Math.max(busiest, i - j + 1);
   }
   assert.ok(busiest <= 8, `${busiest} sounds started within one second`);
-  assert.ok(most <= 40, `${most} nodes of passing sounds at once`);
+  assert.ok(most <= 40, `${most} nodes at once, the beds' included`);
   assert.ok(t.ambience.beds.length <= 2);
+});
+
+test('each bed holds in the node budget exactly the nodes it makes, and gives them back when taken down', () => {
+  for (const panning of [true, false]) {
+    for (const zone of BED_ZONES) {
+      const audio = stubContext({ panning });
+      const kit = createKit(createMixer(audio.ctx));
+      const before = audio.nodes;
+      const bed = createBed(kit, zone);
+      assert.ok(bed, zone);
+      assert.equal(kit.live, audio.nodes - before, `${zone}${panning ? '' : ' (no panning)'}`);
+      if (panning) assert.equal(kit.live, BED_NODES[zone], `${zone}: BED_NODES says the most it makes`);
+      bed.free();
+      assert.equal(kit.live, 0, `${zone} gives its nodes back`);
+    }
+  }
+});
+
+test('each passing sound counts in the budget exactly the nodes it makes, until it ends', () => {
+  const sounds = {
+    bird: (v) => v.bird('spring', 0.1, 1), gull: (v) => v.gull(0.1, 1, -0.7), bee: (v) => v.bee(0.1, 1),
+    burner: (v) => v.burner(0.1, 1), sleigh: (v) => v.sleigh(0.1, 1), chime: (v) => v.chime(0.1, 1),
+  };
+  for (const [name, play] of Object.entries(sounds)) {
+    const audio = stubContext();
+    const kit = createKit(createMixer(audio.ctx));
+    const voices = createNatureSounds(kit);
+    const before = audio.nodes;
+    assert.equal(play(voices), true, name);
+    assert.equal(kit.live, audio.nodes - before, name);
+    audio.advance(60);
+    assert.equal(kit.live, 0, `${name} lets them go`);
+  }
+});
+
+test('a bed waits for room while passing sounds fill the budget, and comes in once they end', () => {
+  const t = setup();
+  t.on();
+  const busy = t.sfx.kit.ctx.createBufferSource();
+  t.sfx.kit.track(busy, 38, t.sfx.kit.ctx.createGain());
+  t.ride(1, middleOf('spring'));
+  assert.deepEqual(t.ambience.beds, [], 'no room for the breeze');
+  assert.ok(t.sfx.kit.live <= 40);
+  busy.onended();
+  t.ride(0.2, middleOf('spring'));
+  assert.deepEqual(t.ambience.beds, ['spring']);
 });
 
 test('no ambience sound starts an oscillator below 20 Hz (the e2e tests count those as the whistle\'s vibrato)', () => {

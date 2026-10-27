@@ -1,8 +1,8 @@
 // The ambience: each zone's own sounds, following the scenery. A bed under every zone (ambienceBeds.js: breeze,
 // waves, rustling leaves, wind, crickets) and, over it, random passing sounds (natureSounds.js: birds, a bee, a
 // balloon's burner, a gull, sleigh bells), crossfading with envAt's zone blend like the sky and the particles; and
-// the evening's clock tower, striking once as the train rolls into the evening. The waves come from the sea's side
-// of wherever she is looking.
+// the evening's clock tower, striking once as the train rolls into the evening. The waves, and the gulls over them,
+// come from the sea's side of wherever she is looking.
 //
 // It plays on the sound effects' kit (sfx.js), into the ambience bus, so the Sound button, a video's sound and the
 // page going into the background govern it with everything else: a bed's nodes stay connected and the master
@@ -31,8 +31,12 @@ const RELEASE = 2;
 const BED_EASE = 0.15;
 const BED_STEP = 0.01;
 
-/** The clock tower strikes this long (s) after the train rolls into the evening. */
+/**
+ * The clock tower strikes this long (s) after the train rolls into the evening; with no room in the node budget
+ * just then, it waits for room up to CHIME_PATIENCE (real s) rather than being lost, since it strikes only once.
+ */
 const CHIME_DELAY = 0.4;
+const CHIME_PATIENCE = 3;
 
 /** The sea lies on this side of the track (zones.js: `water` puts it on the left). */
 const SEA_SIDE = 'left';
@@ -76,7 +80,7 @@ export function createAmbience(sfx) {
     'bird-autumn': (v, at, level) => v.bird('autumn', at, level),
     bee: (v, at, level) => v.bee(at, level),
     burner: (v, at, level) => v.burner(at, level),
-    gull: (v, at, level) => v.gull(at, level),
+    gull: (v, at, level) => v.gull(at, level, seaPan),
     sleigh: (v, at, level) => v.sleigh(at, level),
   };
   for (const event of EVENTS) {
@@ -94,6 +98,8 @@ export function createAmbience(sfx) {
   const levels = {}; // where each bed's fade is heading
   const silent = {}; // real seconds each bed's zone has been silent
   let up = []; // the zones whose beds are up, made again only when that changes
+  let seaPan = 0; // where the sea is from where she is looking (stereo pan), for the waves and the gulls
+  let chimeWait = 0; // while the chime is due: how much longer (real s) it may wait for room
   let since = 0; // real seconds since the last tick
 
   /** Makes, fades, books or takes down `zone`'s bed. */
@@ -101,7 +107,9 @@ export function createAmbience(sfx) {
     let bed = beds[zone];
     if (!bed) {
       if (!(weight > 0) || !audible) return;
-      bed = beds[zone] = createBed(kit, zone);
+      bed = createBed(kit, zone);
+      if (!bed) return; // no room in the node budget yet: passing sounds end within seconds
+      beds[zone] = bed;
       levels[zone] = 0;
       silent[zone] = 0;
       up = BED_ZONES.filter((id) => beds[id]);
@@ -133,7 +141,7 @@ export function createAmbience(sfx) {
     },
     update(env, yaw, seconds, distance) {
       zoneWeights(env, weights);
-      if (chime.step(weights.evening, distance)) sfx.play('chime', CHIME_DELAY);
+      if (chime.step(weights.evening, distance)) chimeWait = CHIME_PATIENCE;
       since += Math.min(seconds > 0 ? seconds : 0, AMBIENCE.MAX_STEP);
       if (since < TICK) return;
       const step = since;
@@ -141,9 +149,14 @@ export function createAmbience(sfx) {
       const kit = sfx.kit;
       if (!kit) return;
       const audible = sfx.audible;
+      seaPan = wavePan(yaw, SEA_SIDE);
       for (let i = 0; i < BED_ZONES.length; i++) tend(kit, BED_ZONES[i], weights[BED_ZONES[i]], step, audible);
-      if (beds.summer) beds.summer.setPan(wavePan(yaw, SEA_SIDE));
-      if (!audible) return;
+      if (beds.summer) beds.summer.setPan(seaPan);
+      if (!audible) {
+        chimeWait = 0; // skipped, like every sound asked for while the sound is off
+        return;
+      }
+      if (chimeWait > 0) chimeWait = sfx.play('chime', CHIME_DELAY) ? 0 : chimeWait - step;
       for (let i = 0; i < clocks.length; i++) {
         const c = clocks[i];
         const weight = weights[c.zone];

@@ -222,6 +222,30 @@ test('the kit holds at most 40 nodes of sound at once, and frees them as each so
   assert.equal(last.disconnected, true);
 });
 
+test('a continuous sound holds its nodes in the budget until it lets them go, and passing sounds fit in the rest', () => {
+  const { ctx } = stubContext();
+  const kit = createKit(createMixer(ctx));
+  assert.equal(kit.hold(10), true);
+  assert.equal(kit.live, 10);
+  assert.equal(kit.room(31), false);
+  assert.equal(kit.room(30), true);
+  assert.equal(kit.hold(31), false, 'no room: nothing is held');
+  assert.equal(kit.live, 10);
+  kit.release(10);
+  assert.equal(kit.live, 0);
+});
+
+test('a one-shot that found no room does not use up its gap: it can play as soon as there is room', () => {
+  const t = setup();
+  t.on();
+  const busy = t.ctx.createBufferSource();
+  t.sfx.kit.track(busy, 30, t.ctx.createGain());
+  assert.equal(t.sfx.play('whistle'), false, 'no room for its 12 nodes');
+  busy.onended();
+  t.advance(0.1);
+  assert.equal(t.sfx.play('whistle'), true, 'well inside its 1.5 s gap');
+});
+
 test('a sound that does not fit in the budget is skipped', () => {
   const t = setup();
   t.on();

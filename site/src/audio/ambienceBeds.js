@@ -10,7 +10,8 @@
 // with it when the sound is held, and pick up where they were.
 //
 // The levels are set for the mix after the master chain and measured there offline
-// (tests/e2e/audioLevels.spec.js): each bed comes to about −36 dBFS RMS at full weight, well under the music.
+// (tests/e2e/ambienceLevels.spec.js): each bed comes to about −36 dBFS RMS at full weight, well under the music,
+// and the crickets about 6 dB under that, because their high tones carry.
 
 import { voiceParts } from './voiceParts.js';
 
@@ -24,12 +25,11 @@ const BREEZE = { LEVEL: 0.05, LOW: [450, 1000], HIGH: 90, GUST: [0.45, 1], EVERY
  * The summer waves: noise under a lowpass, one wave every PERIOD seconds. Each builds for BUILD of its period from
  * the TROUGH (a share of its PEAK at LEVEL) as its cutoff opens, breaks over BREAK with the cutoff wide open
  * (CUT.crest: the hiss of the foam), then washes back to the trough over the rest. The sea's side follows her
- * view: the pan moves there with PAN_EASE (a time constant, s).
+ * view: the pan moves there with PAN_EASE (a time constant, s), for any move of at least PAN_STEP.
  */
 const WAVES = {
   LEVEL: 0.066, TROUGH: 0.16, PEAK: [0.7, 1], PERIOD: [8, 10], BUILD: 0.42, BREAK: 0.1,
-  CUT: { trough: 320, build: 750, crest: [2000, 2900] }, Q: 0.5, PAN_EASE: 0.25, PAN_STEP: 0.02, // PAN_STEP: the
-  // smallest move of her head's pan worth following
+  CUT: { trough: 320, build: 750, crest: [2000, 2900] }, Q: 0.5, PAN_EASE: 0.25, PAN_STEP: 0.02,
 };
 
 /**
@@ -55,7 +55,7 @@ const CRICKETS = {
     { freq: 4180, pulses: 4, period: 0.83, level: 0.8, pan: 0.5 },
     { freq: 4890, pulses: 3, period: 0.47, level: 0.45, pan: 0.1 },
   ],
-  LEVEL: 0.0376, PULSE_ON: 0.022, PULSE_OFF: 0.012, FADE_PULSE: 0.12, JITTER: 0.06, REST_CHANCE: 0.04, REST: [1.5, 4],
+  LEVEL: 0.0188, PULSE_ON: 0.022, PULSE_OFF: 0.012, FADE_PULSE: 0.12, JITTER: 0.06, REST_CHANCE: 0.04, REST: [1.5, 4],
   SOFTER: 0.8, CURVE_POINTS: 64,
 };
 
@@ -65,19 +65,28 @@ const LEAD = 0.02;
 /**
  * @typedef {{ fade: GainNode, tick: (until: number) => void, setPan: (pan: number) => void, free: () => void }} Bed
  *   `fade` is the bed's level on the ambience bus (0 to 1: ambience.js sets it from the zone's weight); `tick`
- *   books its sound up to context time `until`; `setPan` places it (only the waves move); `free` stops it for good.
+ *   books its sound up to context time `until`; `setPan` places it (only the waves move); `free` stops it for good
+ *   and gives its nodes back to the kit's budget.
  */
 
 /** The zones that have a bed. */
 export const BED_ZONES = Object.freeze(['spring', 'summer', 'autumn', 'winter', 'evening']);
 
 /**
- * `zone`'s bed on `kit`, silent until its `fade` is raised.
+ * The most audio nodes each zone's bed is made of (with its stereo pans: one fewer for each where the browser has
+ * none). A bed holds them in the kit's node budget for as long as it stays.
+ */
+export const BED_NODES = Object.freeze({ spring: 5, summer: 5, autumn: 7, winter: 5, evening: 10 });
+
+/**
+ * `zone`'s bed on `kit`, silent until its `fade` is raised, holding its nodes in the kit's budget; null, making
+ * nothing, while the budget has no room for it.
  * @param {import('./sfx.js').Kit} kit
  * @param {string} zone
- * @returns {Bed}
+ * @returns {Bed|null}
  */
 export function createBed(kit, zone) {
+  if (!kit.room(BED_NODES[zone] || 0)) return null;
   const parts = voiceParts(kit);
   const fade = parts.gain(0, kit.buses.ambience);
   const between = ([low, high]) => low + kit.random() * (high - low);
@@ -90,10 +99,13 @@ export function createBed(kit, zone) {
     free() {
       for (const source of sources) source.stop(now());
       fade.disconnect();
+      kit.release(held);
     },
   };
   const build = { spring: breeze, summer: waves, autumn: leaves, winter: wind, evening: crickets }[zone];
   if (build) build();
+  const held = parts.made; // no more than BED_NODES[zone], which there was room for
+  kit.hold(held);
   return bed;
 
   /** The shared noise, from now on, into `into`. */

@@ -5,11 +5,9 @@ import assert from 'node:assert/strict';
 import { CARD_RISES_AFTER, createCues, createCueSounds } from '../../site/src/audio/cueSounds.js';
 import { createKit, createSfx } from '../../site/src/audio/sfx.js';
 import { createMixer } from '../../site/src/audio/mixer.js';
-import { createFinale, FIREWORKS } from '../../site/src/finale/finale.js';
-import { createTrackPath } from '../../site/src/world/trackPath.js';
-import { createTrainExterior } from '../../site/src/train/exterior.js';
-import * as THREE from '../../site/src/three.js';
+import { FIREWORK_TIMING as FIREWORKS } from '../../site/src/finale/fireworkTiming.js';
 import { stubContext } from './audioStub.js';
+import { finaleOnStage } from './finaleStage.js';
 
 /** A stand-in for the sound effects: it remembers each one-shot asked for, by name, on a frame count. */
 function fakeSfx() {
@@ -23,30 +21,18 @@ function fakeSfx() {
   };
 }
 
-const LOOKS = { her: { skin: '#f2c9a5', hair: '#3b2416', outfit: '#e98aa6' }, you: { skin: '#e8b994', hair: '#2a1a10', outfit: '#5b7fc4' } };
-
 function finale(tier) {
-  const path = createTrackPath(1030, 7, { straightRanges: [[0, 120], [870, 1100]] });
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(80, 390 / 844, 0.1, 400);
-  const rig = new THREE.Object3D();
-  rig.add(camera);
-  scene.add(rig);
-  const f = createFinale({
-    stage: { scene, camera, rig }, path, layout: { finaleDistance: 960 }, content: { characters: LOOKS },
-    cabin: { setVisible() {} }, exterior: createTrainExterior(),
-  });
+  const { scene, finale: f } = finaleOnStage();
   f.setQuality(tier);
   return { finale: f, ages: scene.getObjectByName('finale-fireworks').material.uniforms.uAge.value };
 }
 
 /** The frames in which each burst's sparks came out, as the finale draws them. */
-function popsAndBlooms(tier, seconds, from = 0) {
+function popsAndBlooms(tier, seconds) {
   const sfx = fakeSfx();
   const cues = createCues(sfx);
   const { finale: f, ages } = finale(tier);
   f.begin();
-  if (from) f.skipTo(from);
   const before = ages.slice();
   const blooms = [];
   for (let i = 0; i < seconds * 60; i++) {
@@ -115,6 +101,19 @@ test('the cue voices on a real engine: the rustle waits for the card, the sparkl
   assert.ok(sfx.kit.live <= 40, `${sfx.kit.live} nodes`);
   // None starts an oscillator below 20 Hz: the e2e tests count those as the whistle's vibrato.
   for (const s of audio.starts.filter((x) => x.type === 'osc')) assert.ok(s.node.frequency.value >= 20);
+});
+
+test('each cue counts in the budget exactly the nodes it makes, until it ends', () => {
+  for (const name of ['rustle', 'sparkle', 'firework']) {
+    const audio = stubContext();
+    const kit = createKit(createMixer(audio.ctx));
+    const voices = createCueSounds(kit);
+    const before = audio.nodes;
+    assert.equal(voices[name](0.1, 1), true, name);
+    assert.equal(kit.live, audio.nodes - before, name);
+    audio.advance(60);
+    assert.equal(kit.live, 0, `${name} lets them go`);
+  }
 });
 
 test('a cue at no level plays nothing', () => {

@@ -51,7 +51,8 @@ Levels below are targets for the mixed output measured offline (OfflineAudioCont
 - Whistle: a breathy two-to-three-note chord (sines/triangles with a little noise and vibrato), soft attack.
   Peak about −20 dBFS. Toots about 0.3 s and 0.45 s with a short gap.
 - Chug: band-passed noise bursts with a quick decay, rate tied to speed (about 1.3 chugs/s at cruise, 6.5 m/s),
-  level following speed. About −37 dBFS RMS while cruising (first −34; lowered 3 dB so the whistle stands out).
+  level following speed. About −40 dBFS RMS while cruising (first −34; lowered about 6 dB so the whistle's
+  loudest moment is clearly above the chug's).
 - Clickety-clack: two short clicks per rail joint (bogies), every 12 m of track at the ride's distance; quieter
   than the chug.
 - Steam hiss/sigh: high-passed noise with a slow decay (sigh about 1.5 s).
@@ -68,6 +69,8 @@ Levels below are targets for the mixed output measured offline (OfflineAudioCont
 | Evening town | Crickets; a distant clock-tower chime (a few soft bell strikes) once as the train enters the evening zone |
 
 - Ambience bed about −36 dBFS RMS; occasional events (birds, gull, bells, chime, burner) peak about −24 dBFS.
+  After the first measurements: the crickets about 6 dB under the other beds (high tones carry), and the sleigh
+  bells, the fireworks and the sparkle about 6 dB over the other events (they must be clearly heard).
 - Events are random but never crowded (minimum gaps), and stop while stopped at a card only if the author's
   video/Live Photo sound is on (ducked like everything else).
 

@@ -92,6 +92,22 @@ test('a song file is used when present, with the train\'s sounds beside it', asy
   await expect.poll(() => states(page)).toEqual(['running']);
 });
 
+test('her own song plays on through the winter hills: the carol never comes in', async ({ page }) => {
+  await useFixture(page, { music: 'music/tone.wav' });
+  await page.route('**/music/tone.wav', (r) => r.fulfill({ contentType: 'audio/wav', body: wav() }));
+  await page.goto('index.html?speed=50');
+  await page.getByRole('button', { name: 'Begin the ride' }).click();
+  await expect.poll(async () => (await appState(page)).musicSource).toBe('file');
+  for (const title of ['First coffee', 'Rainy walk', 'Beach day', 'Sunset pier', 'Pumpkin patch', 'Movie night']) {
+    await expect(page.locator('#stop-card')).toContainText(title);
+    await page.getByRole('button', { name: 'Continue' }).click();
+  }
+  await expect(page.locator('#stop-card')).toContainText('First snow');
+  await expect.poll(async () => (await appState(page)).ambience).toContain('winter'); // the sound is on, in winter
+  const s = await appState(page);
+  expect([s.musicSource, s.music, s.carol]).toEqual(['file', 'playing', 0]);
+});
+
 test('backgrounding suspends and restores audio', async ({ page }) => {
   await trackAudio(page);
   await useFixture(page);

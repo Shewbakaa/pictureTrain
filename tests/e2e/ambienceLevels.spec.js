@@ -1,8 +1,9 @@
 // The ambience's, the carol's and the cues' levels, rendered offline (OfflineAudioContext, stereo) through the real
 // master chain (audio/mixer.js) with the real voices, against the targets in the sound design
-// (docs/superpowers/specs/2026-10-26-sound-effects-design.md): each zone's bed about −36 dBFS RMS, the passing
-// sounds peaking about −24 dBFS, everything under the music, the carol faint, and the mix never clipping. What it
-// measured goes with the test's results (and to the console with AUDIO_LEVELS=1).
+// (docs/superpowers/specs/2026-10-26-sound-effects-design.md): each zone's bed about −36 dBFS RMS (the crickets
+// about 6 dB under), the passing sounds peaking about −24 dBFS (the celebratory fireworks, sparkle and sleigh bells
+// about 6 dB over), everything under the music, the carol faint, and the mix never clipping. What it measured goes
+// with the test's results (and to the console with AUDIO_LEVELS=1).
 import { test, expect } from '@playwright/test';
 
 test('the ambience, the carol and the cues sit at their targets, under the music, and the mix never clips', async ({ page, browserName }) => {
@@ -36,7 +37,8 @@ test('the ambience, the carol and the cues sit at their targets, under the music
       const ctx = new OfflineAudioContext(2, Math.round(seconds * RATE), RATE);
       const mixer = createMixer(ctx);
       mixer.fade(true, 0.01);
-      const tick = build(ctx, mixer, createKit(mixer));
+      // Every sound is booked before any plays, so none frees its nodes in time: no budget here.
+      const tick = build(ctx, mixer, createKit(mixer, { budget: Infinity }));
       if (tick) {
         tick(0);
         for (let t = STEP; t < seconds - STEP; t += STEP) {
@@ -97,7 +99,7 @@ test('the ambience, the carol and the cues sit at their targets, under the music
     const events = {
       'bird-spring': [16, 1.6, (v, at) => v.bird('spring', at, 1)],
       'bird-autumn': [12, 2.2, (v, at) => v.bird('autumn', at, 1)],
-      gull: [5, 2.5, (v, at) => v.gull(at, 1)],
+      gull: [5, 2.5, (v, at) => v.gull(at, 1, -0.7)], // the sea on her left, looking ahead
       bee: [4, 3, (v, at) => v.bee(at, 1)],
       burner: [4, 3.5, (v, at) => v.burner(at, 1)],
       sleigh: [4, 3.5, (v, at) => v.sleigh(at, 1)],
@@ -206,13 +208,18 @@ test('the ambience, the carol and the cues sit at their targets, under the music
   if (process.env.AUDIO_LEVELS) console.log('[ambience levels]', levels);
 
   const music = m.music;
-  // Each zone's bed: about −36 dBFS RMS at full weight.
-  for (const zone of ['spring', 'summer', 'autumn', 'winter', 'evening']) {
+  // Each zone's bed: about −36 dBFS RMS at full weight; the crickets about 6 dB under, as high tones carry.
+  for (const zone of ['spring', 'summer', 'autumn', 'winter']) {
     expect(Math.abs(m[`bed-${zone}`].rmsDb - -36), `bed-${zone}`).toBeLessThanOrEqual(2.5);
   }
-  // The passing sounds peak about −24 dBFS (the bee and the burner softer, far off), never above −22.
-  for (const name of ['bird-spring', 'gull', 'sleigh', 'chime', 'firework', 'sparkle']) {
+  expect(Math.abs(m['bed-evening'].rmsDb - -42)).toBeLessThanOrEqual(2.5);
+  // The passing sounds peak about −24 dBFS (the bee and the burner softer, far off), never above −22...
+  for (const name of ['bird-spring', 'gull', 'chime']) {
     expect(Math.abs(m[name].peakDb - -24), name).toBeLessThanOrEqual(2);
+  }
+  // ...and the celebration about 6 dB over that, to be clearly heard under the music.
+  for (const name of ['sleigh', 'firework', 'sparkle']) {
+    expect(Math.abs(m[name].peakDb - -18), name).toBeLessThanOrEqual(2);
   }
   for (const name of ['bird-autumn', 'bee', 'burner']) {
     expect(m[name].peakDb, name).toBeLessThanOrEqual(-24);

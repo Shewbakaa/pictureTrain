@@ -3,9 +3,9 @@
 // off, the brakes, a long sigh at a stop). sfx.js decides when they play, with the timing in sfxTiming.js.
 //
 // The levels are set for the mix after the master chain (mixer.js), and measured there offline
-// (tests/e2e/audioLevels.spec.js): the whistle peaks about −20 dBFS, the chug comes to about −37 dBFS RMS while
+// (tests/e2e/audioLevels.spec.js): the whistle peaks about −20 dBFS, the chug comes to about −40 dBFS RMS while
 // cruising with the clicks well below it, and the steam stays softer than the whistle. Each one's loudest moment
-// stays under the music's.
+// stays under the music's, and the whistle's is above the chug's.
 
 import { midiToFreq } from './compose.js';
 import { WHISTLE } from './sfxTiming.js';
@@ -22,10 +22,10 @@ const WHISTLE_SOUND = {
 
 /**
  * A chug: a soft "chuff" of band-passed noise, a quick ATTACK and a DECAY (to −60 dB). Every other chug is a little
- * softer (ACCENT) and lower, the two cylinders taking turns. LEVEL is its peak gain at full speed: 3 dB under the
- * 0.25 it first had, so the "choo-choo" stands out over the chugs.
+ * softer (ACCENT) and lower, the two cylinders taking turns. LEVEL is its peak gain at full speed: about 6 dB under
+ * the 0.25 it first had, so the "choo-choo" stands out over the chugs even at their loudest moments.
  */
-const CHUG = { LEVEL: 0.177, ATTACK: 0.03, DECAY: 0.7, FREQ: 520, LOW_FREQ: 440, Q: 1.1, ACCENT: 0.75 };
+const CHUG = { LEVEL: 0.122, ATTACK: 0.03, DECAY: 0.7, FREQ: 520, LOW_FREQ: 440, Q: 1.1, ACCENT: 0.75 };
 
 /** A rail-joint click: a short tick of band-passed noise. LEVEL is its peak gain at full speed. */
 const CLICK = { LEVEL: 0.16, ATTACK: 0.002, DECAY: 0.06, FREQ: 1800, Q: 2.5 };
