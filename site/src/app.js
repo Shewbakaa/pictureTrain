@@ -30,6 +30,7 @@ import { createTrackPath, TRACK } from './world/trackPath.js';
 import { envAt } from './world/environment.js';
 import { createSky } from './world/sky.js';
 import { createTerrain } from './world/terrain.js';
+import { followWave, SEA_MATERIAL, updateSea } from './world/seaWaves.js';
 import { createTrackMesh } from './world/trackMesh.js';
 import { createDressing } from './world/dressing.js';
 import { createStation, START_STATION_DISTANCE } from './world/stations.js';
@@ -254,6 +255,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     renderer.shadowMap.enabled = tier.shadows;
     sun.castShadow = tier.shadows;
     for (const material of Object.values(MATERIALS)) material.needsUpdate = true;
+    SEA_MATERIAL.needsUpdate = true;
     for (const fn of onDensity) fn(tier.density);
     for (const fn of onParticles) fn(tier.particles);
     finale.setQuality(governor.tier);
@@ -288,6 +290,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   let statsTime = 0;
   let statsFrames = 0;
   let elapsed = 0; // seconds of frames drawn, for things that sway and bob
+  let seaWave = 0; // the waves come in at the beach (seaWaves.js followWave), in time with the ones she hears
 
   // Per-frame scratch.
   const side = new Vector3();
@@ -408,6 +411,10 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     particles.update(dt, env, eye);
     dressing.update(dt, elapsed);
     cabin.update(dt, ride.speed, elapsed);
+    if (terrain.water) {
+      seaWave = followWave(seaWave, dt, sfx ? ambience.seaWave() : NaN);
+      updateSea(elapsed, seaWave, d);
+    }
     if (sfx) {
       sfx.update(ride.speed, d, dt, toStop(d));
       ambience.update(env, look.yaw, dt, d);

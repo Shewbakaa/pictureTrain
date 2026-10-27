@@ -63,10 +63,15 @@ const CRICKETS = {
 const LEAD = 0.02;
 
 /**
- * @typedef {{ fade: GainNode, tick: (until: number) => void, setPan: (pan: number) => void, free: () => void }} Bed
+ * @typedef {{
+ *   fade: GainNode, tick: (until: number) => void, setPan: (pan: number) => void, waveAt: (time: number) => number,
+ *   free: () => void,
+ * }} Bed
  *   `fade` is the bed's level on the ambience bus (0 to 1: ambience.js sets it from the zone's weight); `tick`
- *   books its sound up to context time `until`; `setPan` places it (only the waves move); `free` stops it for good
- *   and gives its nodes back to the kit's budget.
+ *   books its sound up to context time `until`; `setPan` places it (only the waves move); `waveAt` is how many
+ *   waves have come by context time `time`, its fraction how far into the one then (NaN for a bed of no waves, or a
+ *   time no wave is booked for: the sea's waves keep time with it, seaWaves.js); `free` stops it for good and gives
+ *   its nodes back to the kit's budget.
  */
 
 /** The zones that have a bed. */
@@ -96,6 +101,7 @@ export function createBed(kit, zone) {
     fade,
     tick() {},
     setPan() {},
+    waveAt: () => NaN,
     free() {
       for (const source of sources) source.stop(now());
       fade.disconnect();
@@ -150,6 +156,14 @@ export function createBed(kit, zone) {
     noiseInto(low);
     let next = now() + LEAD;
     let lastPan = NaN;
+    const booked = []; // the last few waves booked: { count, start, end }, oldest first
+    let count = 0;
+    bed.waveAt = (time) => {
+      for (const wave of booked) {
+        if (time >= wave.start && time < wave.end) return wave.count + (time - wave.start) / (wave.end - wave.start);
+      }
+      return NaN;
+    };
     bed.tick = (until) => {
       if (next >= until) return;
       const start = Math.max(next, now() + LEAD);
@@ -166,6 +180,8 @@ export function createBed(kit, zone) {
       low.frequency.exponentialRampToValueAtTime(W.CUT.build, built);
       low.frequency.exponentialRampToValueAtTime(between(W.CUT.crest), broken);
       low.frequency.exponentialRampToValueAtTime(W.CUT.trough, end);
+      booked.push({ count: count++, start, end });
+      if (booked.length > 3) booked.shift();
       next = end;
     };
     if (pan !== fade) {

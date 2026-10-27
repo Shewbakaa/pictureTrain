@@ -167,6 +167,23 @@ test('the waves come from the sea on her left, and move round as she turns her h
   assert.ok(Math.abs(pan.pan.target) < 1e-9, 'facing the sea');
 });
 
+test('the waves she hears are counted as they come, so the sea she sees can keep time with them', () => {
+  const t = setup();
+  assert.ok(Number.isNaN(t.ambience.seaWave()), 'nothing heard before the Begin tap');
+  t.on();
+  t.ride(1, middleOf('spring'));
+  assert.ok(Number.isNaN(t.ambience.seaWave()), 'no waves in the meadow');
+  t.ride(0.5, middleOf('summer'));
+  const first = t.ambience.seaWave();
+  assert.ok(first >= 0 && first < 1, `into the first wave: ${first}`);
+  t.ride(25, middleOf('summer'));
+  const later = t.ambience.seaWave();
+  // Each wave lasts 8 to 10 s, so 25 s on she is 2.5 to 3.1 waves further, and the count only ever grows.
+  assert.ok(later - first > 2.4 && later - first < 3.2, `${first} then ${later}`);
+  t.off();
+  assert.ok(Number.isNaN(t.ambience.seaWave()), 'none heard while the sound is off');
+});
+
 test('the gulls call from over the sea, wherever she looks, like the waves', () => {
   const gullPans = (yaw) => {
     const t = setup();

@@ -9,17 +9,19 @@
 // zone blend.
 //
 // The meshes are triangle soup: each triangle has its own vertices and its own face normal (the faceted look, no
-// `flatShading` needed). The ground is the zone's near colour by the track, easing to its far colour out on the
-// hills; each corner takes the colour where it stands, so a zone blend is a smooth gradient, and each triangle is
-// nudged a little as a whole, so the facets show and the ground is never one flat colour.
+// `flatShading` needed; the sea's waves move it, so its material shades it from the moved faces, seaWaves.js). The
+// ground is the zone's near colour by the track, easing to its far colour out on the hills; each corner takes the
+// colour where it stands, so a zone blend is a smooth gradient, and each triangle is nudged a little as a whole, so
+// the facets show and the ground is never one flat colour.
 //
 // `terrainHeight` is pure and DOM-free, so the Node unit tests (and the prop placement) can call it.
 
-import { Color, Mesh, Vector3 } from '../three.js';
+import { BufferAttribute, Color, Mesh, Vector3 } from '../three.js';
 import { clamp, lerp, smoothstep } from '../util/math.js';
 import { createRng } from '../util/rng.js';
 import { jitterColor, triangleSoup } from '../util/geo.js';
 import { MATERIALS } from '../render/materials.js';
+import { SEA_MATERIAL } from './seaWaves.js';
 import { envAt } from './environment.js';
 import { LAYOUT } from './layout.js';
 import { ZONES } from './zones.js';
@@ -111,9 +113,11 @@ const GROUND_JITTER = 0.03;
 
 /**
  * Where the sea is cut across the track (m left of the centre line). It starts under the beach and reaches out
- * to where the fog has long hidden it.
+ * to where the fog has long hidden it. Every cut of the ground (COLUMNS) is one, so the sea knows the ground's
+ * height under it exactly there, and there are more where the waves come in and break, so they move smoothly.
  */
-const SEA_COLUMNS = [6, 10, 15, 22, 32, 45, 62, 85, 110, 140];
+const SEA_COLUMNS = [6, 8.5, 11.5, 13.25, 15, 16.5, 18, 19.5, 21, 23, 25, 27.5, 29.5, 31.5, 35, 39, 43, 47.5, 57,
+  67.5, 78.5, 90, 110, 140];
 /** The sea is SEA_SHALLOW (sRGB) up to the waterline, SEA_SHALLOW_UNTIL m out, deepening to SEA_DEEP by SEA_DEEP_FROM. */
 const SEA_SHALLOW = '#8fdbd6';
 const SEA_DEEP = '#4aa9cf';
@@ -128,38 +132,42 @@ const SEA_RUN_PAST = 80;
 
 // Scratch objects for building.
 const _point = new Vector3();
+const _place = new Vector3();
 const _colour = new Color();
 const _mean = new Color();
 
 /**
  * Points along the track: rows on the row lattice (ROW_PHASE) from the last row at or before `from` to the first
  * at or after `to`, one point per offset in each row. `surfaceAt(d, offset, colour)` returns the height of the
- * point and sets `colour` to its colour.
+ * point and sets `colour` to its colour; `placeAt(d, offset, place)`, if given, sets three more numbers each point
+ * carries (`places`).
  */
-function grid(path, from, to, offsets, surfaceAt) {
+function grid(path, from, to, offsets, surfaceAt, placeAt) {
   const { ROW_STEP } = TERRAIN;
   const first = Math.floor((from - ROW_PHASE) / ROW_STEP) * ROW_STEP + ROW_PHASE;
   const rows = Math.max(1, Math.ceil((to - first) / ROW_STEP));
   const points = new Float32Array((rows + 1) * offsets.length * 3);
   const colours = new Float32Array(points.length);
+  const places = placeAt ? new Float32Array(points.length) : null;
   for (let r = 0; r <= rows; r++) {
     const d = first + r * ROW_STEP;
     for (let c = 0; c < offsets.length; c++) {
       const at = (r * offsets.length + c) * 3;
       path.frameAt(d, offsets[c], surfaceAt(d, offsets[c], _colour), _point).toArray(points, at);
       _colour.toArray(colours, at);
+      if (places) placeAt(d, offsets[c], _place).toArray(places, at);
     }
   }
-  return { rows: rows + 1, columns: offsets.length, points, colours };
+  return { rows: rows + 1, columns: offsets.length, points, colours, places };
 }
 
 /**
  * Two triangles for every cell of a grid, the diagonal alternating like a chequerboard so the facets don't all
- * lean one way, appended to `out` (its `positions` and `colors`). Each corner keeps its point's colour, so colours
- * change smoothly (a zone blend never shows a step), and each triangle is nudged as one (`jitter`, geo.js
- * jitterColor), so the facets show.
+ * lean one way, appended to `out` (its `positions` and `colors`, and its `places` if the grid has them). Each
+ * corner keeps its point's colour, so colours change smoothly (a zone blend never shows a step), and each triangle
+ * is nudged as one (`jitter`, geo.js jitterColor), so the facets show.
  */
-function addTriangles({ rows, columns, points, colours }, jitter, rng, out) {
+function addTriangles({ rows, columns, points, colours, places }, jitter, rng, out) {
   const corner = (r, c) => (r * columns + c) * 3;
   const addTriangle = (a, b, c) => {
     _mean.setRGB((colours[a] + colours[b] + colours[c]) / 3, (colours[a + 1] + colours[b + 1] + colours[c + 1]) / 3,
@@ -169,6 +177,7 @@ function addTriangles({ rows, columns, points, colours }, jitter, rng, out) {
     for (const at of [a, b, c]) {
       out.positions.push(points[at], points[at + 1], points[at + 2]);
       out.colors.push(colours[at] * scale[0], colours[at + 1] * scale[1], colours[at + 2] * scale[2]);
+      if (places) out.places.push(places[at], places[at + 1], places[at + 2]);
     }
   };
   for (let r = 0; r + 1 < rows; r++) {
@@ -185,6 +194,19 @@ function addTriangles({ rows, columns, points, colours }, jitter, rng, out) {
       }
     }
   }
+}
+
+/**
+ * The ground mesh's height `out` metres left of the centre line (out >= COLUMNS[1]): terrainHeight at its cuts,
+ * straight between them, as its triangles are; at its outer edge's height beyond it.
+ */
+function groundMeshHeight(d, out, water) {
+  const last = COLUMNS.length - 1;
+  if (out >= COLUMNS[last]) return terrainHeight(d, -COLUMNS[last], { water });
+  const i = COLUMNS.findIndex((c) => c >= out);
+  const near = COLUMNS[i - 1];
+  const far = COLUMNS[i];
+  return lerp(terrainHeight(d, -near, { water }), terrainHeight(d, -far, { water }), (out - near) / (far - near));
 }
 
 /**
@@ -227,15 +249,18 @@ export function createTerrain(path, layout, { seed = 1 } = {}) {
   const seaOffsets = SEA_COLUMNS.slice().reverse().map((o) => -o);
   const shallow = new Color(SEA_SHALLOW);
   const deep = new Color(SEA_DEEP);
-  const sea = { positions: [], colors: [] };
+  const sea = { positions: [], colors: [], places: [] };
   for (const [start, end] of seaRanges) {
     const stretch = grid(path, Math.max(from, start - SEA_RUN_PAST), Math.min(to, end + SEA_RUN_PAST), seaOffsets, (d, offset, colour) => {
       colour.lerpColors(shallow, deep, smoothstep(SEA_SHALLOW_UNTIL, SEA_DEEP_FROM, -offset));
       return TERRAIN.WATER_LEVEL;
-    });
+    }, (d, offset, place) => place.set(d, -offset, TERRAIN.WATER_LEVEL - groundMeshHeight(d, -offset, envFor(d).water)));
     addTriangles(stretch, SEA_JITTER, rng, sea);
   }
-  const water = new Mesh(triangleSoup(sea.positions, sea.colors), MATERIALS.solid);
+  const seaGeometry = triangleSoup(sea.positions, sea.colors);
+  // Where each corner is, for the waves (seaWaves.js): along the track, out from it, and how deep the still water is.
+  seaGeometry.setAttribute('seaPlace', new BufferAttribute(new Float32Array(sea.places), 3));
+  const water = new Mesh(seaGeometry, SEA_MATERIAL);
   water.name = 'water';
   water.receiveShadow = true;
   return { mesh, water };

@@ -5,6 +5,7 @@ import { createTrackPath, TRACK } from '../../site/src/world/trackPath.js';
 import { buildLayout, EYE_HEIGHT } from '../../site/src/world/layout.js';
 import { SCATTER } from '../../site/src/world/scatter.js';
 import { MATERIALS } from '../../site/src/render/materials.js';
+import { SEA_MATERIAL } from '../../site/src/world/seaWaves.js';
 import { normalizeContent } from '../../site/src/content/normalize.js';
 import { Vector3 } from '../../site/src/three.js';
 import fixture from '../fixtures/content.fixture.js';
@@ -57,18 +58,41 @@ test('beach props stand on dry sand, and the sea begins just beyond them', () =>
   }
 });
 
-test('the ground and the sea are faceted triangle soup in the shared material', () => {
+test('the ground and the sea are faceted triangle soup, the ground in the shared material and the sea in its own', () => {
   for (const mesh of [terrain.mesh, terrain.water]) {
     const { position, normal, color } = mesh.geometry.attributes;
     assert.equal(mesh.geometry.index, null);
-    assert.equal(mesh.material, MATERIALS.solid);
     assert.equal(normal.count, position.count);
     assert.equal(color.count, position.count);
     for (let i = 0; i < normal.count; i++) assert.ok(normal.getY(i) > 0.5, 'faces up, gently sloped');
   }
+  assert.equal(terrain.mesh.material, MATERIALS.solid);
+  assert.equal(terrain.water.material, SEA_MATERIAL); // the waves move it in its shader
   for (let i = 0; i < terrain.water.geometry.attributes.position.count; i++) {
     assert.ok(Math.abs(terrain.water.geometry.attributes.position.getY(i) - TERRAIN.WATER_LEVEL) < 1e-6);
   }
+});
+
+test('each corner of the sea knows where it is and how deep the still water there is', () => {
+  // On the straight start the track runs down -Z with +X on its right, so a corner's distance is -z and how far
+  // out it is, -x. The beach is in the middle of the summer zone, where there is all sea.
+  const summer = layout.zones.find((z) => z.id === 'summer');
+  const { position: p, seaPlace } = terrain.water.geometry.attributes;
+  assert.equal(seaPlace.count, p.count);
+  const mid = (summer.start + summer.end) / 2;
+  let checked = 0;
+  for (let i = 0; i < p.count; i++) {
+    const d = seaPlace.getX(i), out = seaPlace.getY(i), depth = seaPlace.getZ(i);
+    assert.ok(out >= 6 - 1e-4, 'out to sea, on the left');
+    if (Math.abs(d - mid) > 30) continue;
+    assert.ok(Math.abs(path.frameAt(d, -out, TERRAIN.WATER_LEVEL).distanceTo(new Vector3().fromBufferAttribute(p, i))) < 1e-3);
+    // Exactly the ground's height at its cuts; straight between them, like the ground's triangles.
+    if ([6, 15, 19.5, 25, 39].includes(out)) assert.ok(Math.abs(depth - (TERRAIN.WATER_LEVEL - terrainHeight(d, -out, { water: 1 }))) < 1e-4);
+    if (out <= 11.5) assert.ok(depth < -0.25, 'dry sand by the track');
+    if (out >= 19.5) assert.ok(depth > 0.3, 'water past the waterline');
+    checked++;
+  }
+  assert.ok(checked > 100, `${checked} corners checked`);
 });
 
 test('the ground follows terrainHeight, with nothing under the track bed', () => {
