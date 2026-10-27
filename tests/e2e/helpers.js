@@ -39,14 +39,15 @@ export async function waitForPhase(page, phase, timeout = 30000) {
 
 /**
  * Before page.goto: keeps the page's AudioContexts and notes when each noise-based sound (an AudioBufferSourceNode:
- * the train's chugs, clicks, steam and whistle breath; the built-in tune uses oscillators only) starts. Read it with
- * audioReport(page).
+ * the train's chugs, clicks, steam and whistle breath; the built-in tune uses oscillators only) starts, and when
+ * each whistle does (its vibrato is the only oscillator below 20 Hz). Read it with audioReport(page).
  */
 export async function trackAudio(page) {
   await page.addInitScript(() => {
     const contexts = [];
     const starts = [];
-    window.__audio = { contexts, starts };
+    const whistles = [];
+    window.__audio = { contexts, starts, whistles };
     const Base = window.AudioContext || window.webkitAudioContext;
     if (!Base) return;
     class Tracked extends Base {
@@ -62,21 +63,26 @@ export async function trackAudio(page) {
       starts.push(performance.now());
       return start.apply(this, args);
     };
+    const oscillate = OscillatorNode.prototype.start;
+    OscillatorNode.prototype.start = function (...args) {
+      if (this.frequency.value < 20) whistles.push(performance.now());
+      return oscillate.apply(this, args);
+    };
   });
 }
 
 /**
- * What trackAudio saw: `states`, each AudioContext's state; `sounds`, how many noise-based sounds have started; and
- * `busiest`, the most that started within any one second.
+ * What trackAudio saw: `states`, each AudioContext's state; `sounds`, how many noise-based sounds have started;
+ * `busiest`, the most that started within any one second; and `whistles`, how many whistles have blown.
  */
 export function audioReport(page) {
   return page.evaluate(() => {
-    const { contexts, starts } = window.__audio;
+    const { contexts, starts, whistles } = window.__audio;
     let busiest = 0;
     for (let i = 0, j = 0; i < starts.length; i++) {
       while (starts[i] - starts[j] > 1000) j++;
       busiest = Math.max(busiest, i - j + 1);
     }
-    return { states: contexts.map((c) => c.state), sounds: starts.length, busiest };
+    return { states: contexts.map((c) => c.state), sounds: starts.length, busiest, whistles: whistles.length };
   });
 }

@@ -12,6 +12,8 @@ const wav = () => {
 const begin = async (page) => { await page.goto('index.html'); await page.getByRole('button', { name: 'Begin the ride' }).click(); };
 
 const states = async (page) => (await audioReport(page)).states;
+/** The Sound button: a toggle named "Sound", pressed while the sound is on. */
+const soundButton = (page, pressed) => page.getByRole('button', { name: 'Sound', exact: true, pressed });
 
 test('generated music plays after Begin, and the Sound button turns all sound off and on', async ({ page }) => {
   await trackAudio(page);
@@ -21,16 +23,16 @@ test('generated music plays after Begin, and the Sound button turns all sound of
   expect((await appState(page)).musicSource).toBe('generated');
   // One AudioContext for the music and the train's sounds.
   await expect.poll(() => states(page)).toEqual(['running']);
-  await expect(page.getByRole('button', { name: 'Sound on' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(soundButton(page, true)).toBeVisible();
 
-  await page.getByRole('button', { name: 'Sound on' }).click();
+  await soundButton(page, true).click();
   await expect.poll(async () => (await appState(page)).music).toBe('off');
-  await expect(page.getByRole('button', { name: 'Sound off' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(soundButton(page, false)).toBeVisible();
   await expect.poll(() => states(page)).toEqual(['suspended']);
 
-  await page.getByRole('button', { name: 'Sound off' }).click();
+  await soundButton(page, false).click();
   await expect.poll(async () => (await appState(page)).music).toBe('playing');
-  await expect(page.getByRole('button', { name: 'Sound on' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(soundButton(page, true)).toBeVisible();
   await expect.poll(() => states(page)).toEqual(['running']);
 });
 
@@ -38,16 +40,17 @@ test('the train whistles as it sets off and chugs along, and is quiet while the 
   await trackAudio(page);
   await useFixture(page);
   await begin(page);
+  await expect.poll(async () => (await audioReport(page)).whistles).toBe(1);
   await expect.poll(async () => (await audioReport(page)).sounds).toBeGreaterThanOrEqual(2); // the whistle, the steam
   await expect.poll(async () => (await audioReport(page)).sounds, { timeout: 10_000 }).toBeGreaterThanOrEqual(5); // chugs
 
-  await page.getByRole('button', { name: 'Sound on' }).click();
+  await soundButton(page, true).click();
   await expect.poll(() => states(page)).toEqual(['suspended']);
   const quiet = (await audioReport(page)).sounds;
   await page.waitForTimeout(2500); // the train rides on: three chugs and a joint's clicks, with the sound on
   expect((await audioReport(page)).sounds).toBe(quiet);
 
-  await page.getByRole('button', { name: 'Sound off' }).click();
+  await soundButton(page, false).click();
   await expect.poll(async () => (await audioReport(page)).sounds, { timeout: 5000 }).toBeGreaterThan(quiet);
 });
 

@@ -4,7 +4,7 @@
 // plays on; the pill and the pause button stay away, with no stop left to count down to and nothing to pause.
 //
 // The Sound button (#music-toggle) turns all the ride's sound on and off together: the music, the train and the
-// ambience. Its label says which it is, "Sound on" or "Sound off", and it reads as pressed while the sound is on.
+// ambience. It is a toggle button named "Sound", pressed while the sound is on, and shows a speaker.
 
 import { dismiss, reveal, setChildren, svgEl } from './dom.js';
 
@@ -19,16 +19,18 @@ const playIcon = () => icon([
   svgEl('path', { d: 'M8.5 5.9v12.2c0 .9 1 1.4 1.7.9l9.3-6.1a1.1 1.1 0 0 0 0-1.8l-9.3-6.1c-.7-.5-1.7 0-1.7.9z' }),
 ]);
 
-/** Two beamed notes; struck through when the sound is off. */
-const musicIcon = (on) => icon([
-  svgEl('g', { opacity: on ? 1 : 0.55 }, [
-    svgEl('circle', { cx: 6.8, cy: 17.2, r: 2.6 }),
-    svgEl('circle', { cx: 16.6, cy: 15.2, r: 2.6 }),
-    svgEl('path', { d: 'M8.4 17.2V7.4l9.8-2.6v10.4', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linejoin': 'round' }),
-    svgEl('path', { d: 'M8.4 7.4l9.8-2.6v3.1L8.4 10.5z' }),
-  ]),
-  on ? null : svgEl('path', { d: 'M4.5 4.5l15 15', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.2, 'stroke-linecap': 'round' }),
-]);
+/** A speaker: sounding (two waves) when the sound is on, struck through when it is off. */
+const soundIcon = (on) => {
+  const line = (d) => svgEl('path', { d, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round' });
+  return icon([
+    svgEl('g', { opacity: on ? 1 : 0.55 }, [
+      svgEl('path', { d: 'M3.5 9.6c0-.6.4-1 1-1h3l4.6-3.8c.6-.5 1.6-.1 1.6.8v12.8c0 .9-1 1.3-1.6.8l-4.6-3.8h-3c-.6 0-1-.4-1-1z' }),
+      on ? line('M16.4 9.2a4 4 0 0 1 0 5.6') : null,
+      on ? line('M18.9 6.6a7.6 7.6 0 0 1 0 10.8') : null,
+    ]),
+    on ? null : svgEl('path', { d: 'M4.5 4.5l15 15', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.2, 'stroke-linecap': 'round' }),
+  ]);
+};
 
 /**
  * @typedef {{
@@ -51,6 +53,7 @@ export function initControls({ onPauseToggle, onMusicToggle }) {
   const music = document.getElementById('music-toggle');
 
   pill.setAttribute('role', 'status'); // read out as it changes: "Next stop · 3 of 10"
+  music.setAttribute('aria-label', 'Sound'); // a toggle: its name stays, aria-pressed says whether it is on
   pause.addEventListener('click', () => onPauseToggle());
   music.addEventListener('click', () => onMusicToggle());
 
@@ -67,8 +70,7 @@ export function initControls({ onPauseToggle, onMusicToggle }) {
       const on = state === 'playing';
       if (on === shownMusic) return;
       shownMusic = on;
-      setChildren(music, musicIcon(on));
-      music.setAttribute('aria-label', on ? 'Sound on' : 'Sound off');
+      setChildren(music, soundIcon(on));
       music.setAttribute('aria-pressed', String(on));
     },
     setProgress(text) {

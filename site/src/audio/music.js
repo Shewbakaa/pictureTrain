@@ -19,7 +19,7 @@
 // button.
 
 import { composeLoop, midiToFreq } from './compose.js';
-import { createMixer } from './mixer.js';
+import { createFader, createMixer } from './mixer.js';
 
 /**
  * How long the built-in tune takes to swell in the first time it plays (s). Everything else comes up at once
@@ -57,8 +57,11 @@ const FLAT_Q = -3;
 const TICK_MS = 50;
 const LOOKAHEAD = 0.25;
 
-/** Her song's volume. iPhones ignore it: there the song plays at the phone's own volume. */
-const FILE_VOLUME = 0.55;
+/**
+ * Her song's volume: 0.37, a third down on the 0.55 it had before the train's sounds joined it, like the built-in
+ * tune. iPhones ignore it: there the song plays at the phone's own volume.
+ */
+const FILE_VOLUME = 0.37;
 
 /** How long to wait for the browser to let the AudioContext run before counting it as held back (ms). */
 const RESUME_WAIT_MS = 2000;
@@ -367,8 +370,8 @@ function usePlaybackSession() {
  */
 export function createSynth(ctx, out) {
   const master = ctx.createGain();
-  master.gain.value = 0;
   master.connect(out);
+  const fader = createFader(ctx, master.gain); // between silence and its full level, which the music bus sets
 
   const lowpass = (frequency) => {
     const filter = ctx.createBiquadFilter();
@@ -460,25 +463,8 @@ export function createSynth(ctx, out) {
     },
   };
 
-  // The tune's fader, moved by linear ramps between silence and its full level (the music bus sets how loud that
-  // is). The level at any moment is worked out here rather than read back from the AudioParam, which not every
-  // browser reports mid-ramp.
-  let from = 0;
-  let to = 0;
-  let rampStart = 0;
-  let rampEnd = 0;
-  const levelAt = (t) => (t >= rampEnd ? to : from + ((to - from) * (t - rampStart)) / (rampEnd - rampStart));
-
   return {
-    fade(on, seconds) {
-      const now = ctx.currentTime;
-      const level = levelAt(now);
-      const end = now + Math.max(seconds, 0.01);
-      master.gain.cancelScheduledValues(now);
-      master.gain.setValueAtTime(level, now);
-      master.gain.linearRampToValueAtTime(on ? 1 : 0, end);
-      [from, to, rampStart, rampEnd] = [level, on ? 1 : 0, now, end];
-    },
+    fade: fader.fade,
     playNote(note, at) {
       voices[note.voice](note, at);
     },

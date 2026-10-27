@@ -21,15 +21,55 @@ export const BUS = Object.freeze({ MUSIC: 0.105, AMBIENCE: 1, EFFECTS: 1 });
 const COMPRESSOR = { threshold: -20, knee: 6, ratio: 20, attack: 0.01, release: 0.4 };
 
 /**
+ * @typedef {{ fade: (on: boolean, seconds: number) => void, end: number }} Fader
+ */
+
+/**
+ * A fader on `gain` (a GainNode's gain), from silence (0) to full (1): `fade(on, seconds)` moves it all the way up
+ * or down over `seconds` by a linear ramp, from wherever it is, even mid-ramp. `end` is the context time the last
+ * fade finishes. It starts silent.
+ * @param {BaseAudioContext} ctx
+ * @param {AudioParam} gain
+ * @returns {Fader}
+ */
+export function createFader(ctx, gain) {
+  gain.value = 0;
+  // The level at any moment is worked out here rather than read back from the AudioParam, which not every browser
+  // reports mid-ramp.
+  let from = 0;
+  let to = 0;
+  let rampStart = 0;
+  let rampEnd = 0;
+  const levelAt = (t) => (t >= rampEnd ? to : from + ((to - from) * (t - rampStart)) / (rampEnd - rampStart));
+  return {
+    fade(on, seconds) {
+      const now = ctx.currentTime;
+      const level = levelAt(now);
+      const end = now + Math.max(seconds, 0.01);
+      gain.cancelScheduledValues(now);
+      gain.setValueAtTime(level, now);
+      gain.linearRampToValueAtTime(on ? 1 : 0, end);
+      from = level;
+      to = on ? 1 : 0;
+      rampStart = now;
+      rampEnd = end;
+    },
+    get end() {
+      return rampEnd;
+    },
+  };
+}
+
+/**
  * @typedef {{ ctx: BaseAudioContext, music: GainNode, ambience: GainNode, effects: GainNode,
- *             fade: (on: boolean, seconds: number) => void }} Mixer
+ *             fade: (on: boolean, seconds: number) => void, fadeEnd: number }} Mixer
  */
 
 /**
  * The master chain on `ctx`, silent until fade(true).
  * @param {BaseAudioContext} ctx
  * @returns {Mixer}  connect a sound to one of the buses; `fade(on, seconds)` moves the master fader all the way up
- *   or down over `seconds`, from wherever it is
+ *   or down over `seconds`, from wherever it is, and `fadeEnd` is the context time that fade finishes
  */
 export function createMixer(ctx) {
   const compressor = ctx.createDynamicsCompressor();
@@ -37,8 +77,8 @@ export function createMixer(ctx) {
   compressor.connect(ctx.destination);
 
   const master = ctx.createGain();
-  master.gain.value = 0;
   master.connect(compressor);
+  const fader = createFader(ctx, master.gain);
 
   const bus = (level) => {
     const gain = ctx.createGain();
@@ -47,27 +87,14 @@ export function createMixer(ctx) {
     return gain;
   };
 
-  // The master level, faded by linear ramps. The level at any moment is worked out here rather than read back from
-  // the AudioParam, which not every browser reports mid-ramp.
-  let from = 0;
-  let to = 0;
-  let rampStart = 0;
-  let rampEnd = 0;
-  const levelAt = (t) => (t >= rampEnd ? to : from + ((to - from) * (t - rampStart)) / (rampEnd - rampStart));
-
   return {
     ctx,
     music: bus(BUS.MUSIC),
     ambience: bus(BUS.AMBIENCE),
     effects: bus(BUS.EFFECTS),
-    fade(on, seconds) {
-      const now = ctx.currentTime;
-      const level = levelAt(now);
-      const end = now + Math.max(seconds, 0.01);
-      master.gain.cancelScheduledValues(now);
-      master.gain.setValueAtTime(level, now);
-      master.gain.linearRampToValueAtTime(on ? 1 : 0, end);
-      [from, to, rampStart, rampEnd] = [level, on ? 1 : 0, now, end];
+    fade: fader.fade,
+    get fadeEnd() {
+      return fader.end;
     },
   };
 }

@@ -6,7 +6,8 @@
 // a video's sound and the page going into the background govern them together with the music (music.js). Nothing
 // plays while the sound is off, ducked or held: those sounds are skipped, not saved up. The one exception is the
 // moment the sound is coming on: a sound asked for then (the whistle as she taps Begin, before the browser has let
-// the context run) plays as soon as it is on, if that is within WAKE_GRACE.
+// the context run, or as she taps Continue after a video's sound, while the rest of the sound comes back) plays
+// once it is fully on, if it comes on within WAKE_GRACE.
 //
 // The app drives it: depart(), arrive() and finale() from the ride's events, and update(speed, distance, seconds,
 // toStop) every frame, which allocates nothing unless a sound starts. Its timing keeps to real time under a
@@ -112,10 +113,12 @@ export function createKit(mixer) {
 
 /**
  * The sound effects, on `music`'s context and master chain.
- * @param {import('./music.js').Music} music
+ * @param {Pick<import('./music.js').Music, 'mixer'|'audible'|'waking'>} music
+ * @param {{ now?: () => number }} [options]  `now` is the clock (ms) that times how long a one-shot has waited for
+ *   the sound to come on; the unit tests set it
  * @returns {Sfx}
  */
-export function createSfx(music) {
+export function createSfx(music, { now = () => performance.now() } = {}) {
   /** @type {Kit|null} */
   let kit = null;
   /** @type {import('./trainSounds.js').TrainSounds|null} */
@@ -124,7 +127,7 @@ export function createSfx(music) {
   /** @type {Map<string, { gate: ReturnType<typeof createGate>, play: (kit: Kit, at: number, level: number) => boolean|void }>} */
   const shots = new Map();
 
-  // One-shots waiting for the sound to come on: name, delay, level and when they were asked for (performance.now()).
+  // One-shots waiting for the sound to come on: name, delay, level and when they were asked for (now(), ms).
   const waitingName = new Array(WAITING).fill('');
   const waitingDelay = new Float64Array(WAITING);
   const waitingLevel = new Float64Array(WAITING);
@@ -152,9 +155,9 @@ export function createSfx(music) {
 
   /** Plays `shot` `delay` s from now (context time), if its gap allows. Assumes audible(). */
   function fire(shot, delay, level) {
-    const now = kit.ctx.currentTime;
-    if (!shot.gate.open(now)) return false;
-    return shot.play(kit, Math.max(now, now + LEAD + delay), level) !== false;
+    const time = kit.ctx.currentTime;
+    if (!shot.gate.open(time)) return false;
+    return shot.play(kit, Math.max(time, time + LEAD + delay), level) !== false;
   }
 
   /** Whether the sound is on its way: the browser is still answering, or the context has yet to start running. */
@@ -164,10 +167,10 @@ export function createSfx(music) {
 
   /** Keeps `shot` to play once the sound is on, dropping any that have waited too long to make room. */
   function wait(name, delay, level) {
-    const now = performance.now();
+    const asked = now();
     let kept = 0;
     for (let i = 0; i < waiting; i++) {
-      if (now - waitingSince[i] > WAKE_GRACE * 1000) continue;
+      if (asked - waitingSince[i] > WAKE_GRACE * 1000) continue;
       waitingName[kept] = waitingName[i];
       waitingDelay[kept] = waitingDelay[i];
       waitingLevel[kept] = waitingLevel[i];
@@ -179,16 +182,20 @@ export function createSfx(music) {
     waitingName[waiting] = name;
     waitingDelay[waiting] = delay;
     waitingLevel[waiting] = level;
-    waitingSince[waiting] = now;
+    waitingSince[waiting] = asked;
     waiting += 1;
   }
 
-  /** Plays the one-shots that waited for the sound to come on, unless they waited too long. */
+  /**
+   * Plays the one-shots that waited for the sound to come on, unless they waited too long. They start once the
+   * master fader is all the way up, so the first of them is not lost in its fade.
+   */
   function playWaiting() {
-    const now = performance.now();
+    const played = now();
+    const up = Math.max(0, music.mixer.fadeEnd - kit.ctx.currentTime - LEAD);
     for (let i = 0; i < waiting; i++) {
       const shot = shots.get(waitingName[i]);
-      if (shot && now - waitingSince[i] <= WAKE_GRACE * 1000) fire(shot, waitingDelay[i], waitingLevel[i]);
+      if (shot && played - waitingSince[i] <= WAKE_GRACE * 1000) fire(shot, up + waitingDelay[i], waitingLevel[i]);
     }
     waiting = 0;
   }

@@ -37,12 +37,15 @@ test('a video moment plays muted in its card, and its speaker turns the sound on
   expect(await video.evaluate((v) => v.muted)).toBe(false);
   expect((await appState(page)).videoSound).toBe(true);
   await expect.poll(() => states(page)).toEqual(['suspended']); // music, train and ambience all duck for it
+  const whistled = (await audioReport(page)).whistles;
 
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect.poll(async () => (await appState(page)).videoSound).toBe(false);
   expect(await page.locator('video.stop-video').evaluate((v) => v.muted)).toBe(true);
   expect((await appState(page)).music).toBe('playing');
   await expect.poll(() => states(page)).toEqual(['running']);
+  // The sound comes back in time for the train to whistle as it sets off.
+  await expect.poll(async () => (await audioReport(page)).whistles, { timeout: 1500 }).toBe(whistled + 1);
   expect(errors).toEqual([]);
 });
 

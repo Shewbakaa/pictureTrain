@@ -523,8 +523,9 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     mirrorState(); // at once, not at the next frame, so the state agrees with the card that has just come up
   });
   ride.on('depart', () => {
-    sfx.depart();
+    // A clip's sound goes off first: that brings the rest of the sound back, and the whistle waits for it.
     director.setSound(false);
+    sfx.depart();
     appState.phase = 'riding';
     refreshUi();
   });

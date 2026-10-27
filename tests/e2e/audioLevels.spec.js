@@ -1,6 +1,6 @@
 // The mix's levels, rendered offline (OfflineAudioContext) through the real master chain (audio/mixer.js) with the
 // real instruments: the built-in tune and the train's sounds. It checks the targets in the sound design
-// (docs/superpowers/specs/2026-10-26-sound-effects-design.md) and prints what it measured.
+// (docs/superpowers/specs/2026-10-26-sound-effects-design.md) and attaches what it measured to the results.
 import { test, expect } from '@playwright/test';
 
 test('the mix never clips, the music is a third quieter, and the train sits at its target levels', async ({ page, browserName }) => {
@@ -130,8 +130,10 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
     };
   });
 
-  const round = (x) => Math.round(x * 100) / 100;
-  console.log('[audio levels]', JSON.stringify(Object.fromEntries(Object.entries(m).map(([k, v]) => [k, round(v)]))));
+  // The numbers go with the test's results (and to the console with AUDIO_LEVELS=1).
+  const levels = JSON.stringify(Object.fromEntries(Object.entries(m).map(([k, v]) => [k, Math.round(v * 100) / 100])));
+  await test.info().attach('audio-levels.json', { body: levels, contentType: 'application/json' });
+  if (process.env.AUDIO_LEVELS) console.log('[audio levels]', levels);
 
   expect(m.mixPeak).toBeLessThan(0.9);
   const musicDrop = m.musicOldRmsDb - m.musicNewRmsDb;

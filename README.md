@@ -155,9 +155,9 @@ the top, which also switches the train's sounds (its whistle, steam, chugs and t
 If the file is missing or will not play, the built-in tune plays instead and the console says why.
 Keep the file to a few MB (a 128 kbps mp3 is about 1 MB per minute).
 
-Her song is played at a little over half volume on Android and computers, but iPhones ignore the page's
-volume setting, so on an iPhone it plays at whatever the phone's volume is. Check how loud it is on a real
-phone (section 6).
+Her song is played at a little over a third of full volume on Android and computers, so the train's sounds can
+be heard under it, but iPhones ignore the page's volume setting, so on an iPhone it plays at whatever the
+phone's volume is. Check how loud it is on a real phone (section 6).
 
 To hear the built-in tune without a phone, open the site and tap Begin. On the computer this was built on
 there is also a one-loop recording of it at `artifacts/music-loop-preview.wav`. That folder is not part of
@@ -208,8 +208,9 @@ second.)
 - Music starts after you tap Begin, and the train whistles as it sets off. Listen once with the phone's
   speaker: the train's sounds should sit softly under the music.
 - On iPhones before iOS 17, the silent switch mutes the built-in tune and the train's sounds. Test with the
-  switch on and off. If she keeps hers on, tell her to flip it off (or give her your own song, which normally
-  still plays, though the train's sounds stay muted).
+  switch on and off. If she keeps hers on, tell her to flip it off, or give her your own song, which normally
+  still plays. With your song playing, check whether the train's sounds are heard too: that can differ from
+  phone to phone.
 - Her own song plays at the phone's volume on iPhones (see section 4).
 - After the phone is locked and unlocked again, the sound may need one tap on the Sound button to come back.
 - A phone call or a Siri interruption can leave the Sound button showing the wrong state until you tap it.
