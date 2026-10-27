@@ -40,6 +40,7 @@ import { createCouple } from './world/figures.js';
 import { createCabin } from './train/cabin.js';
 import { createTrainExterior } from './train/exterior.js';
 import { createFinale } from './finale/finale.js';
+import { FINALE_FADE } from './finale/finaleTimes.js';
 import { createRide } from './ride/rideController.js';
 import { attachPointerControls, createLook } from './ride/look.js';
 import { loadProgress, saveProgress } from './progress.js';
@@ -87,8 +88,11 @@ const JUMP_FADE_MS = 350;
 /** A frame long enough for the view to finish turning (s): a jump turns her head while the screen is covered. */
 const SETTLE_LOOK = 60;
 
-/** The blush that hides the swap from her seat to the finale, and the one back to the start for "Ride again" (ms per half). */
-const FINALE_FADE_MS = 400;
+/**
+ * The blush that hides the swap from her seat to the finale (finaleTimes.js, which the finale's sounds are timed by),
+ * and the one back to the start for "Ride again" (ms per half).
+ */
+const FINALE_FADE_MS = FINALE_FADE * 1000;
 const RIDE_AGAIN_FADE_MS = 500;
 
 const UP = new Vector3(0, 1, 0);

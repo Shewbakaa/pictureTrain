@@ -48,3 +48,9 @@ export const PACE_SPAN = 0.05;
 
 /** The most the finale's clock moves on in one frame (s): a longer frame counts as only this. */
 export const MAX_STEP = 0.1;
+
+/**
+ * The blush that hides the swap from her seat to the finale takes this long to cover the screen, and again to lift
+ * (s, app.js): the finale's clock starts this long after the train stops, which the finale's sounds are timed by.
+ */
+export const FINALE_FADE = 0.4;

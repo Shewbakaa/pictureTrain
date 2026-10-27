@@ -93,7 +93,7 @@ test('Ride again during the fireworks leaves nothing of the finale sounding', as
   });
   expect(levels.before).toBeGreaterThan(-60);
   // Faded out at once: silent from 0.25 s after the tap, while the crackle would still be dying away.
-  const late = levels.after.filter(([ms]) => ms >= 250);
+  const late = levels.after.filter(([ms]) => ms >= 250 && ms < 500);
   expect(late.length).toBeGreaterThanOrEqual(2); // a busy machine runs the page's timers late
   for (const [ms, db] of late) expect(db, `${ms.toFixed(0)} ms after the tap`).toBeLessThan(-100);
   // And nothing more of the finale plays, under the blush or once she is riding again.

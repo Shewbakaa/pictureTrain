@@ -61,8 +61,9 @@ const NODES = Object.freeze({ rustle: brushNodes(RUSTLE), sparkle: 11, firework:
 const midiToHz = (midi) => 440 * 2 ** ((midi - 69) / 12);
 
 /**
- * How the finale's foley one-shots are gated (s between plays, sfx.define): his footsteps come at least 0.4 s apart,
- * and the two heartbeats 0.8 s apart.
+ * How the finale's foley one-shots are gated (s between plays, sfx.define): a footstep 0.25 s (his steps come at
+ * least 0.4 s apart), a heartbeat 0.5 s (the two come 0.75 s apart), the station bell 3 s, the doves 2 s, and the
+ * rest 1 s (each comes once).
  */
 const FOLEY_GAP = Object.freeze({ step: 0.25, heartbeat: 0.5, bell: 3, doves: 2 });
 const FOLEY_GAP_ELSE = 1;

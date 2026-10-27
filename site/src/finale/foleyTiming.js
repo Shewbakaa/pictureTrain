@@ -19,16 +19,17 @@ import { clamp } from '../util/math.js';
 
 /**
  * AIRTIME: how long her hop's whoosh lasts, while she is in the air (s). SHOP_BELL: how long after the door starts
- * creaking its bell jingles, as the door swings into it (s). HEART: two beats APART seconds apart, each a "lub" and,
- * DUB seconds later, a softer "dub" that has died away RING seconds after it; the second has died away as the
- * hand-off begins. STEP: his footsteps, the first OFF seconds after he sets off, then SLOW steps a second rising to
+ * creaking its bell jingles, as the door swings into it (s). HEART: two beats APART seconds apart (a heart quickened a
+ * little), each a "lub" and, DUB seconds later, a softer "dub" that has died away RING seconds after it; the second
+ * has died away as the hand-off begins. Set so that his footsteps fall between the beats, none within 0.15 s of one:
+ * his last step comes between the first beat and the second, as he reaches her. STEP: his footsteps, the first OFF seconds after he sets off, then SLOW steps a second rising to
  * FAST with his pace (in full from FULL_PACE m/s), and none once his pace falls under STILL m/s; each softer the
  * slower he goes, SOFT of full at a standstill.
  */
 export const FOLEY = Object.freeze({
   AIRTIME: HOP.land - HOP.takeoff,
   SHOP_BELL: 0.1,
-  HEART: Object.freeze({ BEATS: 2, APART: 0.8, DUB: 0.2, RING: 0.14 }),
+  HEART: Object.freeze({ BEATS: 2, APART: 0.75, DUB: 0.16, RING: 0.14 }),
   STEP: Object.freeze({ OFF: 0.3, SLOW: 1.2, FAST: 2.5, FULL_PACE: 5, STILL: 0.25, SOFT: 0.55 }),
 });
 

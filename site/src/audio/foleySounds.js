@@ -13,7 +13,7 @@
 // (tests/e2e/finaleFoleyLevels.spec.js): the station bell peaks about −22 dBFS, the shop bell about −26, and the rest
 // about −30: soft, under the music, the whistle and the fireworks.
 
-import { fallen, TAIL, toSilence, voiceParts } from './voiceParts.js';
+import { strike, TAIL, toSilence, voiceParts } from './voiceParts.js';
 import { STATION_BELL } from './sfxTiming.js';
 import { FOLEY } from '../finale/foleyTiming.js';
 
@@ -53,15 +53,15 @@ const JINGLE = {
 };
 
 /**
- * A step on the wooden platform: a soft, low thud (a sine dropping from THUD to THUD_TO Hz) with the board's hollow
- * knock (noise through a bandpass at KNOCK), which is what a phone's speaker plays of it, and a little click of the
- * heel (noise above CLICK), each at its own share (_GAIN) and dying away over its own decay (s, to −60 dB). His are heavier and lower; hers, the tap as she lands from her hop, lighter. His feet
- * take turns, the left a little lower and heavier than the right (FOOT, of pitch and of weight), and each step varies
- * a little more (VARY) in pitch and weight.
+ * A step on the wooden platform: a soft thud (a sine dropping from THUD to THUD_TO Hz, pitched where a phone's speaker
+ * still plays it) with the board's hollow knock (noise through a bandpass at KNOCK) and a little click of the heel
+ * (noise above CLICK), each at its own share (_GAIN) and dying away over its own decay (s, to −60 dB). His are
+ * heavier; hers, the tap as she lands from her hop, lighter. His feet take turns, the left a little lower and heavier
+ * than the right (FOOT, of pitch and of weight), and each step varies a little more (VARY) in pitch and weight.
  */
 const STEP = {
   his: {
-    LEVEL: 0.0131, THUD: 125, THUD_TO: 82, THUD_DECAY: 0.11, THUD_GAIN: 0.7, KNOCK: 650, KNOCK_Q: 1.6, KNOCK_DECAY: 0.05, KNOCK_GAIN: 1,
+    LEVEL: 0.0102, THUD: 210, THUD_TO: 140, THUD_DECAY: 0.11, THUD_GAIN: 0.8, KNOCK: 600, KNOCK_Q: 1.6, KNOCK_DECAY: 0.05, KNOCK_GAIN: 1,
     CLICK: 3200, CLICK_DECAY: 0.014, CLICK_GAIN: 0.22, VARY: 0.06, FOOT: 0.05,
   },
   hers: {
@@ -119,7 +119,7 @@ const CREAK = { LEVEL: 0.0116, FROM: 420, TO: 640, LENGTH: 0.55, ATTACK: 0.07, R
  * number) away to one side. All their beats share one envelope, struck afresh at each beat, to keep the node count low.
  */
 const DOVES = {
-  LEVEL: 0.0152, COUNT: 3, AFTER: [0, 0.09, 0.2], BEATS: [8, 11], RATE: 9, SLOW: 0.7, BAND: [850, 1500], Q: 0.9,
+  LEVEL: 0.0264, COUNT: 3, AFTER: [0, 0.09, 0.2], BEATS: [8, 11], RATE: 9, SLOW: 0.7, BAND: [850, 1500], Q: 0.9,
   BEAT: 0.06, FADE: 0.15, PAN: [0.15, 0.6],
 };
 
@@ -156,7 +156,6 @@ export function createBrush(kit, out) {
 const BELL_RING = Math.max(...BELL.PARTIALS.map((p) => p.decay));
 const JINGLE_RING = Math.max(...JINGLE.PARTIALS.map((p) => p.decay));
 
-
 /** How many audio nodes each sound holds while it plays, counted against the kit's budget. */
 const NODES = Object.freeze({
   bell: 2 * BELL.PARTIALS.length + 2,
@@ -191,24 +190,6 @@ export function createFoleySounds(kit, out) {
     return { into: parts.gain(level, joint), joint };
   }
   const joining = ({ into, joint }) => (joint === out ? into : joint);
-
-  /**
-   * Strikes `param` at each of `strikes` ([time, peak], in time order) times `scale`: up to the peak over `attack`,
-   * then dying away with time constant `tau`. A strike that lands while the last still rings starts from where that
-   * has fallen to.
-   */
-  function strike(param, strikes, scale, attack, tau) {
-    let ringing = 0;
-    let struck = -Infinity;
-    for (const [t, peak] of strikes) {
-      ringing = struck > -Infinity ? fallen(ringing, t - struck, tau) : 0;
-      param.setValueAtTime(ringing, t);
-      param.linearRampToValueAtTime(peak * scale, t + attack);
-      param.setTargetAtTime(0, t + attack, tau);
-      ringing = peak * scale;
-      struck = t + attack;
-    }
-  }
 
   /**
    * A bell's `partials` of `note` struck at each of `strikes` ([time, strength]) into `into`, from `at` until `end`.

@@ -77,9 +77,12 @@ export function voiceParts(kit) {
   };
 }
 
-/** An envelope's level `seconds` after it was at `level` and began falling towards 0 with time constant `tau`. */
+/**
+ * An envelope's level `seconds` after it was at `level` and began falling towards 0 with time constant `tau`. A time
+ * before it began falling counts as none: it never rises.
+ */
 export function fallen(level, seconds, tau) {
-  return level * Math.exp(-seconds / tau);
+  return level * Math.exp(-Math.max(0, seconds) / tau);
 }
 
 /** Every envelope closes with a ramp this long (s) down to exactly zero before its sources stop. */
@@ -88,4 +91,26 @@ export const TAIL = 0.02;
 /** A time constant (s) for setTargetAtTime that falls to −60 dB over `decay` seconds. */
 export function toSilence(decay) {
   return decay / Math.log(1000);
+}
+
+/**
+ * Strikes `param` at each of `strikes` ([time, peak], in time order) times `scale`: up to the peak over `attack`,
+ * then dying away with time constant `tau`. A strike starts from where the last one has got to: partway up its rise,
+ * if it lands within that, or as far as its ring has fallen. So the envelope never jumps, and never goes above the
+ * larger of their peaks, however close together they come.
+ */
+export function strike(param, strikes, scale, attack, tau) {
+  let from = 0; // where the last strike rose from
+  let start = -Infinity; // when it began
+  let top = 0; // the peak it rose to
+  for (const [t, peak] of strikes) {
+    const into = t - start;
+    const level = into < attack ? from + ((top - from) * Math.max(0, into)) / attack : fallen(top, into - attack, tau);
+    param.setValueAtTime(level, t);
+    param.linearRampToValueAtTime(peak * scale, t + attack);
+    param.setTargetAtTime(0, t + attack, tau);
+    from = level;
+    start = t;
+    top = peak * scale;
+  }
 }

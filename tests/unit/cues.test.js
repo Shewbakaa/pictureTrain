@@ -11,6 +11,7 @@ import { STATION_BELL } from '../../site/src/audio/sfxTiming.js';
 import { FIREWORK_TIMING as FIREWORKS, fireworkBlooms } from '../../site/src/finale/fireworkTiming.js';
 import { BED_NODES } from '../../site/src/audio/ambienceBeds.js';
 import { FINALE_TIMES as T } from '../../site/src/finale/finale.js';
+import { FINALE_FADE } from '../../site/src/finale/finaleTimes.js';
 import { foleyCues, footfalls } from '../../site/src/finale/foleyTiming.js';
 import { stubContext } from './audioStub.js';
 import { finaleOnStage } from './finaleStage.js';
@@ -202,9 +203,6 @@ test('on a slow phone (a tenth of a second a frame) every footstep and cue is st
   }
   assert.equal(cues.heard.filter((n) => n === 'heartbeat').length, 2);
 });
-
-/** The blush that covers the swap to the finale takes this long, so its clock starts this long after the train stops (app.js FINALE_FADE_MS). */
-const FINALE_FADE = 0.4;
 
 test('the whole finale fits the node budget beside the evening\'s crickets: nothing it plays is skipped for want of room', (t) => {
   const { audio, sfx, cues } = engine();

@@ -26,6 +26,7 @@ test('the finale\'s foley sits at its targets, under the music, and the whole fi
     const { STATION_BELL } = await import('./src/audio/sfxTiming.js');
     const { foleyCues } = await import('./src/finale/foleyTiming.js');
     const { fireworkBlooms } = await import('./src/finale/fireworkTiming.js');
+    const { FINALE_FADE } = await import('./src/finale/finaleTimes.js');
 
     const RATE = 48000;
     const STEP = 0.1;
@@ -110,14 +111,14 @@ test('the finale\'s foley sits at its targets, under the music, and the whole fi
     }
 
     // The whole finale as the ride plays it: the music and the evening's crickets throughout; the train stops at 0.2 s
-    // (its sigh, the whistle, then the station bell), and the finale's clock starts 0.4 s later, under the blush; then
+    // (its sigh, the whistle, then the station bell), and the finale's clock starts FINALE_FADE later, under the blush; then
     // every foley cue and footstep at its time, the sparkle, and the fireworks (four bursts) to the end.
     const finale = await render(16, (ctx, mixer, kit) => {
       const synth = createSynth(ctx, mixer.music);
       synth.fade(true, 0.01);
       for (const note of loop.notes) if (note.t < 16) synth.playNote(note, note.t + 0.05);
       const stop = 0.2;
-      const start = stop + 0.4;
+      const start = stop + FINALE_FADE;
       const train = createTrainSounds(kit);
       train.steam('sigh', stop);
       train.whistle('finale', stop + 0.35);
@@ -150,9 +151,10 @@ test('the finale\'s foley sits at its targets, under the music, and the whole fi
     expect(Math.abs(m[name].peakDb - target), `${name} peaks at ${m[name].peakDb.toFixed(2)} dBFS`).toBeLessThanOrEqual(2);
     expect(m[name].loudestDb, `${name} under the music`).toBeLessThan(m.music.loudestDb);
   }
-  // The heartbeats and the steps are heard on a phone's speaker: most of their peak is above 200 Hz.
+  // The heartbeats and the steps are heard on a phone's speaker: their peak there, above 200 Hz, is within 2 dB of
+  // their whole peak.
   for (const name of ['heartbeat', 'step']) {
-    expect(m[`${name}Above200`].peakDb, `${name} above 200 Hz`).toBeGreaterThanOrEqual(m[name].peakDb - 6);
+    expect(m[`${name}Above200`].peakDb, `${name} above 200 Hz`).toBeGreaterThanOrEqual(m[name].peakDb - 2);
   }
   expect(Math.pow(10, m.finaleMix.peakDb / 20), 'the finale never clips').toBeLessThan(0.9);
 });

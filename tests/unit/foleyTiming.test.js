@@ -92,11 +92,24 @@ test('two soft heartbeats, lub-dub, about 0.8 s apart, the second dying away as 
   const beats = cue('heartbeat');
   const { DUB, RING } = FOLEY.HEART;
   assert.equal(beats.length, 2);
-  assert.ok(Math.abs(beats[1] - beats[0] - 0.8) <= 0.05, `${beats[1] - beats[0]} s apart`);
+  const apartBy = beats[1] - beats[0];
+  assert.ok(apartBy >= 0.7 && apartBy <= 0.85, `${apartBy} s apart (a heart quickened a little)`);
   assert.ok(DUB >= 0.12 && DUB <= 0.3, 'the "dub" close behind the "lub"');
   const over = beats[1] + DUB + RING;
   assert.ok(over <= T.handoffStart + 1e-9 && over >= T.handoffStart - 0.1, `the last beat dies away at ${over}`);
   assert.ok(beats[0] > T.herStepEnd, 'she has turned to face him');
+});
+
+test('no footstep lands on a heartbeat: each is at least 0.15 s from every "lub" and "dub", and he reaches her on a beat', () => {
+  const thumps = cue('heartbeat').flatMap((t) => [t, t + FOLEY.HEART.DUB]);
+  const steps = [];
+  footfalls(0, T.end, (name, t) => steps.push(t));
+  for (const step of steps) {
+    for (const thump of thumps) {
+      assert.ok(Math.abs(step - thump) >= 0.15, `a step at ${step.toFixed(3)} s and a beat at ${thump.toFixed(3)} s`);
+    }
+  }
+  assert.ok(cue('heartbeat')[1] > steps[steps.length - 1], 'the last heartbeat comes after his last step');
 });
 
 test('the bouquet\'s paper crinkles as he holds it out, the hearts sparkle, and doves fly off as the fireworks start', () => {
