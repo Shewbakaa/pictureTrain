@@ -7,7 +7,8 @@
 // plays while the sound is off, ducked or held: those sounds are skipped, not saved up. The one exception is the
 // moment the sound is coming on: a sound asked for then (the whistle as she taps Begin, before the browser has let
 // the context run, or as she taps Continue after a video's sound, while the rest of the sound comes back) plays
-// once it is fully on, if it comes on within WAKE_GRACE.
+// once it is fully on, if it comes on within WAKE_GRACE. Likewise a one-shot asked for while the master fader is
+// still rising starts once it is up, so the first toot of a whistle is never lost in a fade.
 //
 // The app drives it: depart(), arrive() and finale() from the ride's events, and update(speed, distance, seconds,
 // toStop) every frame, which allocates nothing unless a sound starts. Its timing keeps to real time under a
@@ -187,15 +188,20 @@ export function createSfx(music, { now = () => performance.now() } = {}) {
   }
 
   /**
-   * Plays the one-shots that waited for the sound to come on, unless they waited too long. They start once the
-   * master fader is all the way up, so the first of them is not lost in its fade.
+   * How long until the master fader is all the way up (s, from LEAD ahead of now): a one-shot that starts then is
+   * not lost in its fade. Once the sound is on, the fader's last move was up, so this is 0 when it has finished.
    */
+  function up() {
+    return Math.max(0, music.mixer.fadeEnd - kit.ctx.currentTime - LEAD);
+  }
+
+  /** Plays the one-shots that waited for the sound to come on, unless they waited too long, once the fader is up. */
   function playWaiting() {
     const played = now();
-    const up = Math.max(0, music.mixer.fadeEnd - kit.ctx.currentTime - LEAD);
+    const delay = up();
     for (let i = 0; i < waiting; i++) {
       const shot = shots.get(waitingName[i]);
-      if (shot && played - waitingSince[i] <= WAKE_GRACE * 1000) fire(shot, up + waitingDelay[i], waitingLevel[i]);
+      if (shot && played - waitingSince[i] <= WAKE_GRACE * 1000) fire(shot, delay + waitingDelay[i], waitingLevel[i]);
     }
     waiting = 0;
   }
@@ -216,7 +222,9 @@ export function createSfx(music, { now = () => performance.now() } = {}) {
         console.warn(`[sfx] There is no sound called "${name}".`);
         return false;
       }
-      if (audible()) return fire(shot, delay, level);
+      // While a request to sound is still being answered, the fader has yet to start back up (after a video's
+      // sound, the context can still be running): the one-shot waits for it, like one asked for at Begin.
+      if (audible() && !music.waking) return fire(shot, up() + delay, level);
       if (coming()) wait(name, delay, level);
       return false;
     },
@@ -250,7 +258,7 @@ export function createSfx(music, { now = () => performance.now() } = {}) {
         if (!coming()) waiting = 0;
         return;
       }
-      if (waiting > 0) playWaiting();
+      if (waiting > 0 && !music.waking) playWaiting();
 
       const ago = chugs.step(speed, seconds);
       if (ago >= 0) fire(chug, -ago, chugLevel(speed));

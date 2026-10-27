@@ -141,7 +141,7 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
   expect(musicDrop).toBeLessThanOrEqual(4);
   expect(Math.abs(m.whistlePeakDb - -20)).toBeLessThanOrEqual(2);
   expect(m.whistleFinalePeakDb).toBeLessThanOrEqual(-18);
-  expect(Math.abs(m.chugRmsDb - -34)).toBeLessThanOrEqual(2);
+  expect(Math.abs(m.chugRmsDb - -37)).toBeLessThanOrEqual(2); // 3 dB under the design's −34, so the whistle stands out
   expect(m.clickRmsDb).toBeLessThan(m.chugRmsDb - 3);
   // Every effect's loudest moment stays below the music's: they sit under it.
   for (const key of ['whistleLoudestDb', 'chugLoudestDb', 'clickLoudestDb', 'puffLoudestDb', 'brakeLoudestDb', 'sighLoudestDb']) {

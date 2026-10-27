@@ -28,8 +28,9 @@ effects sit just audible under it.
   *Silent Night* (Franz Gruber, 1818, public domain), played softly on the same music-box bell, slow, with the
   pad. Only for the built-in tune: when the author's own song plays (content.music), the song continues through
   winter and there is no carol.
-- **The music button becomes one Sound button** (same element, `#music-toggle`, relabelled "Sound on/off"):
-  it turns music, ambience and effects on and off together. `appState.music` keeps its meaning for it.
+- **The music button becomes one Sound button** (same element, `#music-toggle`, with a speaker icon; its
+  accessible name is a static "Sound" and `aria-pressed` says whether it is on): it turns music, ambience and
+  effects on and off together. `appState.music` keeps its meaning for it.
 - **Video and Live Photo sound duck everything** (music, ambience and effects), not just the music.
 - **Music is turned down by about a third** (MASTER_GAIN 0.16 → about 0.105, roughly −3.6 dB).
 
@@ -50,7 +51,7 @@ Levels below are targets for the mixed output measured offline (OfflineAudioCont
 - Whistle: a breathy two-to-three-note chord (sines/triangles with a little noise and vibrato), soft attack.
   Peak about −20 dBFS. Toots about 0.3 s and 0.45 s with a short gap.
 - Chug: band-passed noise bursts with a quick decay, rate tied to speed (about 1.3 chugs/s at cruise, 6.5 m/s),
-  level following speed. About −34 dBFS RMS while cruising.
+  level following speed. About −37 dBFS RMS while cruising (first −34; lowered 3 dB so the whistle stands out).
 - Clickety-clack: two short clicks per rail joint (bogies), every 12 m of track at the ride's distance; quieter
   than the chug.
 - Steam hiss/sigh: high-passed noise with a slow decay (sigh about 1.5 s).

@@ -163,6 +163,40 @@ test('departing while everything is ducked for a video drops the whistle; un-duc
   assert.equal(right.whistles(), 1);
 });
 
+test('Continue moments after a video\'s sound came on: the whistle waits for the sound to come all the way back', () => {
+  const t = setup();
+  t.on();
+  t.advance(1);
+  // Her tap on the video's speaker: everything fades out over 0.4 s. The context is idled only once it has.
+  t.music.audible = false;
+  t.music.mixer.fade(false, 0.4);
+  t.advance(1.2);
+  // Continue, 0.2 s later: the clip's sound goes off and the sound is asked back while the context still runs.
+  t.music.audible = true;
+  t.music.waking = true;
+  t.sfx.depart();
+  assert.equal(t.whistles(), 0, 'not into a fader that is still going down');
+  // The browser answers at once: the master fader comes back up over 0.4 s from where it had got to.
+  t.music.waking = false;
+  t.music.mixer.fade(true, 0.4);
+  t.sfx.update(0, 0, 1 / 60, Infinity);
+  assert.equal(t.whistles(), 1);
+  const whistleAt = t.starts.find((s) => s.type === 'osc').at;
+  assert.ok(whistleAt >= 1.6 - 1e-9, `the whistle starts once the fader is up (at ${whistleAt})`);
+});
+
+test('a one-shot asked for while the master fader is still coming up starts once it is up', () => {
+  const t = setup();
+  t.on(0.4); // the Sound button turned on: the fader rises over 0.4 s
+  t.advance(0.1);
+  t.sfx.depart();
+  assert.equal(t.whistles(), 1);
+  const whistleAt = t.starts.find((s) => s.type === 'osc').at;
+  assert.ok(whistleAt >= 0.4 - 1e-9, `the whistle waits for the fader (starts at ${whistleAt})`);
+  const noise = t.starts.filter((s) => s.type === 'noise').map((s) => s.at).sort((a, b) => a - b);
+  assert.ok(Math.abs(noise[1] - whistleAt - 0.95) < 1e-9, 'the puff still follows the whistle');
+});
+
 test('the same one-shot twice within its gap plays once', () => {
   const t = setup();
   t.on();
