@@ -3,7 +3,8 @@
 // clickety-clack of the rail joints following its speed, a brake hiss as it slows for a stop, a long steam sigh once
 // it stands there, and a longer, happy whistle at the Day 365 station; and, from tapSounds.js, the soft shimmer of a
 // shooting star and the small sounds of her taps: the lantern's warm whoosh, a balloon's pop, a snowman's jingle and a
-// deer's rustle; and the click of the ticket punch as she taps Begin.
+// deer's rustle of leaves ('deer-rustle': the cues' own 'rustle' is the stop card's paper); and the click of the
+// ticket punch as she taps Begin.
 //
 // They play on the music's AudioContext, into the effects bus of its master chain (mixer.js; the train's by a bus of
 // its own, which the tunnel's echo takes them from), so the Sound button, a video's sound and the page going into
@@ -32,7 +33,8 @@
 //                adds a one-shot. `play` builds its nodes to start at context time `at`, counts them with
 //                kit.room() and kit.track(), and returns false if it played nothing. It plays at most once per
 //                `gap` seconds of real time. A continuous sound (an ambience bed) counts its nodes with kit.hold()
-//                for as long as it stays, and gives them back with kit.release().
+//                for as long as it stays, and gives them back with kit.release(). The effects, the ambience and the
+//                cues share one set of names: one defined again replaces the earlier, with a warning.
 //   sfx.play(name, delay = 0, level = 1)
 //                plays a one-shot `delay` seconds from now (later, if the master fader is still coming up), if the
 //                sound is on and its gap allows.
@@ -287,6 +289,7 @@ export function createSfx(music, { now = () => performance.now() } = {}) {
       return audible() && !music.waking && up() === 0;
     },
     define(name, { gap, play }) {
+      if (shots.has(name)) console.warn(`[sfx] "${name}" is defined twice; the later one replaces the earlier.`);
       shots.set(name, { gate: createGate(gap), play });
     },
     play(name, delay = 0, level = 1) {
@@ -374,7 +377,7 @@ export function createSfx(music, { now = () => performance.now() } = {}) {
   sfx.define('lantern', { gap: 1, play: (k, at, level) => tap.lantern(at, level) });
   sfx.define('pop', { gap: 1, play: (k, at, level) => tap.pop(at, level) });
   sfx.define('jingle', { gap: 1, play: (k, at, level) => tap.jingle(at, level) });
-  sfx.define('rustle', { gap: 1, play: (k, at, level) => tap.rustle(at, level) });
+  sfx.define('deer-rustle', { gap: 1, play: (k, at, level) => tap.rustle(at, level) });
   sfx.define('punch', { gap: 1, play: (k, at, level) => tap.punch(at, level) });
   return sfx;
 }

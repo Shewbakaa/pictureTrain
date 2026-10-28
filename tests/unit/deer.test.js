@@ -188,7 +188,7 @@ test('a deer she taps looks up, flicks its ears, bounds off 20 m in 1.5 s and hi
   const home = deer.position.clone();
   const fx = effects();
   herd.targets[0].react(3, fx);
-  assert.deepEqual(fx.played, ['rustle']);
+  assert.deepEqual(fx.played, ['deer-rustle']);
   // It looks up at once, and flicks its ears.
   let lookedUp = false, flicks = 0, last = ears.rotation.x;
   for (let t = 3; t < 3.5; t += 1 / 60) {

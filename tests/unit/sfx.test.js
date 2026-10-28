@@ -3,6 +3,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSfx, createKit } from '../../site/src/audio/sfx.js';
+import { createAmbience } from '../../site/src/audio/ambience.js';
+import { createCues, createCueSounds } from '../../site/src/audio/cueSounds.js';
 import { createMixer } from '../../site/src/audio/mixer.js';
 import { RIDE } from '../../site/src/ride/rideController.js';
 import { stubContext } from './audioStub.js';
@@ -159,6 +161,44 @@ test('an unknown sound warns and plays nothing', (context) => {
   t.on();
   assert.equal(t.sfx.play('foghorn'), false);
   assert.equal(warn.mock.callCount(), 1);
+});
+
+test('a sound defined twice warns, and the later one replaces the earlier', (context) => {
+  const warn = context.mock.method(console, 'warn', () => {});
+  const t = setup();
+  t.on();
+  const played = [];
+  t.sfx.define('horn', { gap: 0, play: () => { played.push('first'); } });
+  assert.equal(warn.mock.callCount(), 0);
+  t.sfx.define('horn', { gap: 0, play: () => { played.push('second'); } });
+  assert.equal(warn.mock.callCount(), 1);
+  assert.equal(warn.mock.calls[0].arguments[0], '[sfx] "horn" is defined twice; the later one replaces the earlier.');
+  t.sfx.play('horn');
+  assert.deepEqual(played, ['second']);
+});
+
+test('the effects, the ambience and the cues, built together as the app builds them, share no sound\'s name', (context) => {
+  const warn = context.mock.method(console, 'warn', () => {});
+  // The app's order (app.js): the effects, then the ambience and the cues, each defining its sounds on the effects.
+  const t = setup();
+  createAmbience(t.sfx);
+  createCues(t.sfx);
+  const twice = warn.mock.calls.map((call) => String(call.arguments[0])).filter((message) => message.includes('defined twice'));
+  assert.deepEqual(twice, []);
+  t.on();
+  // A deer's rustle is the leaves of tapSounds.js, a noise, a filter and a gain...
+  assert.equal(t.sfx.play('deer-rustle'), true);
+  assert.equal(t.sfx.kit.live, 3);
+  t.advance(Math.max(...t.sources.map((s) => s.stopAt)) + 0.1);
+  assert.equal(t.sfx.kit.live, 0);
+  // ...and the cues' 'rustle' is the stop card's paper brush, as the card's own voice makes it.
+  const card = stubContext();
+  const kit = createKit(createMixer(card.ctx));
+  assert.equal(createCueSounds(kit).rustle(0.1, 1), true);
+  assert.notEqual(kit.live, 3, 'the paper is not the leaves');
+  assert.equal(t.sfx.play('rustle'), true);
+  assert.equal(t.sfx.kit.live, kit.live);
+  assert.equal(warn.mock.callCount(), 0, 'and every sound asked for is there');
 });
 
 test('the brake hisses once per stop, as braking begins, and not again after a pause', () => {
@@ -369,7 +409,7 @@ test('a snowman jingles: little high bells, shaken a few times', () => {
 test('a deer rustles off through the leaves: a hiss of noise in steps', () => {
   const t = setup();
   t.on();
-  assert.equal(t.sfx.play('rustle'), true);
+  assert.equal(t.sfx.play('deer-rustle'), true);
   assert.equal(t.noises(), 1);
   assert.equal(t.sources[0].buffer, t.sfx.kit.noise);
   assert.ok(t.made.some((n) => n.type === 'bandpass'));
@@ -379,7 +419,7 @@ test('a deer rustles off through the leaves: a hiss of noise in steps', () => {
 });
 
 test('every tap sound is held in the node budget while it plays and gives its nodes back; all of them at once fit in it', () => {
-  for (const [name, nodes] of [['pop', 3], ['jingle', 4], ['rustle', 3]]) {
+  for (const [name, nodes] of [['pop', 3], ['jingle', 4], ['deer-rustle', 3]]) {
     const t = setup();
     t.on();
     t.sfx.play(name);
@@ -391,7 +431,7 @@ test('every tap sound is held in the node budget while it plays and gives its no
   // The cord's whistle and the lantern too, all at once.
   const t = setup();
   t.on();
-  for (const name of ['whistle', 'lantern', 'pop', 'jingle', 'rustle']) assert.equal(t.sfx.play(name), true, name);
+  for (const name of ['whistle', 'lantern', 'pop', 'jingle', 'deer-rustle']) assert.equal(t.sfx.play(name), true, name);
   assert.ok(t.sfx.kit.live <= 40, `${t.sfx.kit.live} nodes`);
 });
 

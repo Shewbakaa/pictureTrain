@@ -305,7 +305,7 @@ export function createDeer({ layout, path }) {
       position: (out) => (deer.root.visible ? out.copy(middle).multiplyScalar(STAND.SIZE).add(deer.root.position) : null),
       react(now, fx) {
         if (!(now - deer.tapped < BOUND.STARTLE + BOUND.TIME)) deer.tapped = now; // not again while it is off
-        fx.play('rustle');
+        fx.play('deer-rustle');
       },
     })),
   };
