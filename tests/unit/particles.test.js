@@ -104,3 +104,32 @@ test('nothing pops: no particle that shows jumps up or down from one frame to th
     else assert.ok(hidden > 0, `${zone}: particles do fall out of the box and come back, unseen`);
   }
 });
+
+test('in the tunnel nothing falls: the particles fade out with how far inside she is, and back as she comes out', () => {
+  const camera = new Vector3(0, 2.05, -570);
+  const opacityAt = (shelter) => {
+    const p = createAmbientParticles({ maxCount: 50 });
+    p.update(1 / 30, inside('winter'), camera, shelter);
+    return p.points.visible ? p.points.material.uniforms.uOpacity.value : 0;
+  };
+  const open = opacityAt(0);
+  assert.equal(open, ZONES.winter.particles.density, 'out in the open, as ever');
+  assert.equal(opacityAt(undefined), open, 'no tunnel, no change');
+  assert.equal(opacityAt(1), 0, 'none deep inside');
+  assert.ok(Math.abs(opacityAt(0.5) - open / 2) < 1e-9, 'half way in, half as strong');
+  // Smoothly in and out, as `inside` eases: no step.
+  let last = open;
+  for (let shelter = 0; shelter <= 1.0001; shelter += 0.05) {
+    const now = opacityAt(Math.min(shelter, 1));
+    assert.ok(Math.abs(now - last) <= 0.05 * open + 1e-9, `${shelter.toFixed(2)}`);
+    last = now;
+  }
+  // The same particles fade back in where they were: the motion went on while they were hidden.
+  const p = createAmbientParticles({ maxCount: 50 });
+  const q = createAmbientParticles({ maxCount: 50 });
+  for (let frame = 0; frame < 60; frame++) {
+    p.update(1 / 30, inside('winter'), camera, frame < 30 ? 1 : 0);
+    q.update(1 / 30, inside('winter'), camera, 0);
+  }
+  assert.deepEqual([...p.points.geometry.attributes.position.array], [...q.points.geometry.attributes.position.array]);
+});

@@ -16,6 +16,9 @@
 // Between two zones the effect does not mix two kinds at once: the first fades out to nothing at the middle of
 // the blend window, then the second fades in (`particleStyleAt`), and the swap happens while nothing shows.
 //
+// Nothing falls in the tunnel (tunnel.js): the particles fade out as she goes in and back as she comes out, with how
+// far inside she is. They go on moving all the while, so they come back where they would have been.
+//
 // The motion is worked out on the CPU each frame (a few hundred particles); the shapes (petal, leaf, flake,
 // glow) are drawn in the fragment shader, so nothing is recompiled when the kind changes.
 //
@@ -167,11 +170,12 @@ const wrap = (value, size) => ((value % size) + size) % size;
  * @returns {{
  *   points: Points,
  *   setQuality: (share: number) => void,
- *   update: (dt: number, env: Env, cameraPosition: import('../three.js').Vector3) => void,
+ *   update: (dt: number, env: Env, cameraPosition: import('../three.js').Vector3, inside?: number) => void,
  * }}
  *   Add `points` to the scene. `setQuality` draws that share (0 to 1) of the particles: the quality tier's
  *   `particles`. Call `update` every frame with the seconds since the last one, the environment where the
- *   train is and the camera's world position.
+ *   train is, the camera's world position and how far inside the tunnel she is (tunnel.js `tunnelInside`, 0 to 1:
+ *   at 1 none show).
  */
 export function createAmbientParticles({ maxCount = 260 } = {}) {
   const count = Math.max(1, Math.floor(maxCount));
@@ -256,9 +260,10 @@ export function createAmbientParticles({ maxCount = 260 } = {}) {
     material.blending = style.additive ? AdditiveBlending : NormalBlending;
   }
 
-  function update(dt, env, cameraPosition) {
+  function update(dt, env, cameraPosition, inside = 0) {
     time += dt;
-    const { style, opacity } = particleStyleAt(env, showing);
+    const { style } = particleStyleAt(env, showing);
+    const opacity = showing.opacity * (1 - clamp(inside, 0, 1));
     points.visible = opacity > 0.001 && KINDS[style.kind] !== undefined;
     if (!points.visible) return;
     if (style !== current) applyStyle(style);

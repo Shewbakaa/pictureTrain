@@ -94,8 +94,11 @@ const SIGN_RANGE = 200;
 /** Smallest change in a sign's turn (rad) worth re-aiming it for. */
 const SIGN_TURN_EPSILON = 1e-4;
 
-/** How much of the daylight (the sky's and the sun's) is shut out deep in the tunnel, where only its lamps glow. */
-const TUNNEL_DIM = 0.6;
+/**
+ * How much of the daylight (the sky's and the sun's) is shut out deep in the tunnel, where only its lamps glow: enough
+ * that the track bed reads dark, while the cabin round her stays dim but readable.
+ */
+const TUNNEL_DIM = 0.75;
 
 /** How often the ?stats=1 readout refreshes (s). */
 const STATS_EVERY = 0.5;
@@ -464,9 +467,9 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       }
     }
     envAt(layout, d, env);
-    const dim = 1 - TUNNEL_DIM * tunnelInside(span, d);
-    env.hemiIntensity *= dim;
-    env.sunIntensity *= dim;
+    const inside = tunnelInside(span, d);
+    env.hemiIntensity *= 1 - TUNNEL_DIM * inside;
+    env.sunIntensity *= 1 - TUNNEL_DIM * inside;
     applyEnvironment();
     tunnel.update(d);
     placeSun(d);
@@ -474,7 +477,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     sky.update(env, eye, elapsed);
     nightSky.update(dt, eye, zoneWeights(env, zoneShare).evening);
     skyDecor.update(dt, eye, env);
-    particles.update(dt, env, eye);
+    particles.update(dt, env, eye, inside); // nothing falls in the tunnel
     smoke.update(dt, eye);
     dressing.update(dt, elapsed);
     updateWind(elapsed, windStrength(env));
