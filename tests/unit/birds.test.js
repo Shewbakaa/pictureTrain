@@ -168,7 +168,6 @@ test('one instanced mesh for each kind of bird, all on the birds\' material, wit
     const flap = mesh.geometry.getAttribute('aFlap');
     assert.ok(flap instanceof InstancedBufferAttribute && flap.itemSize === 3, mesh.name);
   }
-  assert.deepEqual(birds.targets, []);
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -752,4 +751,63 @@ test('on the lower tiers fewer doves show (the particles share), the ones left s
   none.setQuality(0);
   assert.equal(none.update(T.fireworks + 1), 0);
   assert.ok(!none.mesh.visible);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Taps (Task 14): a gull she taps squawks and flaps off, then glides back.
+// ---------------------------------------------------------------------------------------------
+
+/** TapEffects that note the sounds a reaction asks for. */
+function effects() {
+  const fx = { played: [], play: (name) => fx.played.push(name), burst() {} };
+  return fx;
+}
+
+test('each gull she can see is a tap target on it, and there are none where there are no gulls', () => {
+  const w = world();
+  const d = middleOf(L, 'summer');
+  w.run(1, d);
+  const { targets } = w.birds;
+  assert.equal(targets.length, BIRDS.GULLS.COUNT);
+  const gulls = drawn(w.mesh('gull'));
+  targets.forEach((target, i) => {
+    assert.equal(target.name, 'gull');
+    const at = target.position(new Vector3());
+    assert.ok(at && at.distanceTo(gulls[i].position) < 1e-3, `gull ${i}'s hit sphere is on it (to the instance matrix's 32 bits)`);
+    assert.ok(target.radius >= 1.5 && target.radius <= 4, `${target.radius} m round: about its wingspan, drawn large`);
+  });
+  w.birds.setQuality(0.4);
+  w.run(0.1, d);
+  const shown = Math.ceil(BIRDS.GULLS.COUNT * 0.4);
+  targets.forEach((target, i) => assert.equal(target.position(new Vector3()) !== null, i < shown, `gull ${i} at the low tier`));
+
+  const spring = world();
+  spring.run(1, middleOf(L, 'spring'));
+  assert.ok(spring.birds.targets.every((target) => target.position(new Vector3()) === null));
+});
+
+test('a gull she taps squawks and flaps away 25 m, then glides back to its loop over 8 s', () => {
+  const d = middleOf(L, 'summer');
+  const tapped = world(), still = world();
+  tapped.run(1, d);
+  still.run(1, d);
+  const fx = effects();
+  tapped.birds.targets[1].react(1, fx);
+  assert.deepEqual(fx.played, ['gull']);
+  const gull = (w) => drawn(w.mesh('gull'))[1];
+  const gap = () => gull(tapped).position.distanceTo(gull(still).position);
+  let furthest = 0, when = 0, flapped = 0;
+  for (let t = 0.1; t <= 2.5; t += 0.1) {
+    tapped.run(0.1, d);
+    still.run(0.1, d);
+    flapped = Math.max(flapped, gull(tapped).amount);
+    if (gap() > furthest) [furthest, when] = [gap(), t];
+  }
+  assert.ok(furthest > 23 && furthest < 28, `it flies ${furthest.toFixed(1)} m off its loop`);
+  assert.ok(when > 1 && when < 2, `in about 1.5 s (${when.toFixed(1)} s)`);
+  assert.ok(flapped > 0.9, 'flapping hard');
+  assert.ok(gull(tapped).position.distanceTo(tapped.camera) > gull(still).position.distanceTo(still.camera) + 15, 'away from her');
+  tapped.run(7.2, d);
+  still.run(7.2, d);
+  assert.ok(gap() < 0.5, `back on its loop 9.7 s after the tap (${gap().toFixed(2)} m off)`);
 });

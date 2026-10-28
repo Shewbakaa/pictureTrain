@@ -17,6 +17,9 @@
 // (dressing.js `spots.perches`): the tops of fence posts and the snowmen's bobble hats. All of them are well clear of
 // her seat, and none come between her and a photo sign (signs stand 3.4 m out at eye height).
 //
+// The gulls answer her taps (`targets`, ride/taps.js): a tapped gull squawks, flaps hard and flies off away from her,
+// then glides back to its loop.
+//
 // Each kind follows its zones' weight (ambienceTiming.js `zoneWeights`), not a place in the ride: as a zone gives way
 // the gulls and the flock fly off, up and away, shrinking to nothing, and the robins fade; a ride without summer has
 // no gulls anywhere. The quality tier's `particles` share thins every kind.
@@ -100,6 +103,23 @@ const GULL_FLIGHT = Object.freeze({
   BOB: 2.5, BOB_RATE: 0.35, MARGIN: Object.freeze([10, 16]), TURN_BANK: 0.2, FLAP_EVERY: Object.freeze([8, 12]),
   FLAP_EASE: 0.3, CALLS: Object.freeze([11, 28]), QUIET: 30, AWAY: 40, RISE: 25,
 });
+
+/**
+ * A gull she taps flies AWAY metres straight away from her and UP metres higher over OUT seconds, flapping hard, then
+ * glides back to its loop over BACK seconds. Its hit sphere is REACH metres round: about its wingspan, drawn large.
+ */
+const GULL_FLEE = Object.freeze({ AWAY: 25, UP: 6, OUT: 1.5, BACK: 8, REACH: 2.5 });
+
+/**
+ * How far (0 to 1) a gull is off its loop `since` seconds after her tap: away fast and slowing over OUT, back over BACK.
+ * @param {number} since
+ */
+export function gullFlee(since) {
+  const { OUT, BACK } = GULL_FLEE;
+  if (!(since > 0) || since >= OUT + BACK) return 0;
+  if (since < OUT) return Math.sin((Math.PI / 2) * (since / OUT));
+  return 1 - smoothstep(OUT, OUT + BACK, since);
+}
 
 /**
  * Where each gull loops along the track (m ahead of the train, the range it is drawn from): the first, kept on every
@@ -526,15 +546,15 @@ function showBirds(mesh, count) {
  *   setQuality: (share: number) => void,
  *   setDensity: (share: number) => void,
  *   gullCall: () => void,
- *   targets: object[],
+ *   targets: import('../ride/taps.js').Tappable[],
  * }}
  *   Add `group` to the scene. Call `update` every frame with the seconds since the last one, the environment where
  *   the train is, the camera's world position, the train's distance along the track (m) and, if it is known, the way
  *   she is looking (`view`, a unit vector in the world). `setQuality` is the quality tier's `particles` share (0 to 1)
  *   of every kind; `setDensity` is the tier's `density`, so no robin sits on a fence the tier has thinned away.
  *   `gullCall` is a gull's call just heard: the gull nearest where she is looking (one inside her view whenever any
- *   is) flaps and banks, or without a `view` the one nearest the line ahead. `targets` are the birds' hit shapes for
- *   taps (none yet).
+ *   is) flaps and banks, or without a `view` the one nearest the line ahead. `targets` are the gulls ('gull'), for
+ *   taps; a tapped one answers on the seconds `update` adds up.
  */
 export function createBirds({ path, perches = [] }) {
   const { FLOCK, GULLS, ROBINS } = BIRDS;
@@ -575,6 +595,10 @@ export function createBirds({ path, perches = [] }) {
       flapAt: rngRange(rng, 0, GULL_FLIGHT.FLAP_EVERY[1]),
       flap: [rngRange(rng, 0, TAU), rngRange(rng, 2.2, 2.8)],
       called: -Infinity,
+      fled: -Infinity, // when she last tapped it
+      away: new Vector3(), // which way it flew off then: away from her, level
+      at: new Vector3(), // where it is, at the last update
+      shown: false, // whether it is drawn there, at a size to tap
     };
   });
   const gullSeen = new Float32Array(GULLS.COUNT); // how far (rad) each gull was from where she looks, at the last update
@@ -658,6 +682,7 @@ export function createBirds({ path, perches = [] }) {
     path.tangentAt(d, forward);
     const scale = SIZE * smoothstep(0, 0.35, weight);
     const flap = gulls.geometry.getAttribute('aFlap');
+    for (let i = 0; i < GULLS.COUNT; i++) gullBirds[i].shown = i < gullCount && scale > 0.25 * SIZE;
     for (let i = 0; i < gullCount; i++) {
       const g = gullBirds[i];
       // As summer gives way they fly off, out over the sea and up, shrinking away.
@@ -667,7 +692,12 @@ export function createBirds({ path, perches = [] }) {
       local.x -= offOut; next.x -= offOut;
       local.y += offUp; next.y += offUp;
       toWorld(local, d, position);
-      toWorld(next, d, ahead).sub(position);
+      toWorld(next, d, ahead);
+      // Tapped, it is off its loop, away from her and up, and heads the way it is going.
+      fleeFrom(g, time, position);
+      fleeFrom(g, time + 0.05, ahead);
+      ahead.sub(position);
+      g.at.copy(position);
       // It leans into its loop: down on the side its loop's middle is.
       path.frameAt(d + g.ahead, -g.out - offOut, local.y, centre).sub(position);
       const inside = Math.sign(across.crossVectors(ahead, centre).y) || 1;
@@ -680,6 +710,12 @@ export function createBirds({ path, perches = [] }) {
       gullSeen[i] = Math.acos(clamp(sight.dot(looking ? view : forward), -1, 1));
     }
     showBirds(gulls, gullCount);
+  }
+
+  /** Moves the point `at` of gull `g`'s loop to where it is at `when`, if she has tapped it: off and away from her. */
+  function fleeFrom(g, when, at) {
+    const off = gullFlee(when - g.fled);
+    if (off > 0) at.addScaledVector(g.away, GULL_FLEE.AWAY * off).addScaledVector(UP, GULL_FLEE.UP * off);
   }
 
   /**
@@ -790,8 +826,18 @@ export function createBirds({ path, perches = [] }) {
       callGull();
       selfCall = Math.max(selfCall, GULL_FLIGHT.QUIET); // a call heard: the sound is on, and the calls come from it
     },
-    /** @type {object[]} */
-    targets: [],
+    targets: gullBirds.map((g) => ({
+      name: 'gull',
+      radius: GULL_FLEE.REACH,
+      position: (out) => (gullsShown && g.shown ? out.copy(g.at) : null),
+      react(now, fx) {
+        // It squawks, banks and flaps hard (as for a call), and flies off straight away from her.
+        g.called = time;
+        g.fled = time;
+        g.away.subVectors(g.at, cameraAt).setY(0).normalize();
+        fx.play('gull');
+      },
+    })),
   };
 }
 

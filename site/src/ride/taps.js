@@ -11,6 +11,11 @@
 // A tappable animates itself and asks for its effects (a sound, a burst of hearts) through the TapEffects it is
 // handed, so the world modules never import the sound or the hearts.
 //
+// The cabin she rides in hides the world behind it: a tap on the dashboard or a pillar never reaches a balloon out
+// beyond it, nor scatters the fireflies. The router's `blockers` (the cabin's body) are checked once per tap, and a
+// target further along the ray than where it first meets them does not count, unless it is `aboard`, part of the cabin
+// itself (the lantern stands on the dashboard).
+//
 // `isTap` and `pickTarget` are pure; `createTapRouter` needs only a camera and something with a bounding rect (the
 // canvas), so the Node unit tests can import this file.
 
@@ -32,6 +37,7 @@ export const TAP = Object.freeze({ SLOP: 10, TIME: 350, MIN_ANGLE: 0.06, COOLDOW
  *   not showing
  * @property {number} radius  its hit sphere (m)
  * @property {(now: number, fx: TapEffects) => void} react  it answers a tap at `now` (s, the app's clock)
+ * @property {boolean} [aboard]  it is part of the cabin, which never hides it
  */
 
 /**
@@ -52,13 +58,15 @@ const spot = new Vector3();
 
 /**
  * The target a ray from `origin` along `direction` (a unit vector) hits: one whose position is within its radius of
- * the ray, or within MIN_ANGLE of it. Only targets ahead count, and the nearest along the ray wins.
+ * the ray, or within MIN_ANGLE of it. Only targets ahead count, and the nearest along the ray wins. Beyond
+ * `hiddenBeyond` metres along it (where the ray meets the cabin's body) only `aboard` targets count.
  * @param {Vector3} origin
  * @param {Vector3} direction
  * @param {Tappable[]} targets
+ * @param {number} [hiddenBeyond]
  * @returns {Tappable|null}
  */
-export function pickTarget(origin, direction, targets) {
+export function pickTarget(origin, direction, targets, hiddenBeyond = Infinity) {
   let best = null;
   let bestAlong = Infinity;
   for (const target of targets) {
@@ -66,6 +74,7 @@ export function pickTarget(origin, direction, targets) {
     toTarget.subVectors(spot, origin);
     const along = toTarget.dot(direction);
     if (!(along > 0) || along >= bestAlong) continue;
+    if (along > hiddenBeyond && !target.aboard) continue;
     const off = Math.sqrt(Math.max(0, toTarget.lengthSq() - along * along));
     if (off <= target.radius || Math.atan2(off, along) <= TAP.MIN_ANGLE) {
       best = target;
@@ -75,34 +84,56 @@ export function pickTarget(origin, direction, targets) {
   return best;
 }
 
+/** Whether `object` is drawn: it and everything it hangs from are visible. */
+function showing(object) {
+  for (let o = object; o; o = o.parent) if (!o.visible) return false;
+  return true;
+}
+
 /**
  * Turns her taps on the canvas into reactions.
  * @param {{
  *   camera: import('../three.js').Camera,
  *   element: { getBoundingClientRect: () => { left: number, top: number, width: number, height: number } },
  *   sources: Array<() => Tappable[]>,
+ *   blockers?: import('../three.js').Object3D[],
  *   fx: TapEffects,
  *   fallback?: (ray: import('../three.js').Ray, now: number) => void,
  * }} options  `element` is the canvas the camera draws into. Each of `sources` gives the targets one part of the
- *   world has now. `fallback` hears the taps that hit nothing (the fireflies scatter from them).
+ *   world has now. `blockers` are the meshes that hide the world behind them while they are drawn (the cabin's
+ *   body). `fallback` hears the taps that hit nothing and reach the world (the fireflies scatter from them).
  * @returns {{ tap: (clientX: number, clientY: number, now: number) => string|null,
- *             debugTargets: () => Array<{ name: string, x: number, y: number }> }}
+ *             debugTargets: () => Array<{ name: string, x: number, y: number, hidden: boolean }> }}
  *   `tap` finds what is at that point of the page (CSS px) and has it react at `now` (s), unless it reacted less
  *   than COOLDOWN ago. It returns the name of the target hit, cooling down or not, or null when it hit none.
- *   `debugTargets` says where each showing target in front of her is on the page (CSS px), for tests.
+ *   `debugTargets` says where each showing target in front of her is on the page (CSS px), and whether the cabin hides
+ *   it there, for tests.
  */
-export function createTapRouter({ camera, element, sources, fx, fallback }) {
+export function createTapRouter({ camera, element, sources, blockers = [], fx, fallback }) {
   const raycaster = new Raycaster();
   const ndc = new Vector2();
   /** @type {Map<string, number>} when each target (by name) last reacted */
   const reacted = new Map();
   /** @type {Tappable[]} every target now, gathered afresh for each tap */
   const targets = [];
+  const drawn = [];
+  const hits = [];
 
   function gather() {
     targets.length = 0;
     for (const source of sources) for (const target of source()) targets.push(target);
     return targets;
+  }
+
+  /** How far along the raycaster's ray it first meets a blocker that is drawn (m), or Infinity. */
+  function wall() {
+    drawn.length = 0;
+    for (const blocker of blockers) if (showing(blocker)) drawn.push(blocker);
+    hits.length = 0;
+    raycaster.intersectObjects(drawn, false, hits);
+    const near = hits.length > 0 ? hits[0].distance : Infinity;
+    hits.length = 0;
+    return near;
   }
 
   return {
@@ -112,10 +143,12 @@ export function createTapRouter({ camera, element, sources, fx, fallback }) {
       ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, 1 - ((clientY - rect.top) / rect.height) * 2);
       raycaster.setFromCamera(ndc, camera);
       const { ray } = raycaster;
-      const hit = pickTarget(ray.origin, ray.direction, gather());
+      const blocked = wall();
+      const hit = pickTarget(ray.origin, ray.direction, gather(), blocked);
       targets.length = 0;
       if (!hit) {
-        if (fallback) fallback(ray, now);
+        // A tap on the cabin's body is not a tap on the world.
+        if (fallback && blocked === Infinity) fallback(ray, now);
         return null;
       }
       const last = reacted.get(hit.name);
@@ -133,11 +166,18 @@ export function createTapRouter({ camera, element, sources, fx, fallback }) {
         if (!target.position(spot)) continue;
         // Behind her, a point projects onto the screen all the same; it is left out instead.
         if (camera.worldToLocal(toTarget.copy(spot)).z >= 0) continue;
+        // Whether the cabin is in the way: a tap there would meet it first.
+        raycaster.ray.origin.setFromMatrixPosition(camera.matrixWorld);
+        raycaster.ray.direction.subVectors(spot, raycaster.ray.origin);
+        const far = raycaster.ray.direction.length();
+        raycaster.ray.direction.normalize();
+        const hidden = !target.aboard && wall() < far;
         spot.project(camera);
         spots.push({
           name: target.name,
           x: rect.left + ((spot.x + 1) / 2) * rect.width,
           y: rect.top + ((1 - spot.y) / 2) * rect.height,
+          hidden,
         });
       }
       targets.length = 0;

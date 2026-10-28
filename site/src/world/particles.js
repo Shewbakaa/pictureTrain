@@ -5,7 +5,9 @@
 // the camera. Each particle has a fixed spot in the world plus its own motion (falling, swaying, wandering), and
 // is drawn wherever that lands inside the box: a particle that drifts or falls out of one side comes back in
 // at the other. So the train rolls through particles that stay put in the world, and the box never runs dry.
-// Fireflies are the exception: they hover in a low band round her eye height and never wrap up or down.
+// Fireflies are the exception: they hover in a low band round her eye height and never wrap up or down. A tap in the
+// evening that hits nothing scatters them (`scatterFrom`): those near the point she tapped dart away from it and
+// drift back to where they were wandering over a few seconds.
 //
 // Nothing ever pops in or out. Particles fade out within a few metres of the eye (so none smears across the
 // screen) and with distance, which hides the box's sides (all at least 20 m away, past the fade). They also
@@ -47,6 +49,20 @@ const FIREFLY_BOB = 0.5;
 
 /** Particles fade in and out over this distance (m) from the top and bottom of the box or band. */
 const EDGE_FADE = 0.6;
+
+/**
+ * How fireflies scatter from a tap: those within REACH (m) of the point are pushed straight away from it, PUSH metres
+ * at the point itself and less the further off they were, over OUT seconds, and ease back over BACK seconds. Up and
+ * down they go only LIFT of the way, so they keep to their band.
+ */
+const SCATTER = Object.freeze({ REACH: 6, PUSH: 3, OUT: 0.4, BACK: 4, LIFT: 0.5 });
+
+/** How far (0 to 1) the scattered fireflies are pushed out `since` seconds after the tap. */
+function scattered(since) {
+  if (!(since >= 0) || since >= SCATTER.OUT + SCATTER.BACK) return 0;
+  if (since < SCATTER.OUT) return Math.sin((Math.PI / 2) * (since / SCATTER.OUT));
+  return 0.5 + 0.5 * Math.cos((Math.PI * (since - SCATTER.OUT)) / SCATTER.BACK);
+}
 
 /**
  * How each kind is drawn and moves. `shape` picks the fragment shader's shape. Each particle's colour lies
@@ -171,11 +187,13 @@ const wrap = (value, size) => ((value % size) + size) % size;
  *   points: Points,
  *   setQuality: (share: number) => void,
  *   update: (dt: number, env: Env, cameraPosition: import('../three.js').Vector3, inside?: number) => void,
+ *   scatterFrom: (point: import('../three.js').Vector3, now: number) => void,
  * }}
  *   Add `points` to the scene. `setQuality` draws that share (0 to 1) of the particles: the quality tier's
  *   `particles`. Call `update` every frame with the seconds since the last one, the environment where the
  *   train is, the camera's world position and how far inside the tunnel she is (tunnel.js `tunnelInside`, 0 to 1:
- *   at 1 none show).
+ *   at 1 none show). `scatterFrom` scatters the fireflies near a point in the world at `now` (s, the clock the
+ *   seconds given to `update` add up to); it does nothing unless fireflies are showing.
  */
 export function createAmbientParticles({ maxCount = 260 } = {}) {
   const count = Math.max(1, Math.floor(maxCount));
@@ -248,6 +266,9 @@ export function createAmbientParticles({ maxCount = 260 } = {}) {
   let time = 0;
   let current = null;
   const showing = {};
+  // The last scatter: when it was (s), and how far (m) each firefly is pushed at its fullest.
+  const push = new Float32Array(count * 3);
+  let scatteredAt = -Infinity;
 
   /** Sets the colours, the shape and the blending for a new style (while it shows at opacity 0). */
   function applyStyle(style) {
@@ -280,6 +301,7 @@ export function createAmbientParticles({ maxCount = 260 } = {}) {
     const alphas = alphaAttribute.array;
     const spins = spinAttribute.array;
     const flips = flipAttribute.array;
+    const pushed = fireflies ? scattered(time - scatteredAt) : 0;
     for (let i = 0; i < drawCount; i++) {
       const a = i * 3;
       const ph = i * 4;
@@ -292,6 +314,11 @@ export function createAmbientParticles({ maxCount = 260 } = {}) {
         x += style.sway * 1.5 * Math.sin(time * 0.31 * p + phase[ph]);
         z += style.sway * 1.5 * Math.cos(time * 0.27 * p + phase[ph + 2]);
         up = FIREFLY_BOB + anchor[a + 1] * (height - 2 * FIREFLY_BOB) + FIREFLY_BOB * Math.sin(time * 0.53 * p + phase[ph + 1]);
+        if (pushed > 0) {
+          x += push[a] * pushed;
+          up += push[a + 1] * pushed;
+          z += push[a + 2] * pushed;
+        }
         const blink = 0.5 + 0.5 * Math.sin(time * 1.7 * p + phase[ph + 3]);
         alphas[i] = 0.15 + 0.85 * blink * blink;
         sizes[i] = style.size * sizeFactor[i] * (0.8 + 0.3 * blink);
@@ -325,5 +352,22 @@ export function createAmbientParticles({ maxCount = 260 } = {}) {
       geometry.setDrawRange(0, drawCount);
     },
     update,
+    scatterFrom(point, now) {
+      if (!points.visible || current === null || current.kind !== 'fireflies') return;
+      // From where each one is drawn now: straight away from the point, the nearest the furthest.
+      const { REACH, PUSH, LIFT } = SCATTER;
+      push.fill(0);
+      for (let i = 0; i < drawCount; i++) {
+        const a = i * 3;
+        const dx = positions[a] - point.x, dy = positions[a + 1] - point.y, dz = positions[a + 2] - point.z;
+        const off = Math.hypot(dx, dy, dz);
+        if (!(off < REACH)) continue;
+        const share = (PUSH * (1 - off / REACH)) / Math.max(off, 1e-3);
+        push[a] = dx * share;
+        push[a + 1] = dy * share * LIFT;
+        push[a + 2] = dz * share;
+      }
+      scatteredAt = now;
+    },
   };
 }

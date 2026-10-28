@@ -16,6 +16,7 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
     const { createKit } = await import('./src/audio/sfx.js');
     const { createTrainSounds } = await import('./src/audio/trainSounds.js');
     const { createTapSounds } = await import('./src/audio/tapSounds.js');
+    const { createNatureSounds } = await import('./src/audio/natureSounds.js');
     const { ECHO, createTunnelEcho } = await import('./src/audio/tunnelEcho.js');
     const { tunnelInside } = await import('./src/world/tunnel.js');
     const { TRAIN, chugInterval, chugLevel, clickLevel, bogieDelay } = await import('./src/audio/sfxTiming.js');
@@ -90,6 +91,28 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
     const lantern = await render(6, (ctx, mixer) => {
       const tap = createTapSounds(createKit(mixer, { budget: Infinity }));
       for (const at of [0.2, 2.2, 4.2]) tap.lantern(at);
+    });
+    // Her taps on the world (Task 14): a balloon cluster's pop, a snowman's jingle and a deer's rustle, three times each.
+    const tapSound = (name) => render(6, (ctx, mixer) => {
+      const tap = createTapSounds(createKit(mixer, { budget: Infinity }));
+      for (const at of [0.2, 2.2, 4.2]) tap[name](at);
+    });
+    const pop = await tapSound('pop');
+    const jingle = await tapSound('jingle');
+    const rustle = await tapSound('rustle');
+    // Every sound a tap can make, all at once, on a kit with the ride's own node budget: the cord's whistle, the
+    // lantern, the pop, the jingle, the rustle, a hot-air balloon's burner and a gull.
+    let tapsPlayed = [];
+    let tapsNodes = 0;
+    await render(3, (ctx, mixer) => {
+      const kit = createKit(mixer);
+      const tap = createTapSounds(kit);
+      const nature = createNatureSounds(kit);
+      tapsPlayed = [
+        createTrainSounds(kit).whistle('depart', 0.1), tap.lantern(0.1), tap.pop(0.1), tap.jingle(0.1), tap.rustle(0.1),
+        nature.burner(0.1, 1), nature.gull(0.1, 1),
+      ];
+      tapsNodes = kit.live;
     });
     const mix = await render(SECONDS, (ctx, mixer) => {
       playTune(ctx, mixer, 0);
@@ -169,6 +192,14 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
       shimmerLoudestDb: loudest(shimmer),
       lanternPeakDb: db(peak(lantern)),
       lanternLoudestDb: loudest(lantern),
+      popPeakDb: db(peak(pop)),
+      popLoudestDb: loudest(pop),
+      jinglePeakDb: db(peak(jingle)),
+      jingleLoudestDb: loudest(jingle),
+      rustlePeakDb: db(peak(rustle)),
+      rustleLoudestDb: loudest(rustle),
+      tapsAllPlayed: tapsPlayed.every(Boolean) ? 1 : 0,
+      tapsPeakNodes: tapsNodes,
       mixPeak: peak(mix),
       mixRmsDb: db(rms(mix, afterFade)),
       echoTailDb: after(inTunnel, 0.12, 0.3),
@@ -207,6 +238,14 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
   // The lantern she taps: a soft whoosh about −24 dBFS at its peak, like the ambience's passing sounds, under the music.
   expect(Math.abs(m.lanternPeakDb - -24)).toBeLessThanOrEqual(2);
   expect(m.lanternLoudestDb).toBeLessThan(m.musicNewLoudestDb);
+  // The world's tap sounds: about −24 dBFS at their peaks too, under the music; and every sound a tap can make, fired
+  // at once, fits in the 40-node budget with none skipped.
+  for (const key of ['pop', 'jingle', 'rustle']) {
+    expect(Math.abs(m[`${key}PeakDb`] - -24), key).toBeLessThanOrEqual(2);
+    expect(m[`${key}LoudestDb`], key).toBeLessThan(m.musicNewLoudestDb);
+  }
+  expect(m.tapsAllPlayed).toBe(1);
+  expect(m.tapsPeakNodes).toBeLessThanOrEqual(40);
   expect(m.sighHeardS).toBeGreaterThanOrEqual(1.2);
   expect(m.sighHeardS).toBeLessThanOrEqual(2);
   // The tunnel's echo: a click at 570 m has a tail 120 to 300 ms after it that the same click at 400 m, out in the

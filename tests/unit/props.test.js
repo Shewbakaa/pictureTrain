@@ -130,15 +130,16 @@ test('a fence runs along X, so turning its front (+Z) to the track lines it up w
 });
 
 test('nothing reaches over the track bed from the nearest offset its zone allows', () => {
-  const reach = (g) => {
+  const reach = (g, [ox, , oz] = [0, 0, 0]) => {
     const p = g.attributes.position;
     let most = 0;
-    for (let i = 0; i < p.count; i++) most = Math.max(most, Math.hypot(p.getX(i), p.getZ(i)));
+    for (let i = 0; i < p.count; i++) most = Math.max(most, Math.hypot(p.getX(i) + ox, p.getZ(i) + oz));
     return most;
   };
   for (const id of ZONE_IDS) for (const rule of ZONES[id].props) for (const v of variantsOf(rule.type)) {
-    const { body, glow } = built(rule.type, v);
-    const gap = rule.minOffset - Math.max(reach(body), glow ? reach(glow) : 0) * rule.scale[1];
+    const { body, glow, parts = {} } = built(rule.type, v);
+    const most = Math.max(reach(body), glow ? reach(glow) : 0, ...Object.values(parts).map((p) => reach(p.geometry, p.offset)));
+    const gap = rule.minOffset - most * rule.scale[1];
     assert.ok(gap >= TRACK_BED_HALF_WIDTH, `${id} ${rule.type}#${v} reaches to ${gap.toFixed(2)} m from the centre line`);
   }
 });
@@ -233,8 +234,10 @@ test('a robin perches on the top of each of a fence\'s two posts, and on the sno
 
   const [bobble, ...more] = perchTops('snowman');
   assert.equal(more.length, 0);
-  const snowman = built('snowman').body.boundingBox;
-  assert.ok(Math.abs(bobble[1] - snowman.max.y) < 0.02, `on top of the hat: ${bobble[1].toFixed(3)} against ${snowman.max.y.toFixed(3)}`);
+  // The hat is a part of its own (Task 14), placed by its offset.
+  const { hat } = built('snowman').parts;
+  const hatTop = hat.geometry.boundingBox.max.y + hat.offset[1];
+  assert.ok(Math.abs(bobble[1] - hatTop) < 0.02, `on top of the hat: ${bobble[1].toFixed(3)} against ${hatTop.toFixed(3)}`);
   assert.ok(Math.hypot(bobble[0], bobble[2]) < 0.1, 'over the snowman\'s middle');
 });
 
@@ -243,4 +246,42 @@ test('nothing else has a perch', () => {
     if (type === 'fence' || type === 'snowman') continue;
     assert.deepEqual(perchTops(type), [], type);
   }
+});
+
+// ---------------------------------------------------------------------------------------------
+// The snowman's arm and hat (Task 14): parts of their own, so a tap can wave the one and hop the other.
+// ---------------------------------------------------------------------------------------------
+
+/** The snowman as one geometry before its arm and hat came apart (its triangles, then). */
+const SNOWMAN_TRIANGLES = 550;
+
+test('the snowman has its arm and its hat as parts, and with its body they make the snowman it was', () => {
+  const { body, parts } = createPropGeometry('snowman');
+  assert.ok(parts && parts.arm && parts.hat);
+  const total = triangleCount(body) + triangleCount(parts.arm.geometry) + triangleCount(parts.hat.geometry);
+  assert.ok(Math.abs(total - SNOWMAN_TRIANGLES) <= 2, `${total} triangles in all`);
+});
+
+test('each part turns about its own origin and is put in place by its offset', () => {
+  const { body, parts } = built('snowman');
+  const { arm, hat } = parts;
+  for (const [name, part] of Object.entries(parts)) {
+    assert.equal(part.offset.length, 3, name);
+    assert.ok(part.geometry.attributes.color && part.geometry.attributes.normal, `${name} is coloured like the props`);
+  }
+  // The arm hangs from its shoulder: it reaches out from its origin, up and out to the snowman's side.
+  const reach = arm.geometry.boundingBox;
+  assert.ok(Math.hypot(reach.min.x, reach.min.y) < 0.05 || reach.min.x > -0.05, 'it starts at its origin');
+  assert.ok(reach.max.x > 0.4 && reach.max.y > 0.2, 'and reaches up and out');
+  const [sx, sy] = arm.offset;
+  assert.ok(Math.abs(sx) > 0.2 && Math.abs(sx) < 0.4 && sy > 0.9 && sy < 1.3, `the shoulder is on the body's side: ${arm.offset}`);
+  // The hat sits on its brim: it rises from its origin, which is on top of the head.
+  assert.ok(hat.geometry.boundingBox.min.y > -0.05 && hat.geometry.boundingBox.min.y < 0.05, 'its brim is at its origin');
+  assert.ok(hat.offset[1] > 1.4 && hat.offset[1] < 1.7, `on the head: ${hat.offset}`);
+  // The body is what is left: no part of it is up where the hat is.
+  assert.ok(body.boundingBox.max.y < hat.offset[1] + 0.25, 'the hat is no longer on the body');
+});
+
+test('no other prop has parts', () => {
+  for (const [type, v] of EVERY_PROP) if (type !== 'snowman') assert.equal(built(type, v).parts, undefined, `${type}#${v}`);
 });

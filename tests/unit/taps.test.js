@@ -2,7 +2,7 @@
 // router that turns a point on the screen into a reaction.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PerspectiveCamera, Vector3 } from '../../site/src/three.js';
+import { Mesh, MeshBasicMaterial, PerspectiveCamera, PlaneGeometry, Vector3 } from '../../site/src/three.js';
 import { TAP, createTapRouter, isTap, pickTarget } from '../../site/src/ride/taps.js';
 
 /** A target that stands at `at` (or nowhere, when `at` is null) and counts its reactions. */
@@ -191,4 +191,73 @@ test('debugTargets: where each showing target in front of her is on the canvas, 
   const spots = router.debugTargets();
   assert.deepEqual(spots.map((s) => s.name), ['middle']);
   assert.ok(Math.abs(spots[0].x - 230) < 1e-6 && Math.abs(spots[0].y - 450) < 1e-6, JSON.stringify(spots[0]));
+});
+
+// The cabin hides the world (Task 14): a tap on the dashboard or a pillar never reaches a balloon behind it.
+
+/** A square `size` m across, facing her, `z` m down the view and `x` m to the side: a piece of the cabin's body. */
+function wall(z, size = 0.1, x = 0) {
+  const mesh = new Mesh(new PlaneGeometry(size, size), new MeshBasicMaterial());
+  mesh.position.set(x, 0, z);
+  mesh.updateMatrixWorld(true);
+  return mesh;
+}
+
+/** A target that belongs to the cabin itself, which the cabin's body never hides. */
+const aboard = (name, at, radius) => Object.assign(target(name, at, radius), { aboard: true });
+
+test('pickTarget: beyond `hiddenBeyond` (where the cabin is in the way) only the cabin\'s own targets count', () => {
+  const balloon = target('balloon', new Vector3(0, 0, -12), 1.5);
+  const lantern = aboard('lantern', new Vector3(0, 0, -0.7), 0.1);
+  assert.equal(pickTarget(ORIGIN, AHEAD, [balloon], 0.6), null);
+  assert.equal(pickTarget(ORIGIN, AHEAD, [balloon], 20), balloon);
+  assert.equal(pickTarget(ORIGIN, AHEAD, [balloon, lantern], 0.6), lantern);
+  const moth = target('moth', new Vector3(0, 0, -0.4), 0.1);
+  assert.equal(pickTarget(ORIGIN, AHEAD, [balloon, moth], 0.6), moth, 'a world target in front of the cabin still counts');
+});
+
+test('a tap on the cabin\'s body does not reach a world target behind it; with the body out of the way, it does', () => {
+  const dash = wall(-0.6);
+  const balloon = target('balloon', new Vector3(0, 0, -12), 1.5);
+  const router = createTapRouter({ camera: camera(), element: screen(), sources: [() => [balloon]], blockers: [dash], fx: noFx() });
+  assert.equal(router.tap(200, 400, 0), null, 'the tap lands on the dashboard');
+  assert.equal(balloon.reactions.length, 0);
+  // A hidden cabin (the finale) hides nothing.
+  dash.visible = false;
+  assert.equal(router.tap(200, 400, 1), 'balloon');
+  dash.visible = true;
+  // Nor does a piece of the cabin off to the side of the tap.
+  dash.position.x = 2;
+  dash.updateMatrixWorld(true);
+  assert.equal(router.tap(200, 400, 5), 'balloon');
+  assert.equal(balloon.reactions.length, 2);
+});
+
+test('the cabin never hides its own targets, and a tap on its body is not a tap on the world: no fallback', () => {
+  let fellThrough = 0;
+  const lantern = aboard('lantern', new Vector3(0, 0, -0.7), 0.1);
+  const sources = [() => [lantern]];
+  const router = createTapRouter({ camera: camera(), element: screen(), sources, blockers: [wall(-0.6)], fx: noFx(), fallback: () => { fellThrough += 1; } });
+  assert.equal(router.tap(200, 400, 0), 'lantern');
+  sources.length = 0;
+  assert.equal(router.tap(200, 400, 5), null);
+  assert.equal(fellThrough, 0, 'the fireflies do not scatter from a tap on the dashboard');
+  assert.equal(router.tap(399, 400, 10), null);
+  assert.equal(fellThrough, 1, 'but do from one beside it');
+});
+
+test('debugTargets says which targets the cabin hides from her', () => {
+  const router = createTapRouter({
+    camera: camera(),
+    element: screen(),
+    sources: [() => [
+      target('behind-the-dash', new Vector3(0, 0, -12), 1.5),
+      target('beside-it', new Vector3(1.5, 0, -12), 1.5),
+      aboard('lantern', new Vector3(0, 0, -0.7), 0.1),
+    ]],
+    blockers: [wall(-0.6)],
+    fx: noFx(),
+  });
+  const hidden = Object.fromEntries(router.debugTargets().map((t) => [t.name, t.hidden]));
+  assert.deepEqual(hidden, { 'behind-the-dash': true, 'beside-it': false, lantern: false });
 });

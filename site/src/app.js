@@ -25,7 +25,11 @@
 // Her seat moves with the train: a gentle rock, a drop as each bogie strikes a rail joint, a tip as it pulls away or
 // brakes (ride/trainMotion.js), all of it left out if her phone asks for less motion.
 // Some things answer her taps (ride/taps.js): a touch that ends as a tap rather than a drag finds what she tapped, and
-// it answers: the whistle cord in the cabin's roof tugs and the train whistles, the lantern flares.
+// it answers: the whistle cord in the cabin's roof tugs and the train whistles, the lantern flares, a hot-air balloon's
+// burner roars and it rises, a balloon cluster hops with a pop and a burst of hearts, a snowman waves and its hat hops
+// with a jingle, a gull squawks and flaps off, a deer looks up and bounds away with a rustle, and the two of them at a
+// stop wave (their pet hops). In the evening a tap on the air scatters the fireflies. The cabin's body hides the world
+// behind it from her taps.
 //
 // At the Day 365 station the ride ends in the finale (finale/finale.js): under a blush fade her seat gives way to
 // the train seen from outside, the two of them meet on the platform (a little dog or cat trots over with him, and doves
@@ -57,6 +61,7 @@ import { BIRD_MATERIAL, createBirds } from './world/birds.js';
 import { createButterflies } from './world/butterflies.js';
 import { createDeer } from './world/deer.js';
 import { createAmbientParticles } from './world/particles.js';
+import { createHeartBurst } from './world/heartBurst.js';
 import { createPhotoSign, placeCouple, placeSign, SIGN, signLookYaw, signTurn, turnSign } from './world/signs.js';
 import { createStopCouple } from './world/stopCouple.js';
 import { petFor } from './world/pets.js';
@@ -119,6 +124,12 @@ const TUNNEL_DIM = 0.75;
 
 /** How often the ?stats=1 readout refreshes (s). */
 const STATS_EVERY = 0.5;
+
+/**
+ * A tap on the evening air (one that hits nothing) scatters the fireflies from this far along it (m), while the evening
+ * has more than EVENING of the scenery.
+ */
+const FIREFLY_TAP = Object.freeze({ REACH: 6, EVENING: 0.5 });
 
 /** How long the blush takes to cover the screen for a jump along the timeline, and again to lift (ms). */
 const JUMP_FADE_MS = 350;
@@ -203,7 +214,12 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   // Butterflies over the spring meadow (keeping clear of the photo signs), and the deer at the autumn forest's edge.
   const butterflies = createButterflies({ path, layout });
   const deer = createDeer({ layout, path });
-  scene.add(dressing.group, skyDecor.group, nightSky.group, particles.points, smoke.points, birds.group, butterflies.mesh, deer.group);
+  // The hearts that burst out of a balloon cluster she taps.
+  const hearts = createHeartBurst();
+  scene.add(
+    dressing.group, skyDecor.group, nightSky.group, particles.points, smoke.points, birds.group, butterflies.mesh, deer.group,
+    hearts.points,
+  );
 
   // A photo sign at every stop, and the two of them beside it, posed for the moment (unless its pose is 'none'), with
   // a little dog or cat at their feet (unless content.js pets says 'none').
@@ -443,10 +459,31 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   let wakeLock = null;
 
   // Her drags turn her head, and her taps reach the world (ride/taps.js). What she taps answers with its own
-  // animation and asks for its sound through `fx`, which plays nothing until the sound is made at Begin. The finale
-  // directs the camera itself, so taps rest while it plays.
-  const fx = { play: (name) => sfx && sfx.play(name), burst: () => {} };
-  const taps = createTapRouter({ camera, element: renderer.domElement, sources: [() => cabin.targets], fx });
+  // animation and asks for its sound (and a balloon cluster for its hearts) through `fx`, which plays nothing until the
+  // sound is made at Begin. The cabin's body hides the world behind it, and in the tunnel the balloons are out of sight.
+  // A tap that hits nothing scatters the fireflies in the evening, silently. The finale directs the camera itself, so
+  // taps rest while it plays.
+  const fx = { play: (name) => sfx && sfx.play(name), burst: (at) => hearts.burst(at) };
+  const couples = roadside.flatMap((spot) => (spot.couple ? spot.couple.targets : []));
+  const outOfSight = [];
+  const scatterAt = new Vector3();
+  const taps = createTapRouter({
+    camera,
+    element: renderer.domElement,
+    sources: [
+      () => cabin.targets,
+      () => dressing.targetsNear(ride.distance),
+      () => (tunnelInside(span, ride.distance) > 0 ? outOfSight : skyDecor.targets),
+      () => birds.targets,
+      () => deer.targets,
+      () => couples,
+    ],
+    blockers: cabin.blockers,
+    fx,
+    fallback: (ray, now) => {
+      if (zoneWeights(env, zoneShare).evening > FIREFLY_TAP.EVENING) particles.scatterFrom(ray.at(FIREFLY_TAP.REACH, scatterAt), now);
+    },
+  });
   attachPointerControls(renderer.domElement, look, {
     onTap: (x, y) => {
       if (finale.active) return;
@@ -524,6 +561,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     butterflies.update(dt, env, eye, d); // their wings flap on the birds' clock, which birds.update keeps
     deer.update(dt, d, elapsed);
     dressing.update(dt, elapsed);
+    hearts.update(dt);
     updateWind(elapsed, windStrength(env));
     cabin.update(dt, ride.speed, elapsed);
     if (terrain.water) {

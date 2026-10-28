@@ -8,7 +8,7 @@ import { POSES } from '../../site/src/content/normalize.js';
 import { createPropGeometry } from '../../site/src/world/props.js';
 import { COUPLE_HALF_WIDTH } from '../../site/src/world/figures.js';
 import { PET_COATS, PET_RADIUS } from '../../site/src/world/pets.js';
-import { Box3, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from '../../site/src/three.js';
+import { Box3, Group, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from '../../site/src/three.js';
 
 const STANDING = POSES.filter((pose) => pose !== 'none');
 const FIELDS = ['leftLeg', 'rightLeg', 'leftArm', 'rightArm', 'bob', 'leftArmOut', 'rightArmOut', 'headTurn', 'headTilt', 'sit'];
@@ -336,4 +336,54 @@ test('react makes them wave a moment later, for 2 s', () => {
   assert.ok(raised() > before + 2, `her arm goes up (${before} → ${raised()})`);
   couple.update(12.5);
   assert.ok(Math.abs(raised() - before) < 0.2, 'and comes down');
+});
+
+// ---------------------------------------------------------------------------------------------
+// Taps (Task 14): the two of them, and their pet, answer her taps, silently.
+// ---------------------------------------------------------------------------------------------
+
+test('the couple and their pet are tap targets: they wave, it hops, and neither makes a sound', async () => {
+  const { pickTarget } = await import('../../site/src/ride/taps.js');
+  const fx = { played: [], play: (name) => fx.played.push(name), burst() { throw new Error('no hearts'); } };
+  const pet = { kind: 'dog', coat: PET_COATS.dog[0] };
+  const couple = createStopCouple(characters, 'holding-hands', pet, 'right');
+  const twin = createStopCouple(characters, 'holding-hands', pet, 'right');
+  for (const c of [couple, twin]) {
+    c.group.position.set(5, 0, -20);
+    c.group.updateMatrixWorld(true);
+  }
+  const [them, dog] = couple.targets;
+  assert.deepEqual(couple.targets.map((t) => t.name), ['couple', 'pet']);
+  const middle = them.position(new Vector3());
+  assert.ok(Math.hypot(middle.x - 5, middle.z + 20) < 0.1 && middle.y > 0.7 && middle.y < 1.2, `round them: ${middle.toArray()}`);
+  assert.ok(them.radius >= couple.halfWidth && them.radius <= 1.2, `${them.radius} m round`);
+  const feet = dog.position(new Vector3());
+  const petAt = couple.pet.group.getWorldPosition(new Vector3());
+  assert.ok(Math.hypot(feet.x - petAt.x, feet.z - petAt.z) < 0.1 && feet.y < 0.5, `round the pet: ${feet.toArray()}`);
+  assert.ok(dog.radius >= 0.25 && dog.radius <= 0.5);
+  // The pet sits in front of them, so a tap at its feet reaches it, not them.
+  const eye = new Vector3(5, 2, -8);
+  assert.equal(pickTarget(eye, feet.clone().sub(eye).normalize(), couple.targets), dog);
+  assert.equal(pickTarget(eye, middle.clone().sub(eye).normalize(), couple.targets), them);
+
+  them.react(7, fx);
+  dog.react(7, fx);
+  assert.deepEqual(fx.played, [], 'no sound for either');
+  couple.update(7.6);
+  twin.update(7.6);
+  const arms = (c) => ['her', 'him'].flatMap((who) => ['leftArm', 'rightArm'].flatMap((bone) => boneOf(c, who, bone).rotation.toArray().slice(0, 3)));
+  assert.notDeepEqual(arms(couple), arms(twin), 'they wave');
+  assert.notEqual(couple.pet.group.getObjectByName('dog-body').position.y, twin.pet.group.getObjectByName('dog-body').position.y, 'it hops');
+
+  // Not drawn, not there.
+  couple.group.visible = false;
+  assert.equal(them.position(new Vector3()), null);
+  assert.equal(dog.position(new Vector3()), null);
+  couple.group.visible = true;
+  const roadside = new Group();
+  roadside.add(couple.group);
+  roadside.visible = false;
+  assert.equal(them.position(new Vector3()), null, 'nor while the stop they stand at is out of range');
+
+  assert.deepEqual(createStopCouple(characters, 'sitting').targets.map((t) => t.name), ['couple'], 'no pet, no pet target');
 });

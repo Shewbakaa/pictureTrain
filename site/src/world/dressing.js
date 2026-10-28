@@ -17,6 +17,11 @@
 // thinned with it. The balloon clusters sway and bob on their strings (`update`). The trees, bushes, flowers and
 // grass sway in the breeze, in the vertex shader of their own material (wind.js).
 //
+// The balloon clusters and the snowmen answer her taps (ride/taps.js; `targetsNear` gives those near the train): a
+// cluster hops on its peg with a soft pop and a burst of hearts out of its top, and a snowman waves its raised arm and
+// its hat hops, with a jingle. A snowman's arm and hat are two more instanced meshes beside its body's (props.js
+// `parts`), in the same order and thinned with it, so they can move while the rest of it stands still.
+//
 // It also says where things stand that others need (`spots`): the top of every house's and snowy cottage's chimney in
 // the world, for the smoke, and every fence post's and snowman's top, where the robins perch (birds.js). Each has the
 // share of the density (`rank`) above which its prop is drawn, so the smoke and the robins go with their prop when a
@@ -26,7 +31,7 @@
 
 import { BufferGeometry, Float32BufferAttribute, Group, InstancedMesh, Matrix4, Points, Quaternion, Vector3 } from '../three.js';
 import { MATERIALS } from '../render/materials.js';
-import { clamp } from '../util/math.js';
+import { clamp, smoothstep } from '../util/math.js';
 import { createRng } from '../util/rng.js';
 import { envAt } from './environment.js';
 import { chimneyTop, createPropGeometry, perchTops } from './props.js';
@@ -43,6 +48,7 @@ export const DRESSING = Object.freeze({
   DRY: TERRAIN.WATER_LEVEL + 0.1, // a prop whose ground is lower than this would stand in the sea, so it is left out
   SINK: 0.08,                     // every prop sits this far into the ground: the ground mesh only follows the hills to within about that
   TUNNEL_CLEAR: 10,               // no prop stands over the tunnel, nor within this far of either of its portals
+  TAP_RANGE: 100,                 // a prop she can tap is a target within this far of the train along the track: beyond, the fog has it
 });
 
 /**
@@ -72,6 +78,22 @@ const MAX_FOOT = 2.5;
 
 /** How a balloon cluster moves: tilts (rad) about its peg, stretches on its strings (a share of its height), over these periods (s). */
 const BALLOON_SWAY = Object.freeze({ TILT: 0.05, STRETCH: 0.025, PERIODS: [5.3, 6.7, 3.9] });
+
+/**
+ * A tapped balloon cluster hops HOP metres on its peg over TIME seconds. Its hit sphere is REACH metres round (times its
+ * size) on the middle of its balloons, DOWN metres under their top, where its hearts burst out.
+ */
+const CLUSTER_TAP = Object.freeze({ HOP: 0.3, TIME: 0.6, REACH: 1.1, DOWN: 0.75 });
+
+/**
+ * A tapped snowman waves its raised arm WAVES times over TIME seconds, lifting it LIFT (rad) further up over the first
+ * RAISE of that time (and down again over the last), swinging it SWING (rad) either way; and its hat hops HOP metres
+ * over HOP_TIME seconds, tipping TIP (rad) as it goes. Its hit sphere is REACH metres round (times its size), AT metres
+ * up its middle.
+ */
+const SNOWMAN_TAP = Object.freeze({
+  WAVES: 3, TIME: 1.5, RAISE: 0.15, LIFT: 0.6, SWING: 0.4, HOP: 0.1, HOP_TIME: 0.45, TIP: 0.15, REACH: 0.9, AT: 1,
+});
 
 const UP = new Vector3(0, 1, 0);
 const X_AXIS = new Vector3(1, 0, 0);
@@ -108,11 +130,14 @@ function footprintRadius(geometry) {
  * @returns {{
  *   group: Group, setDensity: (share: number) => void, update: (dt: number, time: number) => void,
  *   spots: { chimneys: Chimney[], perches: Perch[] },
+ *   targetsNear: (distance: number) => import('../ride/taps.js').Tappable[],
  * }}
  *   Add `group` to the scene. `setDensity` draws that share (0 to 1) of every mesh's props: the quality tier's
- *   `density`. Call `update` every frame with the seconds since the last frame and the seconds since the start.
- *   `spots` lists where things stand: `chimneys`, the top of every chimney (smoke.js), and `perches`, the top of
- *   every fence post and snowman (birds.js).
+ *   `density`. Call `update` every frame with the seconds since the last frame and the seconds since the start (the
+ *   clock a tap's reaction starts on). `spots` lists where things stand: `chimneys`, the top of every chimney
+ *   (smoke.js), and `perches`, the top of every fence post and snowman (birds.js). `targetsNear` gives the balloon
+ *   clusters ('balloons') and snowmen ('snowman') drawn within DRESSING.TAP_RANGE of the train at `distance` along the
+ *   track (m), for taps; the list is the same array every call, refilled.
  */
 export function createDressing({ path, layout, seed = 1 }) {
   const group = new Group();
@@ -121,10 +146,11 @@ export function createDressing({ path, layout, seed = 1 }) {
   const tunnel = tunnelSpan(layout);
   const bare = tunnel ? [tunnel.from - DRESSING.TUNNEL_CLEAR, tunnel.to + DRESSING.TUNNEL_CLEAR] : null;
   const env = envAt(layout, 0);
-  const geometries = new Map(); // 'type#variant' → { body, glow, foot }, built once and shared by every zone
+  const geometries = new Map(); // 'type#variant' → { body, glow, parts, foot }, built once and shared by every zone
   /** @type {Array<{ mesh: InstancedMesh|Points, total: number }>} */
   const meshes = [];
   const balloons = [];
+  const snowmen = [];
   const matrix = new Matrix4();
   const position = new Vector3();
   const turn = new Quaternion();
@@ -147,8 +173,8 @@ export function createDressing({ path, layout, seed = 1 }) {
       if (ground(p.d, p.offset) < DRESSING.DRY) continue;
       const key = `${p.type}#${p.variant}`;
       if (!geometries.has(key)) {
-        const { body, glow } = createPropGeometry(p.type, p.variant);
-        geometries.set(key, { body, glow, foot: footprintRadius(body) });
+        const { body, glow, parts } = createPropGeometry(p.type, p.variant);
+        geometries.set(key, { body, glow, parts, foot: footprintRadius(body) });
       }
       const r = geometries.get(key).foot * p.scale;
       const y = Math.min(ground(p.d, p.offset), ground(p.d - r, p.offset), ground(p.d + r, p.offset),
@@ -159,7 +185,7 @@ export function createDressing({ path, layout, seed = 1 }) {
 
     for (const [key, list] of byKind) {
       list.sort((a, b) => a.priority - b.priority);
-      const { body, glow } = geometries.get(key);
+      const { body, glow, parts } = geometries.get(key);
       const [type, variant] = key.split('#');
       const name = `props-${zone.id}-${type}-${variant}`;
       const solid = new InstancedMesh(body, swayMaterialFor(type) ?? MATERIALS.solid, list.length);
@@ -200,14 +226,36 @@ export function createDressing({ path, layout, seed = 1 }) {
         meshes.push({ mesh: halos, total: list.length });
       }
       if (type === 'balloon_cluster') balloons.push({ mesh: solid, placements: list });
+      if (type === 'snowman') {
+        // Its arm and its hat, each on the snowman where its part goes, in the same order as the bodies.
+        const moving = {};
+        for (const [part, { geometry, offset }] of Object.entries(parts)) {
+          const mesh = new InstancedMesh(geometry, MATERIALS.solid, list.length);
+          mesh.name = `${name}-${part}`;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          const at = new Matrix4().makeTranslation(...offset);
+          list.forEach((p, i) => {
+            solid.getMatrixAt(i, matrix);
+            mesh.setMatrixAt(i, matrix.multiply(at));
+          });
+          mesh.computeBoundingSphere();
+          group.add(mesh);
+          meshes.push({ mesh, total: list.length });
+          moving[part] = { mesh, offset: new Vector3(...offset) };
+        }
+        snowmen.push({ mesh: solid, placements: list, ...moving });
+      }
     }
   });
 
-  // Each balloon cluster sways to its own rhythm.
+  // Each balloon cluster sways to its own rhythm, and hops when she taps it.
   const rng = createRng(seed * 7919 + 13);
   const swaying = balloons.map(({ mesh, placements }) => ({
     mesh,
-    clusters: placements.map((p) => ({ x: p.x, y: p.y, z: p.z, rotY: p.rotY, scale: p.scale, phase: [rng(), rng(), rng()].map((u) => u * Math.PI * 2) })),
+    clusters: placements.map((p) => ({
+      x: p.x, y: p.y, z: p.z, rotY: p.rotY, scale: p.scale, phase: [rng(), rng(), rng()].map((u) => u * Math.PI * 2), tapped: -Infinity,
+    })),
   }));
   const yaw = new Quaternion();
   const tiltX = new Quaternion();
@@ -215,20 +263,104 @@ export function createDressing({ path, layout, seed = 1 }) {
   const { TILT, STRETCH, PERIODS } = BALLOON_SWAY;
   const angular = PERIODS.map((period) => (2 * Math.PI) / period);
 
+  // Her taps. Each balloon cluster and snowman is a target, made once with where it stands along the track; the ones
+  // near the train are handed out (`targetsNear`).
+  /** @type {Array<{ d: number, mesh: InstancedMesh, i: number, target: import('../ride/taps.js').Tappable }>} */
+  const tappable = [];
+  const near = [];
+  const local = new Matrix4();
+  /** Where the point `at` (the prop's own frame) of the i-th prop of `mesh` is now, in the world. */
+  const onProp = (mesh, i, at, out) => {
+    mesh.getMatrixAt(i, local);
+    return out.copy(at).applyMatrix4(local);
+  };
+  balloons.forEach(({ mesh, placements }, m) => {
+    const box = mesh.geometry.boundingBox;
+    const middle = new Vector3((box.min.x + box.max.x) / 2, box.max.y - CLUSTER_TAP.DOWN, (box.min.z + box.max.z) / 2);
+    const top = new Vector3(middle.x, box.max.y, middle.z);
+    const burst = new Vector3();
+    swaying[m].clusters.forEach((c, i) => tappable.push({
+      d: placements[i].d,
+      mesh,
+      i,
+      target: {
+        name: 'balloons',
+        radius: CLUSTER_TAP.REACH * c.scale,
+        position: (out) => onProp(mesh, i, middle, out),
+        react(now, fx) {
+          c.tapped = now;
+          fx.burst(onProp(mesh, i, top, burst));
+          fx.play('pop');
+        },
+      },
+    }));
+  });
+  // A snowman's arm and hat move only while it answers a tap: `waving` lists those that are.
+  /** @type {Array<{ snowman: object, i: number, since: number }>} */
+  const waving = [];
+  const middleOfSnowman = new Vector3(0, SNOWMAN_TAP.AT, 0);
+  for (const snowman of snowmen) {
+    snowman.placements.forEach((p, i) => tappable.push({
+      d: p.d,
+      mesh: snowman.mesh,
+      i,
+      target: {
+        name: 'snowman',
+        radius: SNOWMAN_TAP.REACH * p.scale,
+        position: (out) => onProp(snowman.mesh, i, middleOfSnowman, out),
+        react(now, fx) {
+          const already = waving.find((w) => w.snowman === snowman && w.i === i);
+          if (already) already.since = now;
+          else waving.push({ snowman, i, since: now });
+          fx.play('jingle');
+        },
+      },
+    }));
+  }
+
+  /** How far the balloon cluster tapped `since` seconds ago is up its hop (m): up and down once. */
+  const hopAt = (since) => (since >= 0 && since < CLUSTER_TAP.TIME ? CLUSTER_TAP.HOP * Math.sin((Math.PI * since) / CLUSTER_TAP.TIME) : 0);
+
+  const swing = new Matrix4();
+  /** Puts the arm and hat of the i-th of `snowman` as they are `since` seconds into its answer (at rest, done or not begun). */
+  function poseSnowman(snowman, i, since) {
+    const { WAVES, TIME, RAISE, LIFT, SWING, HOP, HOP_TIME, TIP } = SNOWMAN_TAP;
+    const on = since >= 0 && since < TIME;
+    const u = on ? since / TIME : 0;
+    // The arm comes up, waves WAVES times about its shoulder (in the snowman's face, about its +Z), and comes down.
+    const raise = on ? smoothstep(0, RAISE, u) * (1 - smoothstep(1 - RAISE, 1, u)) : 0;
+    const angle = raise * (LIFT + SWING * Math.sin(2 * Math.PI * WAVES * u));
+    snowman.mesh.getMatrixAt(i, matrix);
+    snowman.arm.mesh.setMatrixAt(i, local.copy(matrix).multiply(swing.makeTranslation(snowman.arm.offset)).multiply(swing.makeRotationZ(angle)));
+    // The hat hops off its seat and tips a little, then lands.
+    const hop = since >= 0 && since < HOP_TIME ? Math.sin((Math.PI * since) / HOP_TIME) : 0;
+    position.copy(snowman.hat.offset).setY(snowman.hat.offset.y + HOP * hop);
+    snowman.hat.mesh.setMatrixAt(i, local.copy(matrix).multiply(swing.makeTranslation(position)).multiply(swing.makeRotationZ(-TIP * hop)));
+    snowman.arm.mesh.instanceMatrix.needsUpdate = true;
+    snowman.hat.mesh.instanceMatrix.needsUpdate = true;
+  }
+
   function update(dt, time) {
     for (let m = 0; m < swaying.length; m++) {
       const { mesh, clusters } = swaying[m];
       for (let i = 0; i < clusters.length; i++) {
         const c = clusters[i];
-        // Tilted about its peg and stretched up its strings, so the gift box stays on the ground.
+        // Tilted about its peg and stretched up its strings, so the gift box stays on the ground; hopping, if tapped.
         tiltX.setFromAxisAngle(X_AXIS, TILT * Math.sin(angular[0] * time + c.phase[0]));
         tiltZ.setFromAxisAngle(Z_AXIS, TILT * Math.sin(angular[1] * time + c.phase[1]));
         turn.multiplyQuaternions(yaw.setFromAxisAngle(UP, c.rotY), tiltX).multiply(tiltZ);
         const stretch = 1 + STRETCH * Math.sin(angular[2] * time + c.phase[2]);
         size.set(c.scale, c.scale * stretch, c.scale);
-        mesh.setMatrixAt(i, matrix.compose(position.set(c.x, c.y, c.z), turn, size));
+        mesh.setMatrixAt(i, matrix.compose(position.set(c.x, c.y + hopAt(time - c.tapped), c.z), turn, size));
       }
       mesh.instanceMatrix.needsUpdate = true;
+    }
+    for (let k = waving.length - 1; k >= 0; k--) {
+      const w = waving[k];
+      const since = time - w.since;
+      poseSnowman(w.snowman, w.i, since);
+      // Done: it stands at rest again.
+      if (!(since >= 0 && since < SNOWMAN_TAP.TIME)) waving.splice(k, 1);
     }
   }
 
@@ -244,5 +376,10 @@ export function createDressing({ path, layout, seed = 1 }) {
     },
     update,
     spots: { chimneys, perches },
+    targetsNear(distance) {
+      near.length = 0;
+      for (const t of tappable) if (t.i < t.mesh.count && Math.abs(t.d - distance) < DRESSING.TAP_RANGE) near.push(t.target);
+      return near;
+    },
   };
 }

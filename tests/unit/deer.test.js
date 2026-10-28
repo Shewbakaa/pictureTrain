@@ -22,8 +22,8 @@ const L = layoutOf(DEFAULT_ZONES);
 const PATH = pathOf(L);
 const autumnOf = (layout) => layout.zones.find((z) => z.id === 'autumn');
 
-/** A deer's two meshes, by name. */
-const partsOf = (deer) => ({ body: deer.getObjectByName('deer-body'), head: deer.getObjectByName('deer-head') });
+/** A deer's meshes, by name. */
+const partsOf = (deer) => ({ body: deer.getObjectByName('deer-body'), head: deer.getObjectByName('deer-head'), ears: deer.getObjectByName('deer-ears') });
 
 test('the numbers the deer are made of', () => {
   assert.ok(Object.isFrozen(DEER) && Object.isFrozen(DEER.SPOTS) && Object.isFrozen(DEER.OFFSET));
@@ -53,7 +53,7 @@ test('the default ride has a deer 30% and 70% of the way through the autumn, on 
   const { group, targets } = createDeer({ layout: L, path: PATH });
   assert.ok(group.isGroup);
   assert.equal(group.children.length, 2);
-  assert.deepEqual(targets, [], 'nothing to tap yet');
+  assert.equal(targets.length, 2, 'one to tap for each');
   const autumn = autumnOf(L);
   group.children.forEach((deer, k) => {
     const { distance, offset } = deer.userData;
@@ -68,14 +68,15 @@ test('the default ride has a deer 30% and 70% of the way through the autumn, on 
   assert.notEqual(group.children[0].userData.offset, group.children[1].userData.offset, 'each at its own distance from the track');
 });
 
-test('each deer is two meshes, the body and the head with its neck, drawn with the shared solid material', () => {
+test('each deer is three meshes, the body, the head with its neck and its ears, drawn with the shared solid material', () => {
   const { group } = createDeer({ layout: L, path: PATH });
   for (const deer of group.children) {
     const meshes = [];
     deer.traverse((o) => { if (o.isMesh) meshes.push(o); });
-    assert.equal(meshes.length, 2);
-    const { body, head } = partsOf(deer);
-    assert.deepEqual(meshes.sort((a, b) => a.name.localeCompare(b.name)), [body, head].sort((a, b) => a.name.localeCompare(b.name)));
+    assert.equal(meshes.length, 3);
+    const { body, head, ears } = partsOf(deer);
+    assert.deepEqual(meshes.sort((a, b) => a.name.localeCompare(b.name)), [body, head, ears].sort((a, b) => a.name.localeCompare(b.name)));
+    assert.equal(ears.parent, head, 'the ears go where the head goes, and flick on their own');
     for (const mesh of meshes) {
       assert.equal(mesh.material, MATERIALS.solid);
       assert.ok(mesh.geometry.attributes.color && mesh.geometry.attributes.normal, 'coloured like every model built in code');
@@ -150,4 +151,74 @@ test('a deer far from the train is not drawn, and is drawn again as it comes nea
   assert.ok(!other.visible, 'the other is still far off');
   update(1 / 30, deer.userData.distance + 20, 0);
   assert.ok(deer.visible && other.visible, 'both are near as the train goes on past the first');
+});
+
+// ---------------------------------------------------------------------------------------------
+// Taps (Task 14): a deer she taps looks up at her, flicks its ears and bounds off into the trees.
+// ---------------------------------------------------------------------------------------------
+
+/** TapEffects that note the sounds a reaction asks for. */
+function effects() {
+  const fx = { played: [], play: (name) => fx.played.push(name), burst() {} };
+  return fx;
+}
+
+test('each deer drawn is a tap target round its body', () => {
+  const herd = createDeer({ layout: L, path: PATH });
+  assert.equal(herd.targets.length, herd.group.children.length);
+  const [deer] = herd.group.children;
+  herd.update(1 / 30, deer.userData.distance - 200, 0);
+  assert.equal(herd.targets[0].position(new Vector3()), null, 'not while it is not drawn');
+  herd.update(1 / 30, deer.userData.distance - 40, 0);
+  const target = herd.targets[0];
+  assert.equal(target.name, 'deer');
+  const at = target.position(new Vector3());
+  assert.ok(Math.hypot(at.x - deer.position.x, at.z - deer.position.z) < 0.6, 'over the deer');
+  assert.ok(at.y - deer.position.y > 0.6 && at.y - deer.position.y < 1.6, `round its body, ${(at.y - deer.position.y).toFixed(2)} m up`);
+  assert.ok(target.radius >= 1 && target.radius <= 1.6, `${target.radius} m round`);
+});
+
+test('a deer she taps looks up, flicks its ears, bounds off 20 m in 1.5 s and hides until the train is 200 m past', () => {
+  const herd = createDeer({ layout: L, path: PATH });
+  const [deer] = herd.group.children;
+  const { head, ears } = partsOf(deer);
+  const at = deer.userData.distance;
+  const d = at - 60; // far enough that its head is down, grazing
+  herd.update(1 / 30, d, 3);
+  const home = deer.position.clone();
+  const fx = effects();
+  herd.targets[0].react(3, fx);
+  assert.deepEqual(fx.played, ['rustle']);
+  // It looks up at once, and flicks its ears.
+  let lookedUp = false, flicks = 0, last = ears.rotation.x;
+  for (let t = 3; t < 3.5; t += 1 / 60) {
+    herd.update(1 / 60, d, t);
+    if (Math.abs(head.rotation.x + DEER.HEAD_UP) < 0.05) lookedUp = true;
+    if (Math.sign(ears.rotation.x) !== Math.sign(last) && Math.abs(ears.rotation.x - last) > 1e-6) flicks++;
+    last = ears.rotation.x;
+  }
+  assert.ok(lookedUp, 'it looks up');
+  assert.ok(flicks >= 2, `its ears flick (${flicks} times past rest)`);
+  // Then it bounds off, out from the track, and is gone 1.5 s later, 20 m off.
+  const sideways = PATH.sideAt(at, new Vector3()).multiplyScalar(Math.sign(deer.userData.offset));
+  let furthest = 0, highest = 0;
+  for (let t = 3.5; t < 5.0; t += 1 / 60) {
+    herd.update(1 / 60, d, t);
+    if (!deer.visible) break;
+    const away = deer.position.clone().sub(home);
+    furthest = Math.max(furthest, away.dot(sideways));
+    highest = Math.max(highest, away.y);
+  }
+  assert.ok(furthest > 17 && furthest <= 20.01, `it bounds ${furthest.toFixed(1)} m out into the trees`);
+  assert.ok(highest > 0.3, 'in leaps');
+  herd.update(1 / 60, d, 5.1);
+  assert.equal(deer.visible, false, 'and is gone');
+  assert.equal(herd.targets[0].position(new Vector3()), null, 'and cannot be tapped');
+  // Hidden while the train comes by and goes on, until it is 200 m past; then it is back where it stood.
+  herd.update(1 / 30, at + 150, 20);
+  assert.equal(deer.visible, false);
+  herd.update(1 / 30, at + 201, 40);
+  herd.update(1 / 30, at - 60, 41); // the timeline takes her back to before it
+  assert.equal(deer.visible, true);
+  assert.ok(deer.position.distanceTo(home) < 1e-9, 'standing on its spot again');
 });

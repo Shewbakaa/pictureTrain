@@ -7,7 +7,8 @@
 //
 // Two of them answer her taps (ride/taps.js): the whistle cord tugs down and the train whistles, and the lantern
 // flares up warmly and settles. They are the cabin's `targets`; each animates itself in `update` and asks for its
-// sound through the effects the tap hands it.
+// sound through the effects the tap hands it. The rest of the cabin (`blockers`: the wood, what glows and the bunting)
+// hides the world behind it from her taps.
 //
 // The cabin hangs on the camera's rig (render/stage.js), so it rides along with her but stays put while she looks
 // around. A tall phone sees a narrow, tall slice of the world and a landscape screen a wide, short one, so the
@@ -410,12 +411,13 @@ function flareAt(t) {
  * @returns {{ group: Group, fit: (camera: import('../three.js').PerspectiveCamera) => void,
  *             update: (dt: number, speed: number, time: number) => void, setVisible: (visible: boolean) => void,
  *             pullCord: (now: number) => void, flareLantern: (now: number) => void,
- *             targets: import('../ride/taps.js').Tappable[] }}
+ *             targets: import('../ride/taps.js').Tappable[], blockers: import('../three.js').Object3D[] }}
  *   Add `group` to the camera's rig. `fit` lays it out for the camera's field of view and shape (call it whenever
  *   the screen changes; it does nothing if they have not). `update` bobs it with the train's speed (m/s), sways
  *   the bunting and plays the cord's tug and the lantern's flare; `time` is the seconds since the start, the clock
  *   `pullCord` and `flareLantern` start them on. `targets` are the cord's handle ('whistle-cord') and the lantern
- *   ('lantern'), which answer a tap with those and a sound; they are not showing while the cabin is hidden.
+ *   ('lantern'), which answer a tap with those and a sound; they are not showing while the cabin is hidden. `blockers`
+ *   are the meshes of the cabin's body, which hide the world behind them from a tap.
  */
 export function createCabin() {
   const group = new Group();
@@ -548,6 +550,7 @@ export function createCabin() {
     {
       name: 'whistle-cord',
       radius: REACH.CORD,
+      aboard: true,
       position: showing(handle),
       react(now, fx) {
         pullCord(now);
@@ -557,6 +560,7 @@ export function createCabin() {
     {
       name: 'lantern',
       radius: REACH.LANTERN,
+      aboard: true,
       position: showing(halo),
       react(now, fx) {
         flareLantern(now);
@@ -575,6 +579,7 @@ export function createCabin() {
     pullCord,
     flareLantern,
     targets,
+    blockers: [body, lit, flags],
     setVisible(visible) {
       group.visible = visible;
     },

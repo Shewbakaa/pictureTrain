@@ -12,6 +12,9 @@
 //
 // `glow` holds what should look lit whatever the light (lamp glass, house windows), for an unlit material.
 //
+// The snowman's raised arm and its hat are parts of their own (`parts`), so that a tap can wave the one and hop the
+// other (dressing.js): each is built round the point it turns about, and placed on the snowman by its offset.
+//
 // Colours are sRGB hex, soft and a little sweet, picked against each zone's ground and light in zones.js.
 // Foliage and other natural bits are jittered (geo.js `jitterColor`) by an rng seeded from the type and
 // variant, so a prop looks the same on every phone and every run.
@@ -423,7 +426,17 @@ function hayBale() {
 const SNOWMAN_HEAD = Object.freeze({ position: Object.freeze([0, 1.48, 0]), rotation: Object.freeze([0.06, 0, 0.1]) });
 const BOBBLE = Object.freeze({ AT: Object.freeze([0, 0.35, 0]), RADIUS: 0.075 });
 
-/** Three snowballs with a carrot nose, rosy cheeks, a red scarf, stick arms and a bobble hat, facing +Z. */
+/**
+ * The snowman's raised stick arm, the one on her right as she faces it, from its shoulder to its hand (m); and where
+ * its hat sits on its head, in the head's frame: the underside of the brim, which the hat hops from.
+ */
+const SNOWMAN_ARM = Object.freeze({ SHOULDER: Object.freeze([0.3, 1.1, 0]), HAND: Object.freeze([0.8, 1.42, 0.06]) });
+const HAT_SEAT = Object.freeze([0, 0.06, 0]);
+
+/**
+ * Three snowballs with a carrot nose, rosy cheeks, a red scarf, stick arms and a bobble hat, facing +Z. The raised arm
+ * and the hat are parts of their own, each round the point it turns about (its shoulder, the hat's seat on the head).
+ */
 function snowman() {
   const { snow, coal } = COLOURS;
   const head = [
@@ -433,22 +446,33 @@ function snowman() {
     part(cone(0.05, 0.24, 6), COLOURS.carrot, { position: [0, -0.01, 0.36], rotation: [Math.PI / 2, 0, 0] }),
     ...[[-0.075, -0.075, 0.236], [0, -0.098, 0.24], [0.075, -0.075, 0.236]].map((p) => part(sphere(0.022, 4, 3), coal, { position: p })),
     ...[-1, 1].map((side) => part(sphere(0.05, 4, 3), COLOURS.cheek, { position: [side * 0.155, -0.035, 0.2], scale: [1, 0.6, 0.45] })),
-    // The bobble hat: a dome, a turned-up brim and a pompom.
+  ];
+  // The bobble hat: a dome, a turned-up brim and a pompom, built on its seat.
+  const hat = moveParts([
     part(new SphereGeometry(0.25, 8, 4, 0, TAU, 0, Math.PI / 2), COLOURS.hat, { position: [0, 0.09, 0] }),
     part(cylinder(0.255, 0.268, 0.08, 8), '#ffffff', { position: [0, 0.1, 0] }),
     part(blob(BOBBLE.RADIUS, 0), '#ffffff', { position: [...BOBBLE.AT] }),
-  ];
-  return [
-    part(sphere(0.48, 7, 6), snow, { position: [0, 0.44, 0], scale: [1, 0.92, 1] }),
-    part(sphere(0.35, 7, 6), snow, { position: [0, 1.02, 0] }),
-    ...moveParts(head, { position: [...SNOWMAN_HEAD.position], rotation: [...SNOWMAN_HEAD.rotation] }),
-    part(sphere(0.04, 4, 3), coal, { position: [0, 1.12, 0.335] }),
-    part(sphere(0.04, 4, 3), coal, { position: [0, 0.94, 0.345] }),
-    part(cylinder(0.265, 0.295, 0.11, 8), COLOURS.scarf, { position: [0, 1.3, 0] }),
-    part(box(0.11, 0.34, 0.05), COLOURS.scarf, { position: [0.14, 1.17, 0.25], rotation: [0.3, 0, 0.15] }),
-    rod([0.3, 1.1, 0], [0.8, 1.42, 0.06], 0.028, 0.016, COLOURS.barkDark, 4),
-    rod([-0.3, 1.1, 0], [-0.78, 1.34, 0.1], 0.028, 0.016, COLOURS.barkDark, 4),
-  ];
+  ], { position: HAT_SEAT.map((v) => -v) });
+  const onHead = { position: [...SNOWMAN_HEAD.position], rotation: [...SNOWMAN_HEAD.rotation] };
+  const seat = new Vector3(...HAT_SEAT).applyEuler(new Euler(...SNOWMAN_HEAD.rotation)).add(new Vector3(...SNOWMAN_HEAD.position));
+  const { SHOULDER, HAND } = SNOWMAN_ARM;
+  return {
+    body: [
+      part(sphere(0.48, 7, 6), snow, { position: [0, 0.44, 0], scale: [1, 0.92, 1] }),
+      part(sphere(0.35, 7, 6), snow, { position: [0, 1.02, 0] }),
+      ...moveParts(head, onHead),
+      part(sphere(0.04, 4, 3), coal, { position: [0, 1.12, 0.335] }),
+      part(sphere(0.04, 4, 3), coal, { position: [0, 0.94, 0.345] }),
+      part(cylinder(0.265, 0.295, 0.11, 8), COLOURS.scarf, { position: [0, 1.3, 0] }),
+      part(box(0.11, 0.34, 0.05), COLOURS.scarf, { position: [0.14, 1.17, 0.25], rotation: [0.3, 0, 0.15] }),
+      rod([-0.3, 1.1, 0], [-0.78, 1.34, 0.1], 0.028, 0.016, COLOURS.barkDark, 4),
+    ],
+    parts: {
+      // Tipped as the head is, about its seat (its origin), so that placed there it sits on the head as it always has.
+      hat: { parts: moveParts(hat, { rotation: [...SNOWMAN_HEAD.rotation] }), at: seat.toArray() },
+      arm: { parts: [rod([0, 0, 0], HAND.map((v, i) => v - SHOULDER[i]), 0.028, 0.016, COLOURS.barkDark, 4)], at: [...SHOULDER] },
+    },
+  };
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -680,7 +704,10 @@ export function perchTops(type) {
 
 // ------------------------------------------------------------------------------------------------
 
-/** Each type's builder: (variant, rng) => parts, or { body, glow } for the types that glow. */
+/**
+ * Each type's builder: (variant, rng) => parts, or { body, glow } for the types that glow, or { body, parts } for the
+ * snowman, whose `parts` each give their own parts round their origin and `at`, where that origin goes on the prop.
+ */
 const BUILDERS = {
   tree_round: (v, rng) => roundTree(rng, COLOURS.leaves),
   tree_autumn: (v, rng) => [roundTree, tallTree, birch][v](rng, COLOURS.autumnLeaves[v]),
@@ -714,12 +741,20 @@ function seedOf(type, variant) {
 }
 
 /**
+ * @typedef {{ geometry: import('../three.js').BufferGeometry, offset: [number, number, number] }} PropPart
+ *   A piece of a prop that moves on its own: its geometry, round the point it turns about, and where that point is in
+ *   the prop's frame.
+ */
+
+/**
  * The geometry of one prop.
  * @param {string} type  one of PROP_TYPES
  * @param {number} [variant]  0 up to PROP_VARIANTS[type] (1 for types not listed there), exclusive
- * @returns {{ body: import('../three.js').BufferGeometry, glow: import('../three.js').BufferGeometry|null }}
- *   Fresh geometries every call, never shared, so the caller owns them. Both come from geo.js `mergeParts`;
- *   `glow` is non-null for lamp_post, house and cottage_snowy only.
+ * @returns {{ body: import('../three.js').BufferGeometry, glow: import('../three.js').BufferGeometry|null,
+ *             parts?: { arm: PropPart, hat: PropPart } }}
+ *   Fresh geometries every call, never shared, so the caller owns them. All come from geo.js `mergeParts`;
+ *   `glow` is non-null for lamp_post, house and cottage_snowy only. Only the snowman has `parts`: its raised arm,
+ *   round its shoulder, and its hat, round its seat on the head.
  */
 export function createPropGeometry(type, variant = 0) {
   if (!PROP_TYPES.includes(type)) throw new Error(`createPropGeometry: "${type}" is not a prop type`);
@@ -728,12 +763,18 @@ export function createPropGeometry(type, variant = 0) {
     throw new RangeError(`createPropGeometry: ${type} has no variant ${String(variant)} (it has ${variants})`);
   }
   const built = BUILDERS[type](variant, createRng(seedOf(type, variant)));
-  const { body, glow = [] } = Array.isArray(built) ? { body: built } : built;
+  const { body, glow = [], parts } = Array.isArray(built) ? { body: built } : built;
   const bodyGeometry = mergeParts(body);
   const glowGeometry = glow.length > 0 ? mergeParts(glow) : null;
-  // Stand the prop on the ground: its lowest point exactly at y = 0, the glow moved with it.
+  // Stand the prop on the ground: its lowest point exactly at y = 0, the glow and the parts moved with it.
   const lift = -bodyGeometry.boundingBox.min.y;
   bodyGeometry.translate(0, lift, 0);
   if (glowGeometry) glowGeometry.translate(0, lift, 0);
-  return { body: bodyGeometry, glow: glowGeometry };
+  const result = { body: bodyGeometry, glow: glowGeometry };
+  if (parts) {
+    result.parts = Object.fromEntries(Object.entries(parts).map(([name, { parts: pieces, at: [x, y, z] }]) => (
+      [name, { geometry: mergeParts(pieces), offset: [x, y + lift, z] }]
+    )));
+  }
+  return result;
 }

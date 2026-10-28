@@ -133,3 +133,65 @@ test('in the tunnel nothing falls: the particles fade out with how far inside sh
   }
   assert.deepEqual([...p.points.geometry.attributes.position.array], [...q.points.geometry.attributes.position.array]);
 });
+
+// Fireflies scatter from her tap (Task 14): the app calls scatterFrom with a point 6 m along a tap that hit nothing.
+
+/** Two identical particle systems run side by side in the evening for a second, one to scatter and one to compare. */
+function twins() {
+  const dt = 1 / 30;
+  const camera = new Vector3(4, 2.05, -800);
+  const tapped = createAmbientParticles({ maxCount: 200 });
+  const still = createAmbientParticles({ maxCount: 200 });
+  let time = 0;
+  const run = (seconds, zone = 'evening') => {
+    for (let t = 0; t < seconds - 1e-9; t += dt) {
+      time += dt;
+      tapped.update(dt, inside(zone), camera);
+      still.update(dt, inside(zone), camera);
+    }
+  };
+  const at = (p, i) => new Vector3().fromBufferAttribute(p.points.geometry.attributes.position, i);
+  run(1);
+  return { tapped, still, run, at, camera, now: () => time };
+}
+
+test('a firefly 2 m from the tap is pushed further away within 0.5 s, and back within 0.3 m of its path after 4.5 s', () => {
+  const { tapped, still, run, at, camera, now } = twins();
+  // A firefly a few metres in front of her, and a point 2 m from it.
+  let i = 0;
+  while (at(tapped, i).distanceTo(camera) > 10 || at(tapped, i).distanceTo(camera) < 4) i++;
+  const point = at(tapped, i).add(new Vector3(2, 0, 0));
+  tapped.scatterFrom(point, now());
+  run(0.5);
+  const pushed = at(tapped, i).distanceTo(point), path = at(still, i).distanceTo(point);
+  assert.ok(pushed > path + 0.5, `pushed out to ${pushed.toFixed(2)} m from the tap, against ${path.toFixed(2)} m`);
+  run(4);
+  const back = at(tapped, i).distanceTo(at(still, i));
+  assert.ok(back < 0.3, `back to within ${back.toFixed(3)} m of its path`);
+});
+
+test('only the fireflies within 6 m of the tap scatter, none more than 3 m, and none at all outside the evening', () => {
+  const { tapped, still, run, at, camera, now } = twins();
+  const point = camera.clone().add(new Vector3(0, 0, -6));
+  const near = [];
+  for (let i = 0; i < 200; i++) if (at(tapped, i).distanceTo(point) < 6) near.push(i);
+  assert.ok(near.length > 0, 'some fireflies are near the tap');
+  tapped.scatterFrom(point, now());
+  let most = 0;
+  for (let frame = 0; frame < 60; frame++) {
+    run(1 / 30);
+    for (let i = 0; i < 200; i++) {
+      const moved = at(tapped, i).distanceTo(at(still, i));
+      if (near.includes(i)) most = Math.max(most, moved);
+      else assert.ok(moved < 1e-4, `firefly ${i}, beyond 6 m, stays on its path`);
+    }
+  }
+  assert.ok(most > 1 && most <= 3.0001, `the nearest are pushed out up to 3 m (${most.toFixed(2)} m)`);
+
+  // Snow does not scatter.
+  const snow = twins();
+  snow.run(0.1, 'winter');
+  snow.tapped.scatterFrom(snow.camera.clone().add(new Vector3(0, 0, -6)), snow.now());
+  snow.run(0.5, 'winter');
+  for (let i = 0; i < 200; i++) assert.ok(snow.at(snow.tapped, i).distanceTo(snow.at(snow.still, i)) < 1e-6);
+});

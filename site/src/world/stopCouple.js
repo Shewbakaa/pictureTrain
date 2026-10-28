@@ -11,9 +11,13 @@
 // so does the pet: it sits PET_AHEAD in front of their middle, between them, facing the train like them. In front of
 // a dancing pair it sits a little further out, clear of the circle they turn in, however it turns itself.
 //
+// They answer her taps, silently (`targets`, ride/taps.js): the two of them wave (or, already waving, he twirls her),
+// and the pet, a target of its own round its paws, hops for joy. Sitting in front of them, it is the nearer of the two
+// to her, so a tap at its feet reaches it rather than them.
+//
 // DOM-free at import, so the Node unit tests can import it.
 
-import { Group, Mesh } from '../three.js';
+import { Group, Mesh, Vector3 } from '../three.js';
 import { MATERIALS } from '../render/materials.js';
 import { createFigure, sittingLift } from './figures.js';
 import { BENCH, coupleLayout, mirrorPose, posesAt } from './poses.js';
@@ -24,16 +28,29 @@ import { createPet, PET_RADIUS } from './pets.js';
 const PET_AHEAD = 0.45;
 
 /**
+ * Their hit spheres for taps: the couple's is round their middle, COUPLE_AT metres up, at least COUPLE_REACH metres
+ * round (or as wide as they stand); the pet's is PET_REACH round its body, PET_AT up.
+ */
+const HIT = Object.freeze({ COUPLE_AT: 0.9, COUPLE_REACH: 0.85, PET_AT: 0.2, PET_REACH: 0.35 });
+
+/** Whether `object` is drawn: it and everything it hangs from are visible. */
+function drawn(object) {
+  for (let o = object; o; o = o.parent) if (!o.visible) return false;
+  return true;
+}
+
+/**
  * The two of them at a stop.
  * @param {{ her: { skin: string, hair: string, outfit: string }, you: { skin: string, hair: string, outfit: string } }} characters
  * @param {string} pose  one of content/normalize.js POSES but 'none' (the moment's `pose`)
  * @param {import('./pets.js').PetLook|null} [pet]  their pet at their feet (world/pets.js `petFor`), or none
  * @param {'left'|'right'} [side]  the side of the track the stop is on (world/layout.js Stop `side`)
  * @returns {{ group: Group, update: (time: number) => void, react: (now: number) => void, halfWidth: number,
- *             pet: ReturnType<typeof createPet>|null }}
+ *             pet: ReturnType<typeof createPet>|null, targets: import('../ride/taps.js').Tappable[] }}
  *   Call `update` every frame they are drawn, with the seconds since the start. `react` is a tap on them at `now`
  *   (the same clock): they wave for a moment. `halfWidth`: how far either side of their middle they reach (m), their
- *   pet among them, for `placeCouple`. `pet` is their pet, for a tap on it (its own `react`), or null.
+ *   pet among them, for `placeCouple`. `pet` is their pet, for a tap on it (its own `react`), or null. `targets` are
+ *   the two of them ('couple') and their pet ('pet'), for taps; not there while they are not drawn.
  */
 export function createStopCouple(characters, pose, pet = null, side = 'right') {
   const layout = coupleLayout(pose);
@@ -89,5 +106,23 @@ export function createStopCouple(characters, pose, pet = null, side = 'right') {
 
   update(0);
   const halfWidth = companion ? Math.max(layout.halfWidth, PET_RADIUS) : layout.halfWidth;
-  return { group, update, react, halfWidth, pet: companion };
+
+  const middle = new Vector3(0, HIT.COUPLE_AT, 0);
+  const paws = new Vector3(0, HIT.PET_AT, 0);
+  /** @type {import('../ride/taps.js').Tappable[]} */
+  const targets = [{
+    name: 'couple',
+    radius: Math.max(HIT.COUPLE_REACH, layout.halfWidth),
+    position: (out) => (drawn(group) ? group.localToWorld(out.copy(middle)) : null),
+    react: (now) => react(now),
+  }];
+  if (companion) {
+    targets.push({
+      name: 'pet',
+      radius: HIT.PET_REACH,
+      position: (out) => (drawn(group) ? companion.group.localToWorld(out.copy(paws)) : null),
+      react: (now) => companion.react(now),
+    });
+  }
+  return { group, update, react, halfWidth, pet: companion, targets };
 }

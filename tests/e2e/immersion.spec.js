@@ -3,6 +3,7 @@
 import { test, expect } from '@playwright/test';
 import { useFixture, appState, collectConsoleErrors, waitForPhase } from './helpers.js';
 import { LOOK } from '../../site/src/ride/look.js';
+import { signLookYaw } from '../../site/src/world/signs.js';
 
 /** Before page.goto: a navigator.wakeLock that records every request in window.__wakeLocks and grants it. */
 async function stubWakeLock(page) {
@@ -145,5 +146,72 @@ test('a tap on the stop card stays with the card: the lantern behind it does not
   await expect(card).toBeHidden();
   await page.touchscreen.tap(lantern.x, lantern.y);
   await expect.poll(async () => (await appState(page)).lastTap).toBe('lantern');
+  expect(errors).toEqual([]);
+});
+
+// --- The world answers taps (Task 14) ---
+
+/**
+ * Taps a `name` target where it is on the page right now (window.__app.debugTargets): one on the screen that the
+ * cabin does not hide, the furthest from the cabin's own cord and lantern, so the tap is not theirs. A moving target
+ * (a gull) can slip away between finding it and tapping it, so it tries a few times. Resolves once lastTap is `name`.
+ */
+async function tapTarget(page, name, tries = 3) {
+  const { width, height } = page.viewportSize();
+  const find = async () => {
+    const all = await page.evaluate(() => window.__app.debugTargets());
+    const cabin = all.filter((t) => t.name === 'whistle-cord' || t.name === 'lantern');
+    const clear = (t) => Math.min(...cabin.map((c) => Math.hypot(c.x - t.x, c.y - t.y)));
+    return all
+      .filter((t) => t.name === name && !t.hidden && t.x > 20 && t.x < width - 20 && t.y > 20 && t.y < height - 20)
+      .sort((a, b) => clear(b) - clear(a))[0];
+  };
+  for (let attempt = 1; ; attempt++) {
+    // A gull may be out of view for a moment, flying round its loop.
+    await expect.poll(find, { message: `a ${name} on the screen to tap`, timeout: 15000 }).toBeTruthy();
+    const target = await find();
+    await page.touchscreen.tap(target.x, target.y);
+    try {
+      await expect.poll(async () => (await appState(page)).lastTap, { timeout: 2000 }).toBe(name);
+      return;
+    } catch (error) {
+      if (attempt >= tries) throw error;
+      await page.waitForTimeout(1600); // past the cooldown of whatever that tap did reach
+    }
+  }
+}
+
+test('a tap on a snowman reaches it', async ({ page }) => {
+  const errors = collectConsoleErrors(page);
+  await useFixture(page);
+  await page.goto('index.html?at=640&ui=0');
+  await expect.poll(async () => (await appState(page)).mode).toBe('3d');
+  await tapTarget(page, 'snowman', 1);
+  expect(errors).toEqual([]);
+});
+
+test('a tap on a gull reaches it, though it is flying', async ({ page }) => {
+  const errors = collectConsoleErrors(page);
+  await useFixture(page);
+  await page.goto('index.html?at=290&look=40&ui=0');
+  await expect.poll(async () => (await appState(page)).mode).toBe('3d');
+  await tapTarget(page, 'gull');
+  expect(errors).toEqual([]);
+});
+
+test('a tap on the two of them at a stop reaches them', async ({ page }) => {
+  const errors = collectConsoleErrors(page);
+  await useFixture(page);
+  await page.goto('index.html?at=85&ui=0');
+  await expect.poll(async () => (await appState(page)).mode).toBe('3d');
+  // The first stop's couple stands beside the train, by its sign on the right: she turns her head to them.
+  const across = signLookYaw('right') / LOOK.SENSITIVITY; // dragging right turns her head left (+yaw)
+  const { width, height } = page.viewportSize();
+  await page.mouse.move(width / 2 - across / 2, height * 0.3);
+  await page.mouse.down();
+  await page.mouse.move(width / 2 + across / 2, height * 0.3, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => (await appState(page)).yaw).toBeLessThan(-1);
+  await tapTarget(page, 'couple', 1);
   expect(errors).toEqual([]);
 });

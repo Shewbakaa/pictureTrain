@@ -58,3 +58,49 @@ test('the clouds take on the colour of the horizon: pale by day, peach at dusk',
   assert.ok(day.r > 0.75 && day.g > 0.75 && day.b > 0.75, 'nearly white by day');
   assert.ok(dusk.r > dusk.b + 0.1, 'warmer at dusk');
 });
+
+// Taps (Task 14): a hot-air balloon she taps roars, glows and rises.
+
+test('each hot-air balloon is a tap target round its envelope, far out in the sky', () => {
+  const decor = createSkyDecor();
+  decor.update(1 / 60, new Vector3(0, 2, 0));
+  const balloons = decor.group.children.filter((o) => o.name.startsWith('sky-balloon'));
+  assert.equal(decor.targets.length, 2);
+  decor.targets.forEach((target, i) => {
+    assert.equal(target.name, 'sky-balloon');
+    const at = target.position(new Vector3());
+    const up = at.y - balloons[i].position.y;
+    assert.ok(Math.hypot(at.x - balloons[i].position.x, at.z - balloons[i].position.z) < 1e-6, 'over its basket');
+    assert.ok(up > 8 && up < 15, `round its envelope, ${up.toFixed(1)} m up`);
+    assert.ok(target.radius >= 5 && target.radius <= 9, `${target.radius} m round`);
+  });
+});
+
+test('tapped, a balloon\'s burner roars, its flame glows for 1.2 s, and it bobs up 3 m and back', () => {
+  const camera = new Vector3(0, 2, 0);
+  const tapped = createSkyDecor(), still = createSkyDecor();
+  tapped.update(1, camera);
+  still.update(1, camera);
+  const flame = tapped.group.getObjectByName('sky-balloon-0-flame');
+  assert.ok(flame, 'a flame at its burner');
+  assert.equal(flame.visible, false, 'unlit at rest, so it costs no draw call');
+  assert.equal(flame.material.fog, false, 'never lost in the fog, like the balloon');
+  const halo = tapped.group.getObjectByName('sky-balloon-0-halo');
+  assert.ok(halo && !halo.visible, 'nor its halo');
+  const fx = { played: [], play: (name) => fx.played.push(name), burst() {} };
+  tapped.targets[0].react(1, fx);
+  assert.deepEqual(fx.played, ['burner']);
+  const balloon = (decor) => decor.group.getObjectByName('sky-balloon-0').position.y;
+  let lit = 0, highest = 0;
+  for (let t = 0.05; t <= 10; t += 0.05) {
+    tapped.update(0.05, camera);
+    still.update(0.05, camera);
+    if (flame.visible) lit = t;
+    assert.equal(halo.visible, flame.visible, 'the halo glows with the flame');
+    highest = Math.max(highest, balloon(tapped) - balloon(still));
+  }
+  assert.ok(lit > 1.1 && lit < 1.3, `the flame glows for ${lit.toFixed(2)} s`);
+  assert.ok(highest > 2.9 && highest <= 3.0001, `it rises ${highest.toFixed(2)} m`);
+  assert.ok(Math.abs(balloon(tapped) - balloon(still)) < 1e-6, 'and sinks back to where it was');
+  assert.equal(tapped.group.getObjectByName('sky-balloon-1').position.y, still.group.getObjectByName('sky-balloon-1').position.y, 'the other is untouched');
+});

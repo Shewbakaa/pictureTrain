@@ -198,3 +198,30 @@ test('the cord and the lantern keep to their places when the screen changes shap
   const a = cabinAnchors(camera.fov, camera.aspect);
   assert.ok(Math.abs(pivot.position.x - a.cord.x) < 1e-9 && Math.abs(pivot.position.y - a.cord.top) < 1e-9);
 });
+
+// The cabin hides the world (Task 14): its body is what a tap meets before anything out beyond it.
+
+test('the cabin\'s body hides the world from her taps, but never its own cord and lantern', async () => {
+  const { createTapRouter } = await import('../../site/src/ride/taps.js');
+  const { camera, cabin } = cabinOnRig(390, 844);
+  assert.deepEqual(cabin.blockers.map((m) => m.name), ['cabin-body', 'cabin-glow', 'cabin-bunting']);
+  for (const t of cabin.targets) assert.equal(t.aboard, true, `${t.name} is part of the cabin`);
+  // A balloon far out, straight down the view through the dashboard, and the same balloon up in the open sky.
+  const eye = camera.getWorldPosition(new THREE.Vector3());
+  const along = (x, y) => {
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(x, y), camera);
+    return eye.clone().addScaledVector(ray.ray.direction, 15);
+  };
+  const reactions = [];
+  const balloon = (at) => ({ name: 'balloons', radius: 1, position: (out) => out.copy(at), react: () => reactions.push(at) });
+  const element = { getBoundingClientRect: () => ({ left: 0, top: 0, width: 390, height: 844 }) };
+  const behindDash = balloon(along(0, -0.9));
+  const inTheSky = balloon(along(0, 0.2));
+  const router = createTapRouter({ camera, element, sources: [() => [behindDash, inTheSky], () => cabin.targets], blockers: cabin.blockers, fx: { play() {}, burst() {} } });
+  assert.equal(router.tap(195, 844 * 0.95, 0), null, 'a tap on the dashboard');
+  assert.equal(router.tap(195, 844 * 0.4, 0), 'balloons', 'a tap on the sky');
+  const [, lantern] = cabin.targets;
+  const l = lantern.position(new THREE.Vector3()).project(camera);
+  assert.equal(router.tap(((l.x + 1) / 2) * 390, ((1 - l.y) / 2) * 844, 1), 'lantern', 'the lantern on the dashboard');
+});

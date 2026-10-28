@@ -12,11 +12,15 @@
 // and melting away at the other. The balloons float ahead, one either side, swaying, bobbing and turning
 // slowly; the heart-shaped one keeps its face to the train.
 //
+// The balloons answer her taps (ride/taps.js `targets`): the burner roars, its flame glows over the basket in a soft
+// halo of light, and the balloon rises a little and sinks back. The flame and its halo are drawn only while it glows,
+// so at rest they cost nothing.
+//
 // DOM-free (only Three's classes are used), so the Node unit tests can import it.
 
 import {
-  Color, ConeGeometry, CylinderGeometry, Group, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh,
-  MeshBasicMaterial, Quaternion, SphereGeometry, Vector3,
+  AdditiveBlending, Color, ConeGeometry, CylinderGeometry, Group, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh,
+  MeshBasicMaterial, Quaternion, SphereGeometry, Sprite, SpriteMaterial, Vector3,
 } from '../three.js';
 import { MATERIALS } from '../render/materials.js';
 import { mergeParts, part } from '../util/geo.js';
@@ -48,6 +52,34 @@ const CLOUD_TOP = '#ffffff';
 const CLOUD_UNDER = '#c4cbe6';
 /** How far the clouds' tint goes from white towards the zone's horizon colour. */
 const CLOUD_TINT = 0.45;
+
+/**
+ * A tapped balloon: its flame glows for GLOW seconds, and it rises LIFT metres over RISE seconds and sinks back over
+ * SINK. Its hit sphere is REACH metres round the middle of its envelope, AT metres over the basket; far out as it is,
+ * the taps' own angle (ride/taps.js MIN_ANGLE) makes it easier to hit still.
+ */
+const BURN = Object.freeze({ GLOW: 1.2, LIFT: 3, RISE: 2, SINK: 5, REACH: 7, AT: 11 });
+
+/**
+ * The flame's colour (sRGB), how tall and wide it is (m), and where its foot is over the basket's base (m); and the halo
+ * of light round it, HALO metres across, which lights up the envelope's mouth and shows from far off.
+ */
+const FLAME = Object.freeze({ COLOUR: '#ffb347', HEIGHT: 2.6, RADIUS: 0.75, FOOT: 1.3, HALO: 7 });
+
+/** How brightly the flame shows `since` seconds after her tap: 0 unlit, up to 1 and flickering, then out after GLOW. */
+function flameAt(since) {
+  if (!(since >= 0 && since < BURN.GLOW)) return 0;
+  const u = since / BURN.GLOW;
+  const flicker = 0.85 + 0.15 * Math.sin(since * 37);
+  return smoothstep(0, 0.08, u) * (1 - smoothstep(0.7, 1, u)) * flicker;
+}
+
+/** How far up (m) the balloon is `since` seconds after her tap: up LIFT over RISE, and back down over SINK. */
+function liftAt(since) {
+  if (!(since >= 0 && since < BURN.RISE + BURN.SINK)) return 0;
+  if (since < BURN.RISE) return BURN.LIFT * smoothstep(0, BURN.RISE, since);
+  return BURN.LIFT * (1 - smoothstep(BURN.RISE, BURN.RISE + BURN.SINK, since));
+}
 
 /** A cloud: a row of flattened round puffs, a big one in the middle, about 2.6 units across before scaling. */
 function cloudGeometry() {
@@ -122,9 +154,11 @@ function heartBalloon(colour, trim) {
  * @returns {{
  *   group: Group,
  *   update: (dt: number, cameraPosition: Vector3, env?: import('./environment.js').Env) => void,
+ *   targets: import('../ride/taps.js').Tappable[],
  * }}
  *   Add `group` to the scene and call `update` every frame with the seconds since the last one, the camera's
  *   world position and the environment where the train is (which tints the clouds; without it they stay white).
+ *   `targets` are the two balloons ('sky-balloon'), for taps; a tapped one answers on the seconds `update` adds up.
  */
 export function createSkyDecor() {
   const group = new Group();
@@ -156,9 +190,25 @@ export function createSkyDecor() {
     { mesh: new Mesh(stripedBalloon(['#ff7f7a', '#fff3dd', '#ffc857', '#fff3dd']), MATERIALS.distant), angle: -0.2, radius: 168, height: 30, faceCamera: false },
     { mesh: new Mesh(heartBalloon('#f2557a', '#ffe1ea'), MATERIALS.distant), angle: 0.3, radius: 190, height: 42, faceCamera: true },
   ];
+  // Each has a flame over its basket, hidden until she taps it: a cone, unlit and never fogged, like the balloon, in a
+  // halo of light (the street lamps' glow, render/materials.js).
+  const flameShape = new ConeGeometry(FLAME.RADIUS, FLAME.HEIGHT, 8);
+  flameShape.translate(0, FLAME.FOOT + FLAME.HEIGHT / 2, 0);
   balloons.forEach((b, i) => {
     b.mesh.name = `sky-balloon-${i}`;
     b.phase = rngRange(rng, 0, TAU);
+    b.tapped = -Infinity;
+    b.flame = new Mesh(flameShape, new MeshBasicMaterial({ color: FLAME.COLOUR, transparent: true, opacity: 0, depthWrite: false, fog: false }));
+    b.flame.name = `sky-balloon-${i}-flame`;
+    b.flame.visible = false;
+    b.halo = new Sprite(new SpriteMaterial({
+      map: MATERIALS.halo.map, color: FLAME.COLOUR, transparent: true, opacity: 0, depthWrite: false, blending: AdditiveBlending, fog: false,
+    }));
+    b.halo.name = `sky-balloon-${i}-halo`;
+    b.halo.position.y = FLAME.FOOT + FLAME.HEIGHT * 0.6;
+    b.halo.scale.setScalar(FLAME.HALO);
+    b.halo.visible = false;
+    b.mesh.add(b.flame, b.halo);
     group.add(b.mesh);
   });
 
@@ -192,11 +242,28 @@ export function createSkyDecor() {
 
     for (const b of balloons) {
       const angle = b.angle + 0.06 * Math.sin(time * 0.05 + b.phase);
-      onRing(cameraPosition, angle, b.radius, b.height + 1.6 * Math.sin(time * 0.6 + b.phase), b.mesh.position);
+      const since = time - b.tapped;
+      onRing(cameraPosition, angle, b.radius, b.height + 1.6 * Math.sin(time * 0.6 + b.phase) + liftAt(since), b.mesh.position);
       // The heart faces the train (its +Z towards the ring's centre) with a gentle sway; the round one turns slowly.
       b.mesh.rotation.y = b.faceCamera ? -angle + 0.25 * Math.sin(time * 0.3 + b.phase) : time * 0.05 + b.phase;
+      const glow = flameAt(since);
+      b.flame.visible = b.halo.visible = glow > 0;
+      b.flame.material.opacity = glow;
+      b.halo.material.opacity = 0.9 * glow;
     }
   }
 
-  return { group, update };
+  const middle = new Vector3(0, BURN.AT, 0);
+  /** @type {import('../ride/taps.js').Tappable[]} */
+  const targets = balloons.map((b) => ({
+    name: 'sky-balloon',
+    radius: BURN.REACH,
+    position: (out) => out.copy(b.mesh.position).add(middle),
+    react(now, fx) {
+      b.tapped = time;
+      fx.play('burner');
+    },
+  }));
+
+  return { group, update, targets };
 }

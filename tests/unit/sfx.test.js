@@ -338,6 +338,63 @@ test('the lantern is held in the node budget while it plays, and gives its nodes
   assert.ok(t.made.some((n) => n.disconnected), 'it is disconnected from the bus');
 });
 
+// Her taps on the world (Task 14): a balloon cluster's pop, a snowman's jingle and a deer's rustle.
+
+test('a balloon cluster pops: a quick burst of noise, gone in a moment', () => {
+  const t = setup();
+  t.on();
+  assert.equal(t.sfx.play('pop'), true);
+  assert.equal(t.noises(), 1, 'one burst of noise');
+  assert.equal(t.starts.filter((s) => s.type === 'osc').length, 0);
+  assert.ok(t.made.some((n) => n.type === 'bandpass'), 'a bandpass softens it');
+  const [noise] = t.sources;
+  assert.equal(noise.buffer, t.sfx.kit.noise);
+  assert.ok(noise.stopAt < 0.5, `it is over in a moment (${noise.stopAt.toFixed(2)} s)`);
+  assert.equal(t.sfx.play('pop'), false, 'one pop at a time');
+});
+
+test('a snowman jingles: little high bells, shaken a few times', () => {
+  const t = setup();
+  t.on();
+  assert.equal(t.sfx.play('jingle'), true);
+  const bells = t.starts.filter((s) => s.type === 'osc');
+  assert.equal(bells.length, 3, 'three little bells');
+  assert.equal(t.noises(), 0);
+  for (const { node } of bells) assert.ok(node.frequency.value > 2000, `high: ${node.frequency.value} Hz`);
+  const shakes = t.made.find((n) => n.gain && n.gain.log.filter(([kind]) => kind === 'linear').length >= 3);
+  assert.ok(shakes, 'shaken at least three times');
+  assert.ok(Math.max(...bells.map((b) => b.node.stopAt)) < 1.5, 'and over within a second or so');
+});
+
+test('a deer rustles off through the leaves: a hiss of noise in steps', () => {
+  const t = setup();
+  t.on();
+  assert.equal(t.sfx.play('rustle'), true);
+  assert.equal(t.noises(), 1);
+  assert.equal(t.sources[0].buffer, t.sfx.kit.noise);
+  assert.ok(t.made.some((n) => n.type === 'bandpass'));
+  const steps = t.made.find((n) => n.gain && n.gain.log.filter(([kind]) => kind === 'linear').length >= 6);
+  assert.ok(steps, 'its level falls back and swells again with each step');
+  assert.ok(t.sources[0].stopAt > 0.5 && t.sources[0].stopAt < 2, `about a second (${t.sources[0].stopAt.toFixed(2)} s)`);
+});
+
+test('every tap sound is held in the node budget while it plays and gives its nodes back; all of them at once fit in it', () => {
+  for (const [name, nodes] of [['pop', 3], ['jingle', 4], ['rustle', 3]]) {
+    const t = setup();
+    t.on();
+    t.sfx.play(name);
+    assert.equal(t.sfx.kit.live, nodes, name);
+    t.advance(Math.max(...t.sources.map((s) => s.stopAt)) + 0.1);
+    assert.equal(t.sfx.kit.live, 0, `${name} gives its nodes back`);
+    assert.ok(t.made.some((n) => n.disconnected), `${name} is disconnected from the bus`);
+  }
+  // The cord's whistle and the lantern too, all at once.
+  const t = setup();
+  t.on();
+  for (const name of ['whistle', 'lantern', 'pop', 'jingle', 'rustle']) assert.equal(t.sfx.play(name), true, name);
+  assert.ok(t.sfx.kit.live <= 40, `${t.sfx.kit.live} nodes`);
+});
+
 // The tunnel's sound: the ambience goes muffled and the train's sounds echo while she is inside it.
 const TUNNEL = { from: 540, to: 600, boundary: 570 };
 
