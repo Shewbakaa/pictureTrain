@@ -30,6 +30,9 @@ test('dragging looks around', async ({ page }) => {
   // appState mirrors the look once per frame, so wait for a frame to report the drag (R19).
   await expect.poll(async () => (await appState(page)).yaw).toBeGreaterThan(0.3);
   await page.mouse.up();
+  // Let go, the view stays where she left it a good while before it eases back ahead.
+  await page.waitForTimeout(2500);
+  expect((await appState(page)).yaw).toBeGreaterThan(0.3);
 });
 
 test('canvas fills the viewport and follows resize', async ({ page }) => {

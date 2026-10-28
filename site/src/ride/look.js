@@ -17,7 +17,7 @@ export const LOOK = Object.freeze({
   YAW_LIMIT: 1.75,      // furthest she can turn either way (about 100 degrees)
   PITCH_MIN: -0.45,     // furthest she can look down
   PITCH_MAX: 0.6,       // furthest she can look up
-  RETURN_DELAY: 1.2,    // how long the view stays where she left it before easing back (s)
+  RETURN_DELAY: 4,      // how long the view stays where she left it before easing back (s)
   RETURN_RATE: 2.0,     // how fast it eases back (see `damp`; higher is snappier)
   HFOV: 78,             // horizontal field of view to aim for
   VFOV_MIN: 50,         // vertical field of view limits: wide screens stop narrowing at VFOV_MIN ...

@@ -153,13 +153,14 @@ test('update ignores frames that are not positive times', () => {
 });
 
 test('easing does not depend on the frame rate', () => {
+  const seconds = LOOK.RETURN_DELAY + 1;
   const after = (fps) => {
     const l = createLook();
     l.beginDrag(); l.drag(200, 0); l.endDrag();
-    for (let i = 0; i < 2 * fps; i++) l.update(1 / fps);
+    for (let i = 0; i < Math.round(seconds * fps); i++) l.update(1 / fps);
     return l.yaw;
   };
-  const expected = 200 * LOOK.SENSITIVITY * Math.exp(-LOOK.RETURN_RATE * (2 - LOOK.RETURN_DELAY));
+  const expected = 200 * LOOK.SENSITIVITY * Math.exp(-LOOK.RETURN_RATE * (seconds - LOOK.RETURN_DELAY));
   for (const fps of [20, 30, 60, 144]) assert.ok(Math.abs(after(fps) - expected) < 1e-6, `${fps} fps`);
 });
 
