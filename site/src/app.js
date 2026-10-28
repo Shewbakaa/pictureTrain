@@ -36,6 +36,7 @@ import { createTerrain } from './world/terrain.js';
 import { followWave, SEA_MATERIAL, updateSea } from './world/seaWaves.js';
 import { createTrackMesh } from './world/trackMesh.js';
 import { createDressing } from './world/dressing.js';
+import { SWAY_MATERIAL, updateWind, windStrength } from './world/wind.js';
 import { createStation, START_STATION_DISTANCE } from './world/stations.js';
 import { createSkyDecor } from './world/skyDecor.js';
 import { createAmbientParticles } from './world/particles.js';
@@ -265,6 +266,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     sun.castShadow = tier.shadows;
     for (const material of Object.values(MATERIALS)) material.needsUpdate = true;
     SEA_MATERIAL.needsUpdate = true;
+    SWAY_MATERIAL.needsUpdate = true;
     for (const fn of onDensity) fn(tier.density);
     for (const fn of onParticles) fn(tier.particles);
     finale.setQuality(governor.tier);
@@ -432,6 +434,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     skyDecor.update(dt, eye, env);
     particles.update(dt, env, eye);
     dressing.update(dt, elapsed);
+    updateWind(elapsed, windStrength(env));
     cabin.update(dt, ride.speed, elapsed);
     if (terrain.water) {
       seaWave = followWave(seaWave, dt, sfx ? ambience.seaWave() : NaN);

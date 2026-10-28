@@ -8,6 +8,7 @@ import { envAt } from '../../site/src/world/environment.js';
 import { terrainHeight, TERRAIN } from '../../site/src/world/terrain.js';
 import { ZONES } from '../../site/src/world/zones.js';
 import { MATERIALS } from '../../site/src/render/materials.js';
+import { SWAY_MATERIAL, SWAYING_TYPES } from '../../site/src/world/wind.js';
 import { normalizeContent } from '../../site/src/content/normalize.js';
 import { Matrix4, Vector3 } from '../../site/src/three.js';
 import fixture from '../fixtures/content.fixture.js';
@@ -47,7 +48,7 @@ test('one instanced mesh per zone, type and variant, plus one for each glow', ()
   for (const mesh of meshes) {
     const [, zone, type] = mesh.name.split('-');
     assert.ok(ZONES[zone].props.some((r) => r.type === type), `${mesh.name} comes from a rule of its zone`);
-    assert.equal(mesh.material, mesh.name.endsWith('-glow') ? MATERIALS.glow : MATERIALS.solid);
+    assert.equal(mesh.material, mesh.name.endsWith('-glow') ? MATERIALS.glow : SWAYING_TYPES.has(type) ? SWAY_MATERIAL : MATERIALS.solid);
     assert.ok(mesh.boundingSphere && mesh.boundingSphere.radius > 0, `${mesh.name} has a bounding sphere`);
   }
   for (const glow of meshes.filter((m) => m.name.endsWith('-glow'))) {

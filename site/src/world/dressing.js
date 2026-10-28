@@ -12,7 +12,8 @@
 // share of them (`setDensity`, for a slow phone) keeps the props nearest the track and thins the rest evenly.
 //
 // Each street lamp also has a soft halo round its lantern: one THREE.Points per lamp mesh, in the same order,
-// thinned with it. The balloon clusters sway and bob on their strings (`update`).
+// thinned with it. The balloon clusters sway and bob on their strings (`update`). The trees, bushes, flowers and
+// grass sway in the breeze, in the vertex shader of their own material (wind.js).
 //
 // DOM-free (only Three's classes are used), so the Node unit tests can import it.
 
@@ -26,6 +27,7 @@ import { scatterZone } from './scatter.js';
 import { SIGN } from './signs.js';
 import { START_STATION_DISTANCE } from './stations.js';
 import { terrainHeight, TERRAIN } from './terrain.js';
+import { SWAY_MATERIAL, SWAYING_TYPES } from './wind.js';
 import { ZONES } from './zones.js';
 
 /** Distances in metres. */
@@ -126,7 +128,7 @@ export function createDressing({ path, layout, seed = 1 }) {
       const { body, glow } = geometries.get(key);
       const [type, variant] = key.split('#');
       const name = `props-${zone.id}-${type}-${variant}`;
-      const solid = new InstancedMesh(body, MATERIALS.solid, list.length);
+      const solid = new InstancedMesh(body, SWAYING_TYPES.has(type) ? SWAY_MATERIAL : MATERIALS.solid, list.length);
       solid.name = name;
       solid.castShadow = !NO_SHADOW.has(type);
       solid.receiveShadow = true;
