@@ -1,4 +1,4 @@
-// The toolkit for models built in code: the scenery props, and later the cabin and the little figures.
+// The toolkit for models built in code: the scenery props, the cabin, the little figures and their pets.
 //
 // A model is a handful of simple coloured parts (boxes, cones, spheres...), each placed with a position, a
 // rotation and a scale, merged into one geometry. The result is triangle soup (non-indexed): every triangle
@@ -111,6 +111,33 @@ export function triangleSoup(positions, colors) {
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
+  return geometry;
+}
+
+/**
+ * Parts merged into one geometry for a rigidly skinned mesh (a SkinnedMesh, like the little figures): as `mergeParts`
+ * gives, with `skinIndex` and `skinWeight` attributes that tie every corner of a part, with its whole weight, to that
+ * part's bone. Posing the bones then moves each part as one piece, at the cost of one draw call for them all.
+ * @param {Array<{ bone: string, part: Part }>} tagged  each part with the name of the bone it follows
+ * @param {string[]} bones  the bones' names in the skeleton's order
+ * @returns {BufferGeometry}
+ */
+export function mergeSkinnedParts(tagged, bones) {
+  const geometry = mergeParts(tagged.map((t) => t.part));
+  const corners = geometry.attributes.position.count;
+  const skinIndex = new Uint16Array(corners * 4);
+  const skinWeight = new Float32Array(corners * 4);
+  let at = 0;
+  for (const { bone, part: p } of tagged) {
+    const index = bones.indexOf(bone);
+    if (index < 0) throw new Error(`mergeSkinnedParts: no bone "${bone}"`);
+    for (let i = cornerCount(p.geometry); i > 0; i--, at++) {
+      skinIndex[at * 4] = index;
+      skinWeight[at * 4] = 1;
+    }
+  }
+  geometry.setAttribute('skinIndex', new BufferAttribute(skinIndex, 4));
+  geometry.setAttribute('skinWeight', new BufferAttribute(skinWeight, 4));
   return geometry;
 }
 

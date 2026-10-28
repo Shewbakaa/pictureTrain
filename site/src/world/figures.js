@@ -11,11 +11,9 @@
 //
 // DOM-free (only Three's classes are used), so the Node unit tests can import it.
 
-import {
-  Bone, BufferAttribute, Color, CylinderGeometry, Group, Skeleton, SkinnedMesh, SphereGeometry,
-} from '../three.js';
+import { Bone, Color, CylinderGeometry, Group, Skeleton, SkinnedMesh, SphereGeometry } from '../three.js';
 import { MATERIALS } from '../render/materials.js';
-import { mergeParts, part, triangleCount } from '../util/geo.js';
+import { mergeSkinnedParts, part } from '../util/geo.js';
 import { clamp } from '../util/math.js';
 
 /**
@@ -163,25 +161,6 @@ function figureParts({ skin, hair, outfit, style }) {
   return tagged;
 }
 
-/** The parts merged into one geometry whose every corner follows its part's bone. */
-function skinnedGeometry(tagged) {
-  const geometry = mergeParts(tagged.map((t) => t.part));
-  const corners = geometry.attributes.position.count;
-  const skinIndex = new Uint16Array(corners * 4);
-  const skinWeight = new Float32Array(corners * 4);
-  let at = 0;
-  for (const { bone, part: p } of tagged) {
-    const index = BONES.indexOf(bone);
-    for (let i = triangleCount(p.geometry) * 3; i > 0; i--, at++) {
-      skinIndex[at * 4] = index;
-      skinWeight[at * 4] = 1;
-    }
-  }
-  geometry.setAttribute('skinIndex', new BufferAttribute(skinIndex, 4));
-  geometry.setAttribute('skinWeight', new BufferAttribute(skinWeight, 4));
-  return geometry;
-}
-
 /**
  * One of the two of them.
  * @param {{ skin: string, hair: string, outfit: string, style: 'her'|'him' }} look  colours as '#rrggbb'
@@ -208,7 +187,7 @@ export function createFigure(look) {
   parts.leftHand.position.set(0, -ARM, 0);
   parts.rightHand.position.set(0, -ARM, 0);
 
-  const mesh = new SkinnedMesh(skinnedGeometry(figureParts(look)), MATERIALS.solid);
+  const mesh = new SkinnedMesh(mergeSkinnedParts(figureParts(look), BONES), MATERIALS.solid);
   mesh.name = `${group.name}-body`;
   mesh.castShadow = true;
   mesh.receiveShadow = true;
