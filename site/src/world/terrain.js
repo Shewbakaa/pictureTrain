@@ -8,6 +8,12 @@
 // then the seabed. `water` (environment.js, 0 to 1) eases between the two, so the coast comes and goes with the
 // zone blend.
 //
+// Where the track runs through the tunnel (tunnel.js `tunnelSpan`), a hill rises over it: past the level verge the
+// ground climbs MOUND metres higher (tunnel.js TUNNEL) within a few metres, all along the tunnel's stretch, and eases
+// back down over MOUND_EASE metres beyond each portal, so the hill meets the portals at its full height. The hills
+// roll on over it as they do everywhere. The verge stays level, and the tunnel itself runs along it, so between the
+// portals the hill closes over the tunnel as a roof of ground of its own, part of the same mesh (`roofHeight`).
+//
 // The meshes are triangle soup: each triangle has its own vertices and its own face normal (the faceted look, no
 // `flatShading` needed; the sea's waves move it, so its material shades it from the moved faces, seaWaves.js). The
 // ground is the zone's near colour by the track, easing to its far colour out on the hills; each corner takes the
@@ -24,6 +30,7 @@ import { MATERIALS } from '../render/materials.js';
 import { SEA_MATERIAL } from './seaWaves.js';
 import { envAt } from './environment.js';
 import { LAYOUT } from './layout.js';
+import { PORTAL, portalTop, TUNNEL, tunnelSpan } from './tunnel.js';
 import { ZONES } from './zones.js';
 
 /** Distances in metres. */
@@ -54,6 +61,11 @@ function rolling(d, offset) {
   ) / 1.95;
 }
 
+/** The tunnel's hill rises to its full height this far past the level verge (m), so it stands steep beside the portals. */
+const MOUND_RISE = 5;
+/** And eases down to nothing over this far beyond each portal (m): over three rows of the ground mesh. */
+const MOUND_EASE = 12;
+
 /** The hills, `out` metres beyond the level verge (out > 0): a steady rise to the edge plus rolling hills that grow with it. */
 function hillHeight(d, offset, out) {
   const rise = 0.07 * out;
@@ -66,19 +78,44 @@ function beachHeight(a) {
   return -SEA_DEPTH * smoothstep(BEACH_FLAT, SEABED, a);
 }
 
+/** The tunnel's hill, `a` metres either side of the centre line (a > FLAT), over the span and easing off beyond it. */
+function moundHeight(d, a, { from, to }) {
+  const along = smoothstep(from - MOUND_EASE, from, d) * (1 - smoothstep(to, to + MOUND_EASE, d));
+  return along > 0 ? TUNNEL.MOUND * along * smoothstep(TERRAIN.FLAT, TERRAIN.FLAT + MOUND_RISE, a) : 0;
+}
+
+/**
+ * The hill over the tunnel's own stretch, where the ground itself stays level along the track: a roof of ground
+ * across the tunnel at ROOF_COLUMNS (m from the centre line), a low dome ROOF_RISE over the hill's height whose edges,
+ * as far out as the portals' wings reach, are ROOF_TUCK under the ground of the hill's flanks. It runs from ROOF_IN
+ * metres inside one portal to as far inside the other, within the thickness of their headwalls, and at those ends it
+ * comes down ROOF_TUCK behind the headwall's top (tunnel.js `portalTop`). So from the open track the hill rises
+ * behind each portal with nothing to be seen between them, and from the seat nothing is ever seen of its inside.
+ */
+const ROOF_COLUMNS = [0, 2.5, 4.5, 6.5, 8.5, PORTAL.WING];
+const ROOF_RISE = 0.8;
+const ROOF_TUCK = 0.3;
+const ROOF_IN = PORTAL.IN / 2;
+/** The roof's rows between its ends are the ground's own, none of them closer than this to an end (m). */
+const ROOF_END_GAP = 2;
+/** Added to the ground's seed for the roof's colour nudges. */
+const ROOF_SEED = 977;
+
 /**
  * Height of the ground (m) `offset` metres right of the track (negative: left), `d` metres along it.
  * @param {number} d
  * @param {number} offset
- * @param {{ water?: number }} [options]  how much sea there is on the left, 0 to 1 (environment.js `water`)
+ * @param {{ water?: number, tunnel?: import('./tunnel.js').TunnelSpan|null }} [options]  `water`: how much sea there
+ *   is on the left, 0 to 1 (environment.js `water`); `tunnel`: where the tunnel runs (tunnel.js `tunnelSpan`), for
+ *   its hill, or null for none
  * @returns {number}  exactly 0 within FLAT of the centre line
  */
-export function terrainHeight(d, offset, { water = 0 } = {}) {
+export function terrainHeight(d, offset, { water = 0, tunnel = null } = {}) {
   const a = Math.abs(offset);
   if (a <= TERRAIN.FLAT) return 0;
   const hills = hillHeight(d, offset, a - TERRAIN.FLAT);
-  if (offset > 0 || !(water > 0)) return hills;
-  return lerp(hills, beachHeight(a), clamp(water, 0, 1));
+  const ground = offset > 0 || !(water > 0) ? hills : lerp(hills, beachHeight(a), clamp(water, 0, 1));
+  return tunnel ? ground + moundHeight(d, a, tunnel) : ground;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -136,21 +173,25 @@ const _place = new Vector3();
 const _colour = new Color();
 const _mean = new Color();
 
-/**
- * Points along the track: rows on the row lattice (ROW_PHASE) from the last row at or before `from` to the first
- * at or after `to`, one point per offset in each row. `surfaceAt(d, offset, colour)` returns the height of the
- * point and sets `colour` to its colour; `placeAt(d, offset, place)`, if given, sets three more numbers each point
- * carries (`places`).
- */
-function grid(path, from, to, offsets, surfaceAt, placeAt) {
+/** The rows on the row lattice (ROW_PHASE) from the last at or before `from` to the first at or after `to` (m). */
+function latticeRows(from, to) {
   const { ROW_STEP } = TERRAIN;
   const first = Math.floor((from - ROW_PHASE) / ROW_STEP) * ROW_STEP + ROW_PHASE;
-  const rows = Math.max(1, Math.ceil((to - first) / ROW_STEP));
-  const points = new Float32Array((rows + 1) * offsets.length * 3);
+  const count = Math.max(1, Math.ceil((to - first) / ROW_STEP));
+  return Array.from({ length: count + 1 }, (_, r) => first + r * ROW_STEP);
+}
+
+/**
+ * Points along the track: a row at each of the distances `rows` (in order), one point per offset in each row.
+ * `surfaceAt(d, offset, colour)` returns the height of the point and sets `colour` to its colour;
+ * `placeAt(d, offset, place)`, if given, sets three more numbers each point carries (`places`).
+ */
+function grid(path, rows, offsets, surfaceAt, placeAt) {
+  const points = new Float32Array(rows.length * offsets.length * 3);
   const colours = new Float32Array(points.length);
   const places = placeAt ? new Float32Array(points.length) : null;
-  for (let r = 0; r <= rows; r++) {
-    const d = first + r * ROW_STEP;
+  for (let r = 0; r < rows.length; r++) {
+    const d = rows[r];
     for (let c = 0; c < offsets.length; c++) {
       const at = (r * offsets.length + c) * 3;
       path.frameAt(d, offsets[c], surfaceAt(d, offsets[c], _colour), _point).toArray(points, at);
@@ -158,7 +199,7 @@ function grid(path, from, to, offsets, surfaceAt, placeAt) {
       if (places) placeAt(d, offsets[c], _place).toArray(places, at);
     }
   }
-  return { rows: rows + 1, columns: offsets.length, points, colours, places };
+  return { rows: rows.length, columns: offsets.length, points, colours, places };
 }
 
 /**
@@ -197,16 +238,31 @@ function addTriangles({ rows, columns, points, colours, places }, jitter, rng, o
 }
 
 /**
- * The ground mesh's height `out` metres left of the centre line (out >= COLUMNS[1]): terrainHeight at its cuts,
- * straight between them, as its triangles are; at its outer edge's height beyond it.
+ * The ground mesh's height on a row at `d`, `offset` metres right of the centre line (|offset| >= COLUMNS[1]):
+ * terrainHeight at its cuts, straight between them, as its triangles are; at its outer edge's height beyond it.
  */
-function groundMeshHeight(d, out, water) {
+function groundMeshHeight(d, offset, options) {
+  const side = Math.sign(offset);
+  const out = Math.abs(offset);
   const last = COLUMNS.length - 1;
-  if (out >= COLUMNS[last]) return terrainHeight(d, -COLUMNS[last], { water });
+  if (out >= COLUMNS[last]) return terrainHeight(d, side * COLUMNS[last], options);
   const i = COLUMNS.findIndex((c) => c >= out);
   const near = COLUMNS[i - 1];
   const far = COLUMNS[i];
-  return lerp(terrainHeight(d, -near, { water }), terrainHeight(d, -far, { water }), (out - near) / (far - near));
+  return lerp(terrainHeight(d, side * near, options), terrainHeight(d, side * far, options), (out - near) / (far - near));
+}
+
+/**
+ * The height of the hill's roof over the tunnel (m), `offset` metres right of the centre line, on a row at `d`;
+ * `end` says it is the row at one of its ends, behind a portal.
+ */
+function roofHeight(d, offset, { water, tunnel, end }) {
+  const a = Math.abs(offset);
+  const edge = ROOF_COLUMNS.at(-1);
+  const height = a >= edge
+    ? groundMeshHeight(d, offset, { water, tunnel }) - ROOF_TUCK
+    : TUNNEL.MOUND + ROOF_RISE * (1 - (a / edge) ** 2);
+  return end ? Math.min(height, portalTop(offset) - ROOF_TUCK) : height;
 }
 
 /**
@@ -219,6 +275,7 @@ export function createTerrain(path, layout, { seed = 1 } = {}) {
   const rng = createRng(seed);
   const from = -RUN_PAST;
   const to = layout.total + RUN_PAST;
+  const tunnel = tunnelSpan(layout);
 
   // The ground. A row's points share one distance, so the environment is looked up once per row.
   const env = envAt(layout, from);
@@ -231,13 +288,27 @@ export function createTerrain(path, layout, { seed = 1 } = {}) {
     return env;
   };
   const offsets = [...COLUMNS.slice().reverse().map((o) => -o), ...COLUMNS];
-  const ground = grid(path, from, to, offsets, (d, offset, colour) => {
-    const { water, groundNear, groundFar } = envFor(d);
-    colour.lerpColors(groundNear, groundFar, smoothstep(NEAR_COLOUR_UNTIL, FAR_COLOUR_FROM, Math.abs(offset)));
-    return terrainHeight(d, offset, { water });
+  const groundColour = (d, offset, colour) => {
+    const { groundNear, groundFar } = envFor(d);
+    return colour.lerpColors(groundNear, groundFar, smoothstep(NEAR_COLOUR_UNTIL, FAR_COLOUR_FROM, Math.abs(offset)));
+  };
+  const ground = grid(path, latticeRows(from, to), offsets, (d, offset, colour) => {
+    groundColour(d, offset, colour);
+    return terrainHeight(d, offset, { water: envFor(d).water, tunnel });
   });
   const soil = { positions: [], colors: [] };
   addTriangles(ground, GROUND_JITTER, rng, soil);
+  if (tunnel) {
+    // The hill over the tunnel itself, in the ground's colours (its nudges seeded apart, so the sea's stay the same).
+    const ends = [tunnel.from + ROOF_IN, tunnel.to - ROOF_IN];
+    const rows = [ends[0], ...latticeRows(ends[0], ends[1]).filter((d) => d > ends[0] + ROOF_END_GAP && d < ends[1] - ROOF_END_GAP), ends[1]];
+    const roofOffsets = [...ROOF_COLUMNS.slice().reverse().map((o) => -o), ...ROOF_COLUMNS.slice(1)];
+    const roof = grid(path, rows, roofOffsets, (d, offset, colour) => {
+      groundColour(d, offset, colour);
+      return roofHeight(d, offset, { water: envFor(d).water, tunnel, end: d === ends[0] || d === ends[1] });
+    });
+    addTriangles(roof, GROUND_JITTER, createRng(seed + ROOF_SEED), soil);
+  }
   const mesh = new Mesh(triangleSoup(soil.positions, soil.colors), MATERIALS.solid);
   mesh.name = 'terrain';
   mesh.receiveShadow = true;
@@ -251,10 +322,10 @@ export function createTerrain(path, layout, { seed = 1 } = {}) {
   const deep = new Color(SEA_DEEP);
   const sea = { positions: [], colors: [], places: [] };
   for (const [start, end] of seaRanges) {
-    const stretch = grid(path, Math.max(from, start - SEA_RUN_PAST), Math.min(to, end + SEA_RUN_PAST), seaOffsets, (d, offset, colour) => {
+    const stretch = grid(path, latticeRows(Math.max(from, start - SEA_RUN_PAST), Math.min(to, end + SEA_RUN_PAST)), seaOffsets, (d, offset, colour) => {
       colour.lerpColors(shallow, deep, smoothstep(SEA_SHALLOW_UNTIL, SEA_DEEP_FROM, -offset));
       return TERRAIN.WATER_LEVEL;
-    }, (d, offset, place) => place.set(d, -offset, TERRAIN.WATER_LEVEL - groundMeshHeight(d, -offset, envFor(d).water)));
+    }, (d, offset, place) => place.set(d, -offset, TERRAIN.WATER_LEVEL - groundMeshHeight(d, offset, { water: envFor(d).water, tunnel })));
     addTriangles(stretch, SEA_JITTER, rng, sea);
   }
   const seaGeometry = triangleSoup(sea.positions, sea.colors);

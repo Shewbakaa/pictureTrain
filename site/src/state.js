@@ -14,6 +14,8 @@
 // finaleCues: the finale's own sounds played since the train last pulled in at the Day 365 station, in order, by name
 //   ('bell', 'hop', 'land', 'dress', 'door', 'shop-bell', 'step', 'heartbeat', 'crinkle', 'sparkle', 'doves',
 //   'firework'), the first 64 of them; [] before
+// tunnel: how far inside the tunnel the train is (world/tunnel.js tunnelInside), 0 out in the open to 1 inside, easing
+//   over the first and last few metres; 0 on a ride without a tunnel
 // wakeLock: whether the screen is being kept awake: 'held', 'off' (not at the moment: before Begin, or the browser has
 //   let it go while the page was away), 'refused' (the browser said no) or 'none' (it has no Wake Lock API)
 export const appState = {
@@ -26,6 +28,7 @@ export const appState = {
   reachedMax: -1,
   paused: false,
   yaw: 0,
+  tunnel: 0,
   quality: null,
   drawCalls: 0,
   triangles: 0,

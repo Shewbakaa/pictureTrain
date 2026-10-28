@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { terrainHeight, TERRAIN, createTerrain } from '../../site/src/world/terrain.js';
+import { PORTAL, portalTop, tunnelSpan, TUNNEL } from '../../site/src/world/tunnel.js';
 import { createTrackPath, TRACK } from '../../site/src/world/trackPath.js';
 import { buildLayout, EYE_HEIGHT } from '../../site/src/world/layout.js';
 import { SCATTER } from '../../site/src/world/scatter.js';
@@ -36,6 +37,7 @@ test('continuous', () => {
 const layout = buildLayout(normalizeContent(fixture).content);
 const path = createTrackPath(layout.total, TRACK.SEED, { straightRanges: [[0, 120], [layout.finaleDistance - 90, layout.total + 60]] });
 const terrain = createTerrain(path, layout, { seed: TRACK.SEED });
+const tunnel = tunnelSpan(layout);
 
 test('the ground ends in hill tops above her eye, so from her seat it never visibly ends', () => {
   for (let d = -80; d <= layout.total + 80; d += 1) {
@@ -64,7 +66,11 @@ test('the ground and the sea are faceted triangle soup, the ground in the shared
     assert.equal(mesh.geometry.index, null);
     assert.equal(normal.count, position.count);
     assert.equal(color.count, position.count);
-    for (let i = 0; i < normal.count; i++) assert.ok(normal.getY(i) > 0.5, 'faces up, gently sloped');
+    for (let i = 0; i < normal.count; i++) {
+      // Only the tunnel's hill stands up more steeply, beside the portals and at its ends.
+      const byTunnel = path.pointAt(tunnel.boundary).distanceTo(new Vector3().fromBufferAttribute(position, i).setY(0)) < 60;
+      assert.ok(normal.getY(i) > (byTunnel ? 0.45 : 0.5), 'faces up, gently sloped');
+    }
   }
   assert.equal(terrain.mesh.material, MATERIALS.solid);
   assert.equal(terrain.water.material, SEA_MATERIAL); // the waves move it in its shader
@@ -149,4 +155,92 @@ test('a ride without a water zone has no sea', () => {
   const dry = buildLayout(normalizeContent({ ...fixture, zones: ['spring', 'autumn', 'evening'], moments: [] }).content);
   const dryPath = createTrackPath(dry.total, TRACK.SEED, { straightRanges: [[0, 120], [dry.finaleDistance - 90, dry.total + 60]] });
   assert.equal(createTerrain(dryPath, dry).water, null);
+});
+
+// ---------------------------------------------------------------------------------------------
+// The hill the tunnel runs through (Task 6).
+// ---------------------------------------------------------------------------------------------
+
+test('over the tunnel the ground rises into a hill, but the track bed stays level', () => {
+  assert.deepEqual(tunnel, { from: 540, to: 600, boundary: 570 });
+  assert.equal(terrainHeight(570, 0, { tunnel }), 0);
+  assert.ok(terrainHeight(570, 10, { tunnel }) >= 6);
+  assert.ok(terrainHeight(570, -10, { tunnel }) >= 6);
+  for (let d = tunnel.from - 20; d <= tunnel.to + 20; d += 0.5) {
+    for (let o = -TERRAIN.FLAT; o <= TERRAIN.FLAT; o += 0.5) assert.equal(terrainHeight(d, o, { tunnel }), 0);
+  }
+});
+
+test('away from the tunnel the hill is not there', () => {
+  assert.equal(terrainHeight(400, 10, { tunnel }), terrainHeight(400, 10));
+  assert.equal(terrainHeight(tunnel.from - 12, 30, { tunnel }), terrainHeight(tunnel.from - 12, 30));
+  assert.equal(terrainHeight(tunnel.to + 12, -30, { tunnel }), terrainHeight(tunnel.to + 12, -30));
+  assert.equal(terrainHeight(570, 10, { tunnel: null }), terrainHeight(570, 10));
+});
+
+test('the hill is full height at the portals and eases down over 12 m beyond them', () => {
+  for (const o of [-40, -12, 12, 40]) {
+    for (const d of [tunnel.from, tunnel.boundary, tunnel.to]) {
+      assert.ok(Math.abs(terrainHeight(d, o, { tunnel }) - terrainHeight(d, o) - TUNNEL.MOUND) < 1e-9, `${d} ${o}`);
+    }
+    const before = terrainHeight(tunnel.from - 6, o, { tunnel }) - terrainHeight(tunnel.from - 6, o);
+    const after = terrainHeight(tunnel.to + 6, o, { tunnel }) - terrainHeight(tunnel.to + 6, o);
+    assert.ok(before > 1 && before < TUNNEL.MOUND - 1 && Math.abs(before - after) < 1e-9, `eased: ${before} ${after}`);
+  }
+  // No step anywhere: rows of the ground 4 m apart see a slope, not a cliff.
+  for (let d = tunnel.from - 20; d < tunnel.to + 20; d += 0.25) {
+    for (const o of [-60, -9, 9, 60]) {
+      assert.ok(Math.abs(terrainHeight(d + 0.25, o, { tunnel }) - terrainHeight(d, o, { tunnel })) < 0.3, `${d} ${o}`);
+    }
+  }
+});
+
+test('the ground mesh carries the hill', () => {
+  const p = terrain.mesh.geometry.attributes.position;
+  const corner = new Vector3();
+  let checked = 0;
+  for (const d of [tunnel.from - 3.5, tunnel.boundary + 2.5, tunnel.to + 4.5]) { // rows of the mesh
+    for (const o of [-11.5, 11.5, -39, 39]) {
+      const want = path.frameAt(d, o, terrainHeight(d, o, { tunnel }));
+      let found = false;
+      for (let i = 0; i < p.count && !found; i++) found = corner.fromBufferAttribute(p, i).distanceTo(want) < 1e-3;
+      assert.ok(found, `a ground corner on the hill at ${d} m, ${o} m out`);
+      checked++;
+    }
+  }
+  assert.equal(checked, 12);
+});
+
+test('between the portals the hill closes over the tunnel, its ends tucked behind the portals\' tops', () => {
+  // Where a corner is along the track and out from it, near the tunnel (the track curves there).
+  const samples = [];
+  for (let d = tunnel.from - 20; d <= tunnel.to + 20; d += 0.5) samples.push({ d, point: path.pointAt(d) });
+  const frameOf = (v) => {
+    let best = samples[0], bestSq = Infinity;
+    for (const s of samples) {
+      const sq = (s.point.x - v.x) ** 2 + (s.point.z - v.z) ** 2;
+      if (sq < bestSq) { best = s; bestSq = sq; }
+    }
+    const tangent = path.tangentAt(best.d);
+    const d = best.d + (v.x - best.point.x) * tangent.x + (v.z - best.point.z) * tangent.z;
+    const point = path.pointAt(d), side = path.sideAt(d);
+    return { d, offset: (v.x - point.x) * side.x + (v.z - point.z) * side.z };
+  };
+  const p = terrain.mesh.geometry.attributes.position;
+  const corner = new Vector3();
+  let roof = 0, ends = 0;
+  for (let i = 0; i < p.count; i++) {
+    corner.fromBufferAttribute(p, i);
+    if (corner.y < 0.5 || corner.distanceTo(path.pointAt(tunnel.boundary)) > 60) continue;
+    const { d, offset } = frameOf(corner);
+    if (Math.abs(offset) >= TERRAIN.FLAT) continue; // only the roof stands up over the level verge
+    roof++;
+    assert.ok(d > tunnel.from && d < tunnel.to, `the roof stays between the portals: ${d.toFixed(2)}`);
+    if (Math.abs(offset) <= TUNNEL.HALF_WIDTH + TUNNEL.WALL) assert.ok(corner.y >= TUNNEL.HEIGHT + TUNNEL.WALL, 'clear of the lining');
+    if (d < tunnel.from + PORTAL.IN || d > tunnel.to - PORTAL.IN) {
+      ends++;
+      assert.ok(corner.y < portalTop(offset), `hidden behind the portal's top at ${offset.toFixed(1)} m out`);
+    }
+  }
+  assert.ok(roof > 50 && ends > 10, `${roof} corners of roof, ${ends} at its ends`);
 });

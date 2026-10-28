@@ -6,6 +6,7 @@ import { createTrackPath, TRACK } from '../../site/src/world/trackPath.js';
 import { buildLayout } from '../../site/src/world/layout.js';
 import { envAt } from '../../site/src/world/environment.js';
 import { terrainHeight, TERRAIN } from '../../site/src/world/terrain.js';
+import { tunnelSpan } from '../../site/src/world/tunnel.js';
 import { ZONES } from '../../site/src/world/zones.js';
 import { MATERIALS } from '../../site/src/render/materials.js';
 import { swayMaterialFor } from '../../site/src/world/wind.js';
@@ -17,6 +18,7 @@ import fixture from '../fixtures/content.fixture.js';
 const layout = buildLayout(normalizeContent(fixture).content);
 const path = createTrackPath(layout.total, TRACK.SEED, { straightRanges: [[0, 120], [layout.finaleDistance - 90, layout.total + 60]] });
 const dressing = createDressing({ path, layout });
+const tunnel = tunnelSpan(layout);
 const meshes = dressing.group.children.filter((o) => o.isInstancedMesh);
 const bodies = meshes.filter((m) => !m.name.endsWith('-glow'));
 
@@ -64,11 +66,23 @@ test('every prop stands on the ground and none of them floats', () => {
   for (const mesh of bodies) {
     for (const p of instances(mesh)) {
       const { d, offset } = trackFrameOf(p);
-      const ground = terrainHeight(d, offset, { water: envAt(layout, d, env).water });
+      const ground = terrainHeight(d, offset, { water: envAt(layout, d, env).water, tunnel });
       assert.ok(p.y <= ground - DRESSING.SINK + 0.05, `${mesh.name} at ${d} m floats: ${p.y.toFixed(2)} over ground ${ground.toFixed(2)}`);
       assert.ok(p.y >= ground - DRESSING.SINK - 1.5, `${mesh.name} at ${d} m is buried: ${p.y.toFixed(2)} under ground ${ground.toFixed(2)}`);
     }
   }
+});
+
+test('no prop stands in the tunnel\'s stretch, nor within 10 m of its portals', () => {
+  let near = 0;
+  for (const mesh of bodies) {
+    for (const p of instances(mesh)) {
+      const { d } = trackFrameOf(p);
+      assert.ok(d < tunnel.from - 10 || d > tunnel.to + 10, `${mesh.name} at ${d.toFixed(1)} m`);
+      if (d > tunnel.from - 40 && d < tunnel.to + 40) near++;
+    }
+  }
+  assert.ok(near > 10, `${near} props either side of the hill: only its own stretch is bare`);
 });
 
 test('nothing stands in the sea (R20)', () => {

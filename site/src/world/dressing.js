@@ -4,7 +4,9 @@
 // it stands (terrain.js `terrainHeight`, with the sea's share there from environment.js), at the lowest point
 // under its footprint so that on a slope it never floats, and sunk a few centimetres more because the ground
 // mesh is a coarse grid over that smooth height. Anything that would stand in the sea is left out: the
-// neighbours of a beach zone spill their props into its blend window, where the ground slopes into the water.
+// neighbours of a beach zone spill their props into its blend window, where the ground slopes into the water. So is
+// anything on the tunnel's hill (tunnel.js) or within TUNNEL_CLEAR of its portals, where the hill rises; beyond that
+// the props stand on the hill's last gentle slope.
 //
 // There is one InstancedMesh for each zone's body of each type and variant, and another for its glow (lamp
 // glass, windows) where it has one: about forty meshes for the default ride, and only the zones near the
@@ -31,6 +33,7 @@ import { scatterZone } from './scatter.js';
 import { SIGN } from './signs.js';
 import { START_STATION_DISTANCE } from './stations.js';
 import { terrainHeight, TERRAIN } from './terrain.js';
+import { tunnelSpan } from './tunnel.js';
 import { swayMaterialFor } from './wind.js';
 import { ZONES } from './zones.js';
 
@@ -38,6 +41,7 @@ import { ZONES } from './zones.js';
 export const DRESSING = Object.freeze({
   DRY: TERRAIN.WATER_LEVEL + 0.1, // a prop whose ground is lower than this would stand in the sea, so it is left out
   SINK: 0.08,                     // every prop sits this far into the ground: the ground mesh only follows the hills to within about that
+  TUNNEL_CLEAR: 10,               // no prop stands over the tunnel, nor within this far of either of its portals
 });
 
 /**
@@ -105,6 +109,8 @@ export function createDressing({ path, layout, seed = 1 }) {
   const group = new Group();
   group.name = 'dressing';
   const avoid = avoidSpots(layout);
+  const tunnel = tunnelSpan(layout);
+  const bare = tunnel ? [tunnel.from - DRESSING.TUNNEL_CLEAR, tunnel.to + DRESSING.TUNNEL_CLEAR] : null;
   const env = envAt(layout, 0);
   const geometries = new Map(); // 'type#variant' → { body, glow, foot }, built once and shared by every zone
   /** @type {Array<{ mesh: InstancedMesh|Points, total: number }>} */
@@ -121,11 +127,12 @@ export function createDressing({ path, layout, seed = 1 }) {
     const def = ZONES[zone.id];
     const placements = scatterZone({ path, zone, rules: def.props, seed: seed + index, avoid, water: def.water });
 
-    // Stand each prop on the ground, or leave it out if that ground is under the sea.
+    // Stand each prop on the ground, or leave it out if that ground is under the sea or is the tunnel's hill.
     const byKind = new Map();
     for (const p of placements) {
+      if (bare && p.d >= bare[0] && p.d <= bare[1]) continue;
       const water = envAt(layout, p.d, env).water;
-      const ground = (d, offset) => terrainHeight(d, offset, { water });
+      const ground = (d, offset) => terrainHeight(d, offset, { water, tunnel });
       if (ground(p.d, p.offset) < DRESSING.DRY) continue;
       const key = `${p.type}#${p.variant}`;
       if (!geometries.has(key)) {

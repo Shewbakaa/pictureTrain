@@ -5,7 +5,8 @@
 // balloons, the ambient particles of the zone the train is in, a photo sign at every stop with the two of them
 // standing beside every other one, and the cabin she rides in. At dusk the sky fills with stars and a crescent moon
 // comes up, a shooting star crosses it 40 m before the last station and again as the finale's wish shows, and smoke
-// curls from the chimneys of the houses and of the station house.
+// curls from the chimneys of the houses and of the station house. The track runs through a hill into winter, and the
+// world's light dims while she is in the tunnel.
 //
 // On top of it sits the ride UI: the intro card, a card at every stop, the timeline, the controls and the progress
 // pill, with the furthest moment she has reached remembered across reloads. If the phone takes the GPU away
@@ -40,6 +41,7 @@ import { createSmoke } from './world/smoke.js';
 import { createTerrain } from './world/terrain.js';
 import { followWave, SEA_MATERIAL, updateSea } from './world/seaWaves.js';
 import { createTrackMesh } from './world/trackMesh.js';
+import { createTunnel, tunnelInside, tunnelSpan } from './world/tunnel.js';
 import { createDressing } from './world/dressing.js';
 import { SWAY_LOW_MATERIAL, SWAY_MATERIAL, updateWind, windStrength } from './world/wind.js';
 import { createStation, START_STATION_DISTANCE } from './world/stations.js';
@@ -91,6 +93,9 @@ const AMBIENT_PARTICLES = 600;
 const SIGN_RANGE = 200;
 /** Smallest change in a sign's turn (rad) worth re-aiming it for. */
 const SIGN_TURN_EPSILON = 1e-4;
+
+/** How much of the daylight (the sky's and the sun's) is shut out deep in the tunnel, where only its lamps glow. */
+const TUNNEL_DIM = 0.6;
 
 /** How often the ?stats=1 readout refreshes (s). */
 const STATS_EVERY = 0.5;
@@ -161,7 +166,9 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   });
   const sky = createSky();
   const terrain = createTerrain(path, layout, { seed: TRACK.SEED });
-  scene.add(sky.mesh, terrain.mesh, createTrackMesh(path, layout));
+  const span = tunnelSpan(layout); // the hill is the ground's (terrain.js); the tunnel through it is its own
+  const tunnel = createTunnel(path, span);
+  scene.add(sky.mesh, terrain.mesh, createTrackMesh(path, layout), tunnel.group);
   if (terrain.water) scene.add(terrain.water);
   const finaleStation = createStation({ path, distance: layout.finaleDistance, kind: 'finale' });
   scene.add(createStation({ path, distance: START_STATION_DISTANCE, kind: 'start' }), finaleStation);
@@ -365,6 +372,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     appState.reachedMax = ride.reachedMax;
     appState.paused = ride.paused;
     appState.yaw = look.yaw;
+    appState.tunnel = tunnelInside(span, ride.distance);
     if (ambience) {
       appState.ambience = ambience.beds;
       appState.carol = music.carol;
@@ -456,7 +464,11 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       }
     }
     envAt(layout, d, env);
+    const dim = 1 - TUNNEL_DIM * tunnelInside(span, d);
+    env.hemiIntensity *= dim;
+    env.sunIntensity *= dim;
     applyEnvironment();
+    tunnel.update(d);
     placeSun(d);
     camera.getWorldPosition(eye);
     sky.update(env, eye, elapsed);

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { appState } from './helpers.js';
 
-for (const at of [40, 150, 300, 480, 660, 820, 960]) {
+for (const at of [40, 150, 300, 480, 570, 660, 820, 960]) {
   test(`performance budget at ${at} m`, async ({ page }) => {
     await page.goto(`index.html?at=${at}&quality=high&ui=0`);
     await expect.poll(async () => (await appState(page)).mode).toBe('3d');
