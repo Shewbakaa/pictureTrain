@@ -98,6 +98,32 @@ test('a tap on the card finishes the writing at once, and nothing else hears it'
   await expect(page.getByRole('button', { name: 'Ride again' })).toBeEnabled();
 });
 
+test('a button in the card body is its own, and the tap is only kept from others while the writing runs', async ({ page }) => {
+  await useFixture(page, { finale: { message: LONG_MESSAGE } });
+  await page.goto('index.html?finale=1&ft=12');
+  await waitForPhase(page, 'done');
+  const body = page.locator('.finale-card-body');
+  const message = page.locator('.finale-message');
+  // What Task 18's voice button will be: a real button inside the body.
+  await body.evaluate((b) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.id = 'extra-button';
+    button.textContent = 'Play';
+    b.appendChild(button);
+    window.__heard = 0;
+    document.addEventListener('click', () => { window.__heard += 1; });
+  });
+  await page.locator('#extra-button').click();
+  await expect(message).not.toHaveClass(/inked/); // its tap is not a tap on the writing
+  expect(await page.evaluate(() => window.__heard)).toBe(1); // and went on to the document as any button's would
+  await body.click({ position: { x: 12, y: 12 } });
+  await expect(message).toHaveClass(/inked/);
+  expect(await page.evaluate(() => window.__heard)).toBe(1); // the tap that finished the writing stopped at the card
+  await body.click({ position: { x: 12, y: 12 } });
+  expect(await page.evaluate(() => window.__heard)).toBe(2); // once it is written, a tap on the card is just a tap
+});
+
 test('the writing leaves the card where it is', async ({ page }) => {
   await useFixture(page, { finale: { message: `${LONG_MESSAGE}\n\n${LONG_MESSAGE}` } });
   await page.goto('index.html?finale=1&ft=12');

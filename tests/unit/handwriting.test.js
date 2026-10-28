@@ -63,16 +63,44 @@ test('a line break waits the line pause, a paragraph break the paragraph pause',
   assert.ok(Math.abs(after('one.\n\ntwo') - INK.PARAGRAPH) < 1e-9);
 });
 
-test('blank lines, spaces and tabs around words are only separators', () => {
-  const { words } = inkPlan('\n\n  one \t two  \r\n\r\n three\n\n\n\nfour\n');
-  assert.deepEqual(words.map((w) => w.text), ['one', 'two', 'three', 'four']);
-  assert.deepEqual(words.map((w) => w.breakAfter), ['none', 'paragraph', 'paragraph', 'none']);
+test('spaces and tabs around words are only separators, and every line break the author wrote is kept', () => {
+  const plan = inkPlan('\n\n  one \t two  \r\n\r\n three\n\n\n\nfour\n');
+  assert.deepEqual(plan.words.map((w) => w.text), ['one', 'two', 'three', 'four']);
+  // Two breaks make a paragraph, and three or more are the blank lines white-space: pre-line would have drawn.
+  assert.deepEqual(plan.words.map((w) => w.breakAfter), ['none', 'paragraph', 'paragraph', 'none']);
+  assert.deepEqual(plan.words.map((w) => w.breaks), [0, 2, 4, 0]);
+  assert.equal(plan.leading, 2);
+  // The breaks at the very end have nothing after them, so there are none.
+  assert.equal(inkPlan('one\n\n').words[0].breaks, 0);
+});
+
+test('extra blank lines wait no longer than a paragraph', () => {
+  const gap = (text) => {
+    const { words } = inkPlan(text);
+    return words[1].start - (words[0].start + words[0].duration);
+  };
+  assert.ok(Math.abs(gap('one\n\n\n\ntwo') - INK.PARAGRAPH) < 1e-9);
 });
 
 test('no text is no words, and ends where it starts', () => {
-  assert.deepEqual(inkPlan(''), { words: [], end: 0 });
-  assert.deepEqual(inkPlan(' \n ', 1.5), { words: [], end: 1.5 });
-  assert.deepEqual(inkPlan(undefined, 1.5), { words: [], end: 1.5 });
+  assert.deepEqual(inkPlan(''), { words: [], end: 0, leading: 0 });
+  assert.deepEqual(inkPlan(' \n ', 1.5), { words: [], end: 1.5, leading: 0 });
+  assert.deepEqual(inkPlan(undefined, 1.5), { words: [], end: 1.5, leading: 0 });
+});
+
+test('a word of nothing but a quote or a bracket is only a word, not the end of a sentence', () => {
+  const { words } = inkPlan('a " b ) c');
+  assert.deepEqual(words.map((w) => w.text), ['a', '"', 'b', ')', 'c']);
+  for (let i = 1; i < words.length; i++) {
+    const gap = words[i].start - (words[i - 1].start + words[i - 1].duration);
+    assert.ok(Math.abs(gap - INK.WORD_GAP) < 1e-9, `before word ${i}`);
+  }
+});
+
+test('a no-break space keeps its two halves in one word, so a wrap cannot part them', () => {
+  const { words } = inkPlan('Day\u00a0365 and\u00a0more');
+  assert.deepEqual(words.map((w) => w.text), ['Day\u00a0365', 'and\u00a0more']);
+  assert.ok(Math.abs(words[0].duration - 7 * INK.PER_CHAR) < 1e-9);
 });
 
 test('a long word takes longer, in whole characters', () => {

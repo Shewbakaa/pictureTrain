@@ -8,7 +8,7 @@
 
 import { appState } from '../state.js';
 import { el, prefersReducedMotion, setChildren, svgEl } from './dom.js';
-import { writeLetter } from './handwriting.js';
+import { finishOnTap, writeLetter } from './handwriting.js';
 import { squiggle, ticketLines, ticketParts } from './intro.js';
 import { momentPhoto } from './stopCard.js';
 
@@ -20,29 +20,34 @@ function heart() {
 }
 
 /**
- * Has the message and the signoff written once the message has scrolled up into view: at once where the browser has no
- * IntersectionObserver to say when. Until then they hold their text, unseen, so there is nothing to flash.
+ * Has the message and the signoff written once the message has scrolled into view (at once where the browser has no
+ * IntersectionObserver to say when), and a tap on `card` finishes the writing. Until then they hold their text, unseen,
+ * so there is nothing to flash.
+ * @param {HTMLElement} card  the finale's card, which a tap finishes the writing on
  * @param {{ el: HTMLElement, text: string } | null} message
  * @param {{ el: HTMLElement, text: string } | null} signoff
  */
-function writeWhenSeen(message, signoff) {
+function writeWhenSeen(card, message, signoff) {
   const first = message || signoff;
   if (!first) return;
+  let writing = null;
+  finishOnTap(card, () => writing);
   function write() {
     for (const part of [message, signoff]) if (part) part.el.classList.remove('ink-pending');
-    writeLetter(message, signoff, { reduced: prefersReducedMotion() });
+    writing = writeLetter(message, signoff, { reduced: prefersReducedMotion() });
   }
   if (typeof IntersectionObserver !== 'function') {
     write();
     return;
   }
   for (const part of [message, signoff]) if (part) part.el.classList.add('ink-pending');
-  // A fifth of the way up the screen, so she has the first lines to read as the pen reaches them.
+  // The moment the message's first line comes up over the screen's edge, not a fifth of the way up it: on a tall
+  // screen the end of the page can leave the message nearer than that to the bottom, and it would never be written.
   const observer = new IntersectionObserver((entries) => {
     if (!entries.some((entry) => entry.isIntersecting)) return;
     observer.disconnect();
     write();
-  }, { rootMargin: '0px 0px -20% 0px' });
+  });
   observer.observe(first.el);
 }
 
@@ -56,6 +61,13 @@ export function showFallback(content, assets) {
   const page = document.getElementById('fallback');
   const messageEl = finale.message ? el('p', { class: 'fallback-message' }, [finale.message]) : null;
   const signoffEl = finale.signoff ? el('p', { class: 'fallback-signoff' }, [finale.signoff]) : null;
+  const finaleCard = el('footer', { class: 'fallback-card fallback-finale' }, [
+    heart(),
+    el('p', { class: 'eyebrow' }, [finale.eyebrow]),
+    el('h2', { class: 'fallback-wish' }, [finale.wish]),
+    messageEl,
+    signoffEl,
+  ]);
   setChildren(page, el('div', { class: 'fallback-page' }, [
     // The same boarding ticket as the ride opens with, already punched, with nothing to tap.
     el('header', { class: 'fallback-card fallback-intro ticket' }, ticketParts([
@@ -71,16 +83,10 @@ export function showFallback(content, assets) {
       el('h2', { class: 'fallback-title' }, [moment.title]),
       moment.caption ? el('p', { class: 'fallback-caption' }, [moment.caption]) : null,
     ]))),
-    el('footer', { class: 'fallback-card fallback-finale' }, [
-      heart(),
-      el('p', { class: 'eyebrow' }, [finale.eyebrow]),
-      el('h2', { class: 'fallback-wish' }, [finale.wish]),
-      messageEl,
-      signoffEl,
-    ]),
+    finaleCard,
   ]));
   page.hidden = false;
-  writeWhenSeen(messageEl && { el: messageEl, text: finale.message }, signoffEl && { el: signoffEl, text: finale.signoff });
+  writeWhenSeen(finaleCard, messageEl && { el: messageEl, text: finale.message }, signoffEl && { el: signoffEl, text: finale.signoff });
   appState.phase = 'fallback';
   appState.mode = 'fallback';
 }

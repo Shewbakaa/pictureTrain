@@ -181,6 +181,36 @@ test('the 2D story writes its message in ink as it scrolls into view', async ({ 
   expect(errors).toEqual([]);
 });
 
+test('the 2D story writes its message at the bottom of the page on a tall screen too', async ({ page }) => {
+  // At the end of the page a short message can sit nearer the screen's bottom than a fifth of a tall screen's height.
+  for (const [width, height] of [[820, 1180], [1280, 1100], [1440, 1300]]) {
+    await page.setViewportSize({ width, height });
+    await page.goto('index.html?fallback=1');
+    await expect(page.locator('.fallback-moment')).toHaveCount(10);
+    await page.locator('#fallback').evaluate((e) => { e.scrollTop = e.scrollHeight; });
+    await expect(page.locator('.fallback-message .ink-word'), `${width}x${height}`).toHaveCount(9);
+    await expect(page.locator('.fallback-message')).not.toHaveClass(/ink-pending/);
+    await expect(page.locator('.fallback-signoff .ink-word')).toHaveCount(2);
+  }
+});
+
+test('a tap on the 2D story\'s last card finishes the writing', async ({ page }) => {
+  const long = 'Thank you for the best year of my life, for every walk in the rain and every coffee we let go cold. '.repeat(4).trim();
+  await useFixture(page, { finale: { message: long } });
+  await page.goto('index.html?fallback=1');
+  const card = page.locator('.fallback-finale');
+  const message = page.locator('.fallback-message');
+  // Before the writing has begun a tap does nothing, and does no harm.
+  await card.dispatchEvent('click');
+  await expect(message).toHaveClass(/ink-pending/);
+  await message.scrollIntoViewIfNeeded();
+  await expect(message.locator('.ink-word')).toHaveCount(long.split(' ').length);
+  await expect(message).not.toHaveClass(/inked/);
+  await card.click({ position: { x: 10, y: 10 } });
+  await expect(message).toHaveClass(/inked/);
+  await expect(page.locator('.fallback-signoff')).toHaveClass(/inked/);
+});
+
 test('the 2D story writes its message at once where there is no IntersectionObserver', async ({ page }) => {
   await page.addInitScript(() => { delete window.IntersectionObserver; });
   await page.goto('index.html?fallback=1');

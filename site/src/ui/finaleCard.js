@@ -5,7 +5,7 @@
 // finishes it at once. The body scrolls inside the card, so a long message never pushes the button off the screen.
 
 import { el, prefersReducedMotion, reveal, setChildren, svgEl } from './dom.js';
-import { writeLetter } from './handwriting.js';
+import { finishOnTap, writeLetter } from './handwriting.js';
 
 /** The pen touches down this long (s) after the card starts to rise, which takes 1.1 s but is mostly there by then. */
 const WRITE_FROM = 1;
@@ -51,13 +51,9 @@ export function showFinaleCard(content, { onRideAgain }) {
     signoffEl && { el: signoffEl, text: signoff },
     { startAt: WRITE_FROM, reduced: prefersReducedMotion() },
   );
-  // A tap on the card finishes the writing at once. (A touch that scrolls the body is not a click, and a tap on a
-  // button or link inside it is theirs.)
-  body.addEventListener('click', (event) => {
-    if (event.target instanceof Element && event.target.closest('button, a')) return;
-    event.stopPropagation();
-    writing.finish();
-  });
+  // A tap on the card finishes the writing at once (see finishOnTap: not a tap on a button or link inside it, and not
+  // once it is over).
+  finishOnTap(body, () => writing);
   reveal(card);
 }
 

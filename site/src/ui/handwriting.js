@@ -62,38 +62,54 @@ function graphemeCount(word) {
 /** The pause after `word` from how it ends, s (at least the gap between words). */
 function pauseAfter(word) {
   const last = word.replace(CLOSERS, '').slice(-1);
+  // A word of nothing but closers (a lone quote or bracket) has no last character to read a pause from.
+  if (!last) return INK.WORD_GAP;
   if (SENTENCE_MARKS.includes(last)) return INK.SENTENCE;
   if (COMMA_MARKS.includes(last)) return INK.COMMA;
   return INK.WORD_GAP;
 }
 
 /**
- * @typedef {{ text: string, start: number, duration: number, breakAfter: 'none' | 'line' | 'paragraph' }} InkWord
- *   `start` and `duration` in seconds, `breakAfter` what the message has after the word.
+ * Where a message splits into words: spaces, tabs and line breaks only, as `white-space: pre-line` collapses them. A
+ * no-break space stays inside its word, so the two halves are never parted by a wrap.
+ */
+const SEPARATOR = /([ \t\f\n]+)/;
+
+/**
+ * @typedef {{ text: string, start: number, duration: number, breakAfter: 'none' | 'line' | 'paragraph', breaks: number }} InkWord
+ *   `start` and `duration` in seconds. `breaks` is how many line breaks the message has right after the word (none
+ *   after the last), and `breakAfter` what that makes of it: one is a 'line', two or more a 'paragraph'.
  */
 
 /**
- * When each word of `text` is written. Words are split on spaces; a line break ends a line and a blank line (two or
- * more breaks) ends a paragraph. After each word the pen waits for the longest of the gap between words, the pause its
- * last character asks for, and its line or paragraph break, if it has one.
+ * When each word of `text` is written. Words are split on spaces and tabs; each line break in the text is kept (so
+ * are the blank lines the author leaves, however many, and any before the first word), a single one ends a line and
+ * two or more a paragraph. After each word the pen waits for the longest of the gap between words, the pause its last
+ * character asks for, and its line or paragraph break, if it has one.
  * @param {string} text
  * @param {number} [startAt]  s, where the first word starts
- * @returns {{ words: InkWord[], end: number }}  `end` is when the last word is done (the pen's last pause is not waited for)
+ * @returns {{ words: InkWord[], end: number, leading: number }}  `end` is when the last word is done (the pen's last
+ *   pause is not waited for); `leading` is how many line breaks the text starts with
  */
 export function inkPlan(text, startAt = 0) {
   const words = [];
-  // Splitting on whitespace and keeping it, so what lies between two words says whether they share a line.
-  for (const piece of String(text ?? '').replace(/\r\n?/g, '\n').split(/(\s+)/)) {
-    if (!piece) continue;
-    if (/^\s+$/.test(piece)) {
-      const breaks = piece.split('\n').length - 1;
-      if (words.length && breaks) words[words.length - 1].breakAfter = breaks > 1 ? 'paragraph' : 'line';
-    } else {
-      words.push({ text: piece, start: 0, duration: Math.max(INK.MIN_WORD, graphemeCount(piece) * INK.PER_CHAR), breakAfter: 'none' });
+  let leading = 0;
+  // Splitting on the separators and keeping them: the words are the even pieces, and what lies between two words (the
+  // odd ones) says how many line breaks there are.
+  String(text ?? '').replace(/\r\n?/g, '\n').split(SEPARATOR).forEach((piece, i) => {
+    if (i % 2 === 0) {
+      if (piece) words.push({ text: piece, start: 0, duration: Math.max(INK.MIN_WORD, graphemeCount(piece) * INK.PER_CHAR), breakAfter: 'none', breaks: 0 });
+      return;
     }
-  }
-  // Breaks at the very end of the message have nothing after them to wait for.
-  if (words.length) words[words.length - 1].breakAfter = 'none';
+    const breaks = piece.split('\n').length - 1;
+    const previous = words[words.length - 1];
+    if (!previous) leading = breaks;
+    else if (breaks) Object.assign(previous, { breaks, breakAfter: breaks > 1 ? 'paragraph' : 'line' });
+  });
+  // Breaks at the very end of the message have nothing after them to wait for (and a message of nothing but breaks
+  // is all end).
+  if (words.length) Object.assign(words[words.length - 1], { breaks: 0, breakAfter: 'none' });
+  else leading = 0;
 
   let t = startAt;
   for (const word of words) {
@@ -102,13 +118,13 @@ export function inkPlan(text, startAt = 0) {
     t += word.duration + Math.max(pauseAfter(word.text), breakPause);
   }
   const last = words[words.length - 1];
-  return { words, end: last ? last.start + last.duration : startAt };
+  return { words, end: last ? last.start + last.duration : startAt, leading };
 }
 
 /**
  * Writes `text` into `el` in ink, replacing what it held. Every word becomes a `span.ink-word` carrying `--ink-start`
  * and `--ink-dur` (s) for the stylesheet's sweep, with the spaces kept between them and a `<br>` for each line break
- * (two for a paragraph), so under `white-space: pre-line` it lays out as the text did. The sweep is the stylesheet's
+ * of the text (so a blank line is two of them), so under `white-space: pre-line` it lays out as the text did. The sweep is the stylesheet's
  * business (`.ink-word`), and `finish()` (or the writing running out) puts the class `inked` on `el`, which turns it all
  * off and leaves the text as it is.
  *
@@ -116,8 +132,9 @@ export function inkPlan(text, startAt = 0) {
  * @param {HTMLElement} el
  * @param {string} text
  * @param {{ startAt?: number, reduced?: boolean }} [options]  `startAt` s from now; `reduced` fades instead
- * @returns {{ finish: () => void, done: Promise<void>, end: number }}  `finish` shows all of it at once; `done` settles
- *   when it has been written (or finished); `end` is when that is, s from now (`startAt` plus the writing's length)
+ * @returns {{ finish: () => void, done: Promise<void>, end: number, running: boolean }}  `finish` shows all of it at
+ *   once; `done` settles when it has been written (or finished); `end` is when that is, s from now (`startAt` plus
+ *   the writing's length); `running` is whether it is still being written
  */
 export function writeInk(el, text, { startAt = 0, reduced = false } = {}) {
   const plan = inkPlan(text, startAt);
@@ -126,6 +143,8 @@ export function writeInk(el, text, { startAt = 0, reduced = false } = {}) {
   el.classList.remove('inked', 'ink-fade');
   el.textContent = '';
   const fragment = document.createDocumentFragment();
+  const lineBreaks = (count) => { for (let n = 0; n < count; n++) fragment.appendChild(document.createElement('br')); };
+  lineBreaks(plan.leading);
   plan.words.forEach((word, i) => {
     const span = document.createElement('span');
     span.className = 'ink-word';
@@ -136,8 +155,7 @@ export function writeInk(el, text, { startAt = 0, reduced = false } = {}) {
     if (i === plan.words.length - 1) return;
     // A space even before a break, where it collapses away, so the text reads as words with its spaces in it.
     fragment.appendChild(document.createTextNode(' '));
-    if (word.breakAfter !== 'none') fragment.appendChild(document.createElement('br'));
-    if (word.breakAfter === 'paragraph') fragment.appendChild(document.createElement('br'));
+    lineBreaks(word.breaks);
   });
   el.appendChild(fragment);
 
@@ -148,15 +166,17 @@ export function writeInk(el, text, { startAt = 0, reduced = false } = {}) {
   }
 
   let settle;
+  let running = true;
   const done = new Promise((resolve) => { settle = resolve; });
   // The page's clock runs the animations, and this one the end of them, a beat late rather than early.
   const timer = setTimeout(() => finish(), end * 1000 + 100);
   function finish() {
     clearTimeout(timer);
+    running = false;
     el.classList.add('inked'); // the writing is over: the stylesheet lets go of every mask and animation
     settle();
   }
-  return { finish, done, end };
+  return { finish, done, end, get running() { return running; } };
 }
 
 /** The signoff is written this long (s) after the message is done, as if the pen were lifted and put down again. */
@@ -167,7 +187,7 @@ const SIGNOFF_AFTER = 0.4;
  * @param {{ el: HTMLElement, text: string } | null} message
  * @param {{ el: HTMLElement, text: string } | null} signoff
  * @param {{ startAt?: number, reduced?: boolean }} [options]  as for `writeInk`
- * @returns {{ finish: () => void, done: Promise<void> }}  of both together
+ * @returns {{ finish: () => void, done: Promise<void>, running: boolean }}  of both together
  */
 export function writeLetter(message, signoff, { startAt = 0, reduced = false } = {}) {
   const writings = [];
@@ -181,5 +201,23 @@ export function writeLetter(message, signoff, { startAt = 0, reduced = false } =
   return {
     finish: () => writings.forEach((writing) => writing.finish()),
     done: Promise.all(writings.map((writing) => writing.done)).then(() => {}),
+    get running() { return writings.some((writing) => writing.running); },
   };
+}
+
+/**
+ * Lets a tap on `target` finish the writing at once. A tap on a button or a link inside it is theirs and is left alone,
+ * and while nothing is being written (before it starts, after it is over) the tap passes by untouched; only a tap that
+ * finishes the writing is kept from reaching anything else.
+ * @param {HTMLElement} target
+ * @param {() => ({ finish: () => void, running: boolean } | null)} current  the writing now, or null if none has begun
+ */
+export function finishOnTap(target, current) {
+  target.addEventListener('click', (event) => {
+    if (event.target instanceof Element && event.target.closest('button, a')) return;
+    const writing = current();
+    if (!writing || !writing.running) return;
+    event.stopPropagation();
+    writing.finish();
+  });
 }
