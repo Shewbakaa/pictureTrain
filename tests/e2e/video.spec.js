@@ -94,11 +94,43 @@ async function liveFirst(page, browserName) {
   await useFixture(page, { moments: base.moments.map((m, i) => (i === 0 ? { ...m, photo: '../tests/fixtures/still.jpg', live: clip(browserName) } : m)) });
 }
 
+/**
+ * Before the card comes up: notes each time a Live Photo starts or stops playing (its figure's `is-playing`), with
+ * whether its motion was muted and the app had a video's sound on at that moment, and each change of the ride's
+ * AudioContext's state (trackAudio's first) once there is one. Read them with `liveLog(page)`. The motion lasts two
+ * seconds, so on a loaded machine it can be over before a check gets round to looking: these say what happened, when
+ * it happened.
+ */
+async function watchLive(page) {
+  await page.evaluate(() => {
+    const plays = [];
+    const contextStates = [];
+    window.__live = { plays, contextStates };
+    new MutationObserver((records) => {
+      for (const { target } of records) {
+        if (!target.classList.contains('stop-photo-live')) continue;
+        const playing = target.classList.contains('is-playing');
+        if (plays.length && plays[plays.length - 1].playing === playing) continue;
+        plays.push({ playing, muted: target.querySelector('video').muted, videoSound: window.__app.state.videoSound });
+      }
+    }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    const watchContext = () => {
+      const ctx = window.__audio.contexts[0];
+      if (!ctx) return void setTimeout(watchContext, 20);
+      ctx.addEventListener('statechange', () => contextStates.push(ctx.state));
+    };
+    watchContext();
+  });
+}
+
+const liveLog = (page) => page.evaluate(() => window.__live);
+
 test('a Live Photo shows its still with a LIVE badge, plays once silently, and plays with sound when tapped', async ({ page, browserName }) => {
   const errors = collectConsoleErrors(page);
   await trackAudio(page);
   await liveFirst(page, browserName);
   await page.goto('index.html?speed=25');
+  await watchLive(page);
   await page.getByRole('button', { name: 'Begin the ride' }).click();
 
   const live = page.locator('#stop-card .stop-photo-live');
@@ -107,15 +139,19 @@ test('a Live Photo shows its still with a LIVE badge, plays once silently, and p
   await expect(live.locator('.live-badge')).toHaveText('LIVE');
   const motion = live.locator('video');
   expect(await motion.evaluate((v) => v.loop)).toBe(false);
-  await expect(live).toHaveClass(/is-playing/); // it played as the card came up
-  expect(await motion.evaluate((v) => v.muted)).toBe(true);
-  await expect(live).not.toHaveClass(/is-playing/, { timeout: 10_000 }); // and settled back to the still
+  // It played as the card came up, muted, and settled back to the still.
+  await expect.poll(async () => (await liveLog(page)).plays, { timeout: 10_000 }).toEqual([
+    { playing: true, muted: true, videoSound: false },
+    { playing: false, muted: true, videoSound: false },
+  ]);
+  await expect(live).not.toHaveClass(/is-playing/);
 
+  // A tap plays it again with its sound, and the music, the train and the ambience all duck for it: the
+  // AudioContext is suspended. (Until it ends, two seconds on, and the sound comes back.)
+  const { contextStates } = await liveLog(page);
   await page.getByRole('button', { name: 'Play the Live Photo with its sound' }).click();
-  await expect(live).toHaveClass(/is-playing/);
-  expect(await motion.evaluate((v) => v.muted)).toBe(false);
-  await expect.poll(async () => (await appState(page)).videoSound).toBe(true);
-  await expect.poll(() => states(page)).toEqual(['suspended']);
+  await expect.poll(async () => (await liveLog(page)).plays[2]).toEqual({ playing: true, muted: false, videoSound: true });
+  await expect.poll(async () => (await liveLog(page)).contextStates.slice(contextStates.length)).toContain('suspended');
 
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect.poll(async () => (await appState(page)).videoSound).toBe(false);

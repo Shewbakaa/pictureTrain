@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { useFixture, appState, waitForPhase, collectConsoleErrors, trackAudio, audioReport } from './helpers.js';
+import { FIREWORK_TIMING } from '../../site/src/finale/fireworkTiming.js';
 
 test.beforeEach(async ({ page }) => { await useFixture(page); });
 
@@ -138,17 +139,36 @@ test('the writing leaves the card where it is', async ({ page }) => {
   expect(await body.evaluate((b) => b.scrollTop)).toBe(40);
 });
 
+/**
+ * Before page.goto: notes the animations on his message, and on each of its words, the moment it is set to fade in
+ * (as its card comes up), in `window.__fade`. The fade lasts under a second and is put away a moment after it ends:
+ * on a loaded machine that can all be over before a check gets round to looking.
+ */
+async function noteFade(page) {
+  await page.addInitScript(() => {
+    new MutationObserver((records, observer) => {
+      for (const { target: e } of records) {
+        if (!e.classList.contains('finale-message') || !e.classList.contains('ink-fade') || e.classList.contains('inked')) continue;
+        const words = [...e.querySelectorAll('.ink-word')];
+        window.__fade = { message: e.getAnimations().map((a) => a.animationName), words: words.map((w) => w.getAnimations().length) };
+        observer.disconnect();
+        return;
+      }
+    }).observe(document, { subtree: true, attributes: true, attributeFilter: ['class'] });
+  });
+}
+
 test('with reduced motion the message fades in instead of being written', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await useFixture(page, { finale: { message: LONG_MESSAGE } });
+  await noteFade(page);
   await page.goto('index.html?finale=1&ft=12');
   await waitForPhase(page, 'done');
   const message = page.locator('.finale-message');
   await expect(message).toHaveClass(/ink-fade/);
-  expect(await message.evaluate((e) => e.getAnimations().map((a) => a.animationName))).toEqual(['ink-fade-in']);
-  // No word has an animation of its own: that is the sweep.
-  expect(await message.locator('.ink-word').evaluateAll((words) => words.map((w) => w.getAnimations().length))).toEqual(Array(wordsIn(LONG_MESSAGE)).fill(0));
-  // A tap still finishes it.
+  // It fades in as one, and no word has an animation of its own: that is the sweep.
+  await expect.poll(() => page.evaluate(() => window.__fade)).toEqual({ message: ['ink-fade-in'], words: Array(wordsIn(LONG_MESSAGE)).fill(0) });
+  // A tap finishes it, if it has not finished by itself (a second after it starts): either way nothing is left running.
   await page.locator('.finale-card-body').click({ position: { x: 12, y: 12 } });
   await expect(message).toHaveClass(/inked/);
   expect(await message.evaluate((e) => e.getAnimations().length)).toBe(0);
@@ -231,9 +251,14 @@ test('full ride end to end', async ({ page, browserName }) => {
   // The evening's nocturne plays on through the finale.
   expect((await appState(page)).musicPiece).toBe('evening');
   await expect.poll(async () => (await audioReport(page)).pieces.evening.paused).toBe(false);
-  // The fireworks pop over the town (each a puff and a crackle) for as long as the finale plays.
-  const popped = (await audioReport(page)).sounds;
-  await expect.poll(async () => (await audioReport(page)).sounds - popped, { timeout: 5000 }).toBeGreaterThanOrEqual(6);
+  // The fireworks pop over the town (each a puff and a crackle) for as long as the finale plays: at least six sounds
+  // over the next two rounds of the bursts, in which every burst blooms twice. That is measured on the finale's own
+  // clock, not the wall's: it moves on at most MAX_STEP a frame, so on a loaded machine drawing in software it runs
+  // well behind the wall clock. And two rounds, not a fixed few seconds, so that the low tier's two bursts (which the
+  // quality may step down to on such a machine) give four pops, eight sounds, however the rounds fall.
+  const [popped, from] = await page.evaluate(() => [window.__audio.starts.length, window.__app.state.finaleTime]);
+  await expect.poll(async () => (await appState(page)).finaleTime, { timeout: 60_000 }).toBeGreaterThanOrEqual(from + 2 * FIREWORK_TIMING.PERIOD);
+  expect((await audioReport(page)).sounds - popped).toBeGreaterThanOrEqual(6);
   // The train's sounds and the ambience kept to real time while the ride ran 50 times too fast: they were heard,
   // but never piled up (it crosses a rail joint every few frames, which would otherwise be dozens of clicks a second,
   // and passes through a zone in a moment).
