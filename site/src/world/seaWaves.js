@@ -16,6 +16,7 @@
 // Pure and DOM-free at import, like materials.js, so the Node unit tests can import it.
 
 import { Color, MeshLambertMaterial } from '../three.js';
+import { addAfter, glslFloat as f } from '../render/shaderPatch.js';
 import { lerp, smoothstep } from '../util/math.js';
 
 /**
@@ -120,12 +121,6 @@ export function followWave(wave, seconds, heard) {
 // The shaders
 // ---------------------------------------------------------------------------------------------------------------
 
-/** `x` as a GLSL float literal. */
-const f = (x) => {
-  const text = String(x);
-  return /[.e]/.test(text) ? text : `${text}.0`;
-};
-
 const S = SEA_WAVES;
 
 /** What both shaders share: the uniforms and the wave's shape (the GLSL of wavePhase, surge, crestLife, crestDepth). */
@@ -211,19 +206,13 @@ const uniforms = {
   uSeaFoam: { value: new Color(SEA_WAVES.FOAM) },
 };
 
-/** `source` with `text` added after `chunk`, which must be in it: a renamed three.js chunk fails loudly here. */
-function after(source, chunk, text) {
-  if (!source.includes(chunk)) throw new Error(`seaWaves: the shader has no ${chunk}`);
-  return source.replace(chunk, `${chunk}\n${text}`);
-}
-
 /** The sea's material: lit like materials.js `solid`, from the vertex colours, with the waves. */
 export const SEA_MATERIAL = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
 SEA_MATERIAL.name = 'sea';
 SEA_MATERIAL.onBeforeCompile = (shader) => {
   Object.assign(shader.uniforms, uniforms);
-  shader.vertexShader = after(after(shader.vertexShader, '#include <common>', VERTEX_HEAD), '#include <begin_vertex>', VERTEX_MOVE);
-  shader.fragmentShader = after(after(shader.fragmentShader, '#include <common>', FRAGMENT_HEAD), '#include <color_fragment>', FRAGMENT_FOAM);
+  shader.vertexShader = addAfter('seaWaves', shader.vertexShader, [['#include <common>', VERTEX_HEAD], ['#include <begin_vertex>', VERTEX_MOVE]]);
+  shader.fragmentShader = addAfter('seaWaves', shader.fragmentShader, [['#include <common>', FRAGMENT_HEAD], ['#include <color_fragment>', FRAGMENT_FOAM]]);
 };
 SEA_MATERIAL.customProgramCacheKey = () => 'sea-waves';
 

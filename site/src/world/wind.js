@@ -26,6 +26,7 @@
 // Pure and DOM-free at import, like materials.js, so the Node unit tests can import it.
 
 import { MeshLambertMaterial } from '../three.js';
+import { addAfter, glslFloat as f } from '../render/shaderPatch.js';
 import { lerp } from '../util/math.js';
 
 /** @typedef {import('./environment.js').Env} Env */
@@ -130,12 +131,6 @@ export function swayAt(height, time, x, z, strength, plant = WIND) {
 // The shader
 // ---------------------------------------------------------------------------------------------------------------
 
-/** `x` as a GLSL float literal. */
-const f = (x) => {
-  const text = String(x);
-  return /[.e]/.test(text) ? text : `${text}.0`;
-};
-
 const { RATE, GUST } = WIND;
 const { CAP, PHASE_X, PHASE_Z, SIDE, SIDE_RATE, SIDE_PHASE, CALM, GUSTED } = SWAY;
 
@@ -184,12 +179,6 @@ const uniforms = {
   uWindStrength: { value: 0 },
 };
 
-/** `source` with `text` added after `chunk`, which must be in it: a renamed three.js chunk fails loudly here. */
-function after(source, chunk, text) {
-  if (!source.includes(chunk)) throw new Error(`wind: the shader has no ${chunk}`);
-  return source.replace(chunk, `${chunk}\n${text}`);
-}
-
 /**
  * A material for plants that bend `plant.BEND` metres at `plant.REF_HEIGHT`: lit like materials.js `solid`, from the
  * vertex colours, with the sway. Each has a program of its own (`name` is its cache key), as its shader's numbers differ.
@@ -200,7 +189,7 @@ function swayMaterial(name, plant) {
   material.name = name;
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
-    shader.vertexShader = after(after(shader.vertexShader, '#include <common>', head), '#include <begin_vertex>', VERTEX_MOVE);
+    shader.vertexShader = addAfter('wind', shader.vertexShader, [['#include <common>', head], ['#include <begin_vertex>', VERTEX_MOVE]]);
   };
   material.customProgramCacheKey = () => name;
   return material;
