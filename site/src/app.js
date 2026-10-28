@@ -15,6 +15,8 @@
 // little sounds (her hop down, his door and footsteps, heartbeats, the bouquet's paper, doves), its hearts' sparkle
 // and its fireworks, all hushed again as she rides again or jumps back. One Sound button turns it all on and off.
 // Her tap on Begin also asks the phone to keep its screen on for the whole ride (ui/wakeLock.js).
+// Her seat moves with the train: a gentle rock, a drop as each bogie strikes a rail joint, a tip as it pulls away or
+// brakes (ride/trainMotion.js), all of it left out if her phone asks for less motion.
 //
 // At the Day 365 station the ride ends in the finale (finale/finale.js): under a blush fade her seat gives way to
 // the train seen from outside, the two of them meet on the platform, and his message comes up on a card with the
@@ -45,8 +47,9 @@ import { createFinale } from './finale/finale.js';
 import { FINALE_FADE } from './finale/finaleTimes.js';
 import { createRide } from './ride/rideController.js';
 import { attachPointerControls, createLook } from './ride/look.js';
+import { createTrainMotion } from './ride/trainMotion.js';
 import { loadProgress, saveProgress } from './progress.js';
-import { fadeThrough } from './ui/dom.js';
+import { fadeThrough, prefersReducedMotion } from './ui/dom.js';
 import { hideIntro, showIntro } from './ui/intro.js';
 import { keepAwake } from './ui/wakeLock.js';
 import { hideStopCard, showStopCard } from './ui/stopCard.js';
@@ -232,6 +235,10 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   look.update(60);
   attachPointerControls(renderer.domElement, look);
 
+  // The train moving under her. Her phone's wish for less motion is read once, as the ride is built.
+  const motion = createTrainMotion();
+  const reducedMotion = prefersReducedMotion();
+
   // Video moments: one clip plays at a time, the one at the stop or the nearest coming up (photos/videos.js).
   // Her tap on its speaker in the stop card turns its sound on, and the music fades out for it (wired below).
   const clips = layout.stops.map((stop) => {
@@ -406,6 +413,16 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       if (cues) cues.finale(finale.time, finale.bursts); // its own sounds, the sparkle and the fireworks, on its clock
     } else {
       camera.rotation.set(look.pitch, look.yaw, 0, 'YXZ');
+      if (reducedMotion) {
+        camera.position.y = 0;
+      } else {
+        // placeRig has just set her seat afresh, so the train's motion lays itself on it without building up.
+        motion.update(dt, ride.speed, d);
+        rig.rotateZ(motion.roll);
+        rig.rotateX(motion.pitch);
+        rig.translateY(motion.lift);
+        camera.position.y = motion.headLag;
+      }
     }
     envAt(layout, d, env);
     applyEnvironment();
@@ -524,6 +541,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   /** From the finale back to her seat (under a fade): the cabin, the camera on her seat, no card. */
   function leaveFinale() {
     finale.reset();
+    motion.reset(); // it stood still through the finale, and "Ride again" starts the train from the Day 1 station
     cabin.fit(camera);
     hideFinaleCard();
     appState.view = 'cabin';
