@@ -160,6 +160,44 @@ test('the 2D story tells every moment in order and ends with the wish, message a
   expect(errors).toEqual([]);
 });
 
+test('the 2D story writes its message in ink as it scrolls into view', async ({ page }) => {
+  const errors = collectConsoleErrors(page);
+  await page.goto('index.html?fallback=1');
+  await expect(page.locator('.fallback-moment')).toHaveCount(10);
+  const message = page.locator('.fallback-message');
+  const signoff = page.locator('.fallback-signoff');
+  // Far below the screen it waits, as plain text that is not yet seen.
+  await expect(message).toHaveClass(/ink-pending/);
+  await expect(message.locator('.ink-word')).toHaveCount(0);
+  await expect(message).toContainText('Thank you for the best year of my life.');
+  await message.scrollIntoViewIfNeeded();
+  await expect(message.locator('.ink-word')).toHaveCount(9);
+  await expect(signoff.locator('.ink-word')).toHaveCount(2);
+  await expect(message).not.toHaveClass(/ink-pending/);
+  // Written in time, with all of it kept.
+  await expect(signoff).toHaveClass(/inked/);
+  await expect(message).toHaveClass(/inked/);
+  await expect(message).toContainText('Thank you for the best year of my life.');
+  expect(errors).toEqual([]);
+});
+
+test('the 2D story writes its message at once where there is no IntersectionObserver', async ({ page }) => {
+  await page.addInitScript(() => { delete window.IntersectionObserver; });
+  await page.goto('index.html?fallback=1');
+  await expect(page.locator('.fallback-moment')).toHaveCount(10);
+  await expect(page.locator('.fallback-message .ink-word')).toHaveCount(9);
+  await expect(page.locator('.fallback-message')).not.toHaveClass(/ink-pending/);
+});
+
+test('the 2D story fades its message in with reduced motion', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('index.html?fallback=1');
+  const message = page.locator('.fallback-message');
+  await message.scrollIntoViewIfNeeded();
+  await expect(message).toHaveClass(/ink-fade/);
+  expect(await message.locator('.ink-word').evaluateAll((words) => words.map((w) => w.getAnimations().length))).toEqual(Array(9).fill(0));
+});
+
 test('the 2D story shows a pastel block, never a broken image, for a placeholder without a picture', async ({ page }) => {
   // A browser that will not give a 2D canvas leaves every placeholder with src ''.
   await page.addInitScript(() => {

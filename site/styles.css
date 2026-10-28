@@ -27,6 +27,15 @@
   font-display: swap;
   src: url('fonts/nunito-latin-700-normal.woff2') format('woff2');
 }
+/* His message and signoff are in handwriting (ui/handwriting.js writes them out). Its latin subset has the em dash of
+   the default signoff and the curly quotes; a glyph it lacks (a heart) is drawn in the next font of --font-hand. */
+@font-face {
+  font-family: 'Dancing Script';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('fonts/dancing-script-latin-500-normal.woff2') format('woff2');
+}
 
 :root {
   --cream: #fffaf3;
@@ -37,6 +46,7 @@
   --gold: #d9a441;
   --radius: 22px;
   --font-display: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+  --font-hand: 'Dancing Script', 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
   --font-ui: 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   /* Notch and home-bar insets. They only take effect because of viewport-fit=cover in index.html. */
   --safe-top: env(safe-area-inset-top, 0px);
@@ -881,10 +891,18 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* The message and the signoff are handwritten, a quarter larger than the print they replace so the script reads at
+   arm's length. Dancing Script has no italic face (its letters are already slanted), so `font-synthesis: none` stops a
+   second slant being faked on it; `italic` is there for the glyphs it lacks, which come from Cormorant Garamond's
+   real italic. */
 .finale-message {
   margin: 12px 0 0;
-  font-size: 17px;
-  line-height: 1.6;
+  font-family: var(--font-hand);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 21px;
+  line-height: 1.5;
+  font-synthesis: none;
   color: var(--soft-ink);
   white-space: pre-line;
   word-break: break-word;
@@ -893,7 +911,12 @@ body {
 
 .finale-signoff {
   margin: 10px 0 2px;
-  font: italic 500 24px/1.3 var(--font-display);
+  font-family: var(--font-hand);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 30px;
+  line-height: 1.3;
+  font-synthesis: none;
   font-variant-numeric: lining-nums;
   color: var(--rose-ink);
   word-break: break-word;
@@ -1312,8 +1335,12 @@ body {
 
 .fallback-message {
   margin: 16px 0 0;
-  font-size: 17px;
-  line-height: 1.6;
+  font-family: var(--font-hand);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 21px;
+  line-height: 1.5;
+  font-synthesis: none;
   color: var(--soft-ink);
   white-space: pre-line;
   word-break: break-word;
@@ -1322,11 +1349,81 @@ body {
 
 .fallback-signoff {
   margin: 18px 0 0;
-  font: italic 500 24px/1.3 var(--font-display);
+  font-family: var(--font-hand);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 30px;
+  line-height: 1.3;
+  font-synthesis: none;
   font-variant-numeric: lining-nums;
   color: var(--rose-ink);
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+
+/* --- His message, written in ink ----------------------------------------------------------------------------- */
+
+/* ui/handwriting.js turns the message and the signoff into one .ink-word per word, each with the second it starts at
+   (--ink-start) and how long its stroke takes (--ink-dur). A soft ink edge sweeps across a word left to right: a mask
+   wider than the word by its own width and an edge's width (0.7em), slid along as the word is written. At the start the
+   word is all in the mask's clear part, and at the end all in its solid part. The words are written one after another,
+   so a line fills as if by a pen, wherever the phone wraps it. */
+.ink-word {
+  display: inline-block;
+  /* Room a flourish can overshoot into without the mask cutting it off, which the layout does not count. */
+  padding: 0.1em 0.25em;
+  margin: -0.1em -0.25em;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(50% - 0.35em), transparent calc(50% + 0.35em));
+  mask-image: linear-gradient(90deg, #000 calc(50% - 0.35em), transparent calc(50% + 0.35em));
+  -webkit-mask-size: calc(200% + 0.7em) 100%;
+  mask-size: calc(200% + 0.7em) 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  animation: ink-write var(--ink-dur, 0.3s) linear var(--ink-start, 0s) both;
+}
+
+@keyframes ink-write {
+  from {
+    -webkit-mask-position: 100% 0;
+    mask-position: 100% 0;
+  }
+  to {
+    -webkit-mask-position: 0 0;
+    mask-position: 0 0;
+  }
+}
+
+/* With less motion the writing fades in as a whole instead (the app asks for it; --ink-start and --ink-dur are on it). */
+.ink-fade {
+  animation: ink-fade-in var(--ink-dur, 0.9s) ease-out var(--ink-start, 0s) both;
+}
+
+.ink-fade .ink-word {
+  animation: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+@keyframes ink-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Written, or finished by a tap: no mask and no animation left on any of it. */
+.inked,
+.inked.ink-fade {
+  animation: none;
+}
+
+.inked .ink-word {
+  animation: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+/* The 2D story's message waits unseen until it scrolls into view (its text stays, for a screen reader). */
+.ink-pending {
+  opacity: 0;
 }
 
 /* --- Less motion when she has asked for it ------------------------------------------------------------------- */

@@ -12,6 +12,7 @@ import { parseDebugParams } from './debug.js';
 import { startApp } from './app.js';
 import { loadPhotos } from './photos/photos.js';
 import { showFallback } from './ui/fallback.js';
+import { loadInkFont } from './ui/handwriting.js';
 import { hideLoading, setLoadingProgress, showLoadingMessage } from './ui/loading.js';
 
 /** How long (ms) to wait for the canvas fonts before drawing the boards and placeholders in fallback fonts instead. */
@@ -81,6 +82,7 @@ async function boot() {
   const debug = parseDebugParams(location.search);
   document.title = content.intro.title;
 
+  loadInkFont(); // not waited for: the message at the end is minutes away
   await loadCanvasFonts();
   // The photos fill most of the bar; building the world and drawing its first frame take the rest.
   const assets = await loadPhotos(content.moments, {

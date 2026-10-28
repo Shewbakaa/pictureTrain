@@ -1,9 +1,14 @@
 // The message card at the end of the ride: it rises over the evening station once the fireworks have begun. A
 // small heart, the eyebrow ("One year of us"), the wish ("Happy 1 year, Maya") large in the display font, his
-// message with its line breaks kept, his signoff in italics, and "Ride again", which takes her back to the start.
-// The body scrolls inside the card, so a long message never pushes the button off the screen.
+// message with its line breaks kept, his signoff, and "Ride again", which takes her back to the start. The message
+// and the signoff write themselves in ink, in handwriting, as the card settles (ui/handwriting.js); a tap on the card
+// finishes it at once. The body scrolls inside the card, so a long message never pushes the button off the screen.
 
-import { el, reveal, setChildren, svgEl } from './dom.js';
+import { el, prefersReducedMotion, reveal, setChildren, svgEl } from './dom.js';
+import { writeLetter } from './handwriting.js';
+
+/** The pen touches down this long (s) after the card starts to rise, which takes 1.1 s but is mostly there by then. */
+const WRITE_FROM = 1;
 
 /** A small heart over the eyebrow (the same one as the 2D story's). */
 function heart() {
@@ -27,18 +32,32 @@ export function showFinaleCard(content, { onRideAgain }) {
     again.disabled = true;
     onRideAgain();
   });
-  setChildren(card, [
-    el('div', { class: 'finale-card-body' }, [
-      heart(),
-      el('p', { class: 'eyebrow' }, [eyebrow]),
-      el('h2', { class: 'finale-wish', id: 'finale-wish' }, [wish]),
-      message ? el('p', { class: 'finale-message' }, [message]) : null,
-      signoff ? el('p', { class: 'finale-signoff' }, [signoff]) : null,
-    ]),
-    el('div', { class: 'finale-card-footer' }, [again]),
+  const messageEl = message ? el('p', { class: 'finale-message' }) : null;
+  const signoffEl = signoff ? el('p', { class: 'finale-signoff' }) : null;
+  const body = el('div', { class: 'finale-card-body' }, [
+    heart(),
+    el('p', { class: 'eyebrow' }, [eyebrow]),
+    el('h2', { class: 'finale-wish', id: 'finale-wish' }, [wish]),
+    messageEl,
+    signoffEl,
   ]);
+  setChildren(card, [body, el('div', { class: 'finale-card-footer' }, [again])]);
   card.setAttribute('role', 'dialog');
   card.setAttribute('aria-labelledby', 'finale-wish');
+
+  // The message first, then the signoff a beat after it; with reduced motion, each fades in instead.
+  const writing = writeLetter(
+    messageEl && { el: messageEl, text: message },
+    signoffEl && { el: signoffEl, text: signoff },
+    { startAt: WRITE_FROM, reduced: prefersReducedMotion() },
+  );
+  // A tap on the card finishes the writing at once. (A touch that scrolls the body is not a click, and a tap on a
+  // button or link inside it is theirs.)
+  body.addEventListener('click', (event) => {
+    if (event.target instanceof Element && event.target.closest('button, a')) return;
+    event.stopPropagation();
+    writing.finish();
+  });
   reveal(card);
 }
 

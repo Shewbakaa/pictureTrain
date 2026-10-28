@@ -427,6 +427,8 @@ Made with:
   Licence 1.1, in `site/fonts/LICENSE-cormorant-garamond.txt`.
 - [Nunito](https://github.com/googlefonts/nunito) for the body text and numbers. SIL Open Font Licence 1.1,
   in `site/fonts/LICENSE-nunito.txt`.
+- [Dancing Script](https://github.com/googlefonts/DancingScript) for the handwriting of the final message and
+  its sign-off. SIL Open Font Licence 1.1, in `site/fonts/LICENSE-dancing-script.txt`.
 - Music: Frédéric Chopin — recordings from Musopen's Complete Chopin Collection (CC0 1.0),
   https://archive.org/details/musopen-chopin
 

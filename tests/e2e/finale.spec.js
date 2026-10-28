@@ -41,6 +41,114 @@ test('jumping from the finale to a moment', async ({ page }) => {
   expect(s.view).toBe('cabin');
 });
 
+// A message long enough (about a minute of writing) that it is still being written when a test looks, in three
+// paragraphs with a line break inside the first, like one the author might write.
+const LONG_MESSAGE = [
+  'Thank you for the best year of my life, for every walk in the rain and every coffee we let go cold.\nI did not know that a year could be so gentle.',
+  'You make the small things feel like they were planned for us: the late train home, the smallest pumpkin, the snowman that leaned a little to the left and still stood all night.',
+  'Here is to the next one, and the one after that, and all the quiet evenings in between.',
+].join('\n\n');
+const wordsIn = (text) => text.split(/\s+/).filter(Boolean).length;
+
+test('his message writes itself in ink, a word at a time, signoff after it', async ({ page }) => {
+  await useFixture(page, { finale: { message: LONG_MESSAGE } });
+  await page.goto('index.html?finale=1&ft=12&ui=0');
+  await waitForPhase(page, 'done');
+  const message = page.locator('.finale-message');
+  await expect(message.locator('.ink-word')).toHaveCount(wordsIn(LONG_MESSAGE));
+  await expect(page.locator('.finale-signoff .ink-word')).toHaveCount(2); // "—" and "Sam"
+  // The paragraphs and the line break are kept, as <br>s: one for the line, two for each blank line between paragraphs.
+  await expect(message.locator('br')).toHaveCount(1 + 2 + 2);
+  // The words stay in order, with their spaces, for a screen reader and for copying.
+  expect(await message.evaluate((e) => e.textContent.replace(/\s+/g, ' ').trim())).toBe(LONG_MESSAGE.replace(/\s+/g, ' '));
+  // The signoff starts after the message has finished.
+  const starts = await page.evaluate(() => {
+    const start = (word) => parseFloat(word.style.getPropertyValue('--ink-start'));
+    const last = [...document.querySelectorAll('.finale-message .ink-word')].pop();
+    return { messageLast: start(last) + parseFloat(last.style.getPropertyValue('--ink-dur')), signoff: start(document.querySelector('.finale-signoff .ink-word')) };
+  });
+  expect(starts.signoff).toBeGreaterThan(starts.messageLast);
+  await expect(message).not.toHaveClass(/inked/);
+});
+
+test('a tap on the card finishes the writing at once, and nothing else hears it', async ({ page }) => {
+  await useFixture(page, { finale: { message: LONG_MESSAGE } });
+  await page.goto('index.html?finale=1&ft=12');
+  await waitForPhase(page, 'done');
+  const message = page.locator('.finale-message');
+  const signoff = page.locator('.finale-signoff');
+  const lastWord = message.locator('.ink-word').last();
+  // The last word is still to be written: the sweep is running on it.
+  await expect(message).not.toHaveClass(/inked/);
+  expect(await lastWord.evaluate((w) => [w.getAnimations().length, getComputedStyle(w).animationName])).toEqual([1, 'ink-write']);
+  const scrolled = await page.locator('.finale-card-body').evaluate((b) => b.scrollTop);
+  const heard = await page.evaluate(() => {
+    window.__heard = 0;
+    document.addEventListener('click', () => { window.__heard += 1; });
+    return window.__heard;
+  });
+  await page.locator('.finale-card-body').click({ position: { x: 12, y: 12 } });
+  await expect(message).toHaveClass(/inked/);
+  await expect(signoff).toHaveClass(/inked/);
+  expect(await lastWord.evaluate((w) => [w.getAnimations().length, getComputedStyle(w).animationName, getComputedStyle(w).maskImage || getComputedStyle(w).webkitMaskImage])).toEqual([0, 'none', 'none']);
+  expect(await page.evaluate(() => window.__heard)).toBe(heard); // the tap went no further than the card
+  expect(await page.locator('.finale-card-body').evaluate((b) => b.scrollTop)).toBe(scrolled);
+  // All of it is there, in full.
+  await expect(message).toContainText('Here is to the next one');
+  await expect(page.getByRole('button', { name: 'Ride again' })).toBeEnabled();
+});
+
+test('the writing leaves the card where it is', async ({ page }) => {
+  await useFixture(page, { finale: { message: `${LONG_MESSAGE}\n\n${LONG_MESSAGE}` } });
+  await page.goto('index.html?finale=1&ft=12');
+  await waitForPhase(page, 'done');
+  const body = page.locator('.finale-card-body');
+  // The message is longer than the card, which scrolls; words below the fold write unseen and nothing follows them.
+  expect(await body.evaluate((b) => b.scrollHeight > b.clientHeight)).toBe(true);
+  await page.waitForTimeout(2500); // well into the writing
+  expect(await body.evaluate((b) => b.scrollTop)).toBe(0);
+  await body.evaluate((b) => { b.scrollTop = 40; });
+  await page.waitForTimeout(1500);
+  expect(await body.evaluate((b) => b.scrollTop)).toBe(40);
+});
+
+test('with reduced motion the message fades in instead of being written', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await useFixture(page, { finale: { message: LONG_MESSAGE } });
+  await page.goto('index.html?finale=1&ft=12');
+  await waitForPhase(page, 'done');
+  const message = page.locator('.finale-message');
+  await expect(message).toHaveClass(/ink-fade/);
+  expect(await message.evaluate((e) => e.getAnimations().map((a) => a.animationName))).toEqual(['ink-fade-in']);
+  // No word has an animation of its own: that is the sweep.
+  expect(await message.locator('.ink-word').evaluateAll((words) => words.map((w) => w.getAnimations().length))).toEqual(Array(wordsIn(LONG_MESSAGE)).fill(0));
+  // A tap still finishes it.
+  await page.locator('.finale-card-body').click({ position: { x: 12, y: 12 } });
+  await expect(message).toHaveClass(/inked/);
+  expect(await message.evaluate((e) => e.getAnimations().length)).toBe(0);
+});
+
+test('with no message the signoff alone is still written, and a tap finishes it', async ({ page }) => {
+  const errors = collectConsoleErrors(page);
+  await useFixture(page, { finale: { message: '' } });
+  await page.goto('index.html?finale=1&ft=12');
+  await waitForPhase(page, 'done');
+  await expect(page.locator('.finale-message')).toHaveCount(0);
+  await expect(page.locator('.finale-signoff .ink-word')).toHaveCount(2);
+  await page.locator('.finale-card-body').click({ position: { x: 12, y: 12 } });
+  await expect(page.locator('.finale-signoff')).toHaveClass(/inked/);
+  expect(errors).toEqual([]);
+});
+
+test('the handwriting font is loaded early and has the em dash of the signoff', async ({ page }) => {
+  await page.goto('index.html?finale=1&ft=12&ui=0');
+  await waitForPhase(page, 'done');
+  await expect.poll(() => page.evaluate(() => document.fonts.check('500 20px "Dancing Script"'))).toBe(true);
+  expect(await page.evaluate(() => [...document.fonts].some((f) => f.family.includes('Dancing Script') && f.status === 'loaded'))).toBe(true);
+  expect(await page.evaluate(() => document.fonts.check('500 20px "Dancing Script"', '— Sam’s “love”…'))).toBe(true);
+  await expect(page.locator('.finale-signoff')).toContainText('— Sam');
+});
+
 test('their pet trots over with him in the finale', async ({ page }) => {
   await page.goto('index.html?finale=1&ft=7.5&ui=0');
   await expect.poll(async () => (await appState(page)).finaleTime).toBe(7.5);

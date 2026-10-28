@@ -14,6 +14,7 @@ const FONTS = [
   ['cormorant-garamond', 'cormorant-garamond-latin-500-italic.woff2'],
   ['nunito', 'nunito-latin-400-normal.woff2'],
   ['nunito', 'nunito-latin-700-normal.woff2'],
+  ['dancing-script', 'dancing-script-latin-500-normal.woff2'],
 ];
 
 // The fonts are under the SIL Open Font License, which asks for its text to travel with the font files.

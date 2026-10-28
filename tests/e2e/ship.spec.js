@@ -38,3 +38,15 @@ test('og image and favicon exist', async ({ request }) => {
   expect(og.headers()['content-type']).toBe('image/jpeg');
   expect((await request.get('favicon.svg')).status()).toBe(200);
 });
+
+test('the fonts ship with their licenses, the handwriting font among them', async ({ request }) => {
+  const font = await request.get('fonts/dancing-script-latin-500-normal.woff2');
+  expect(font.status()).toBe(200);
+  expect((await font.body()).subarray(0, 4).toString('latin1')).toBe('wOF2');
+  // The SIL Open Font License asks for its text to travel with each font.
+  for (const family of ['cormorant-garamond', 'nunito', 'dancing-script']) {
+    const license = await request.get(`fonts/LICENSE-${family}.txt`);
+    expect(license.status(), family).toBe(200);
+    expect(await license.text(), family).toContain('SIL OPEN FONT LICENSE');
+  }
+});
