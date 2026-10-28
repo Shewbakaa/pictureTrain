@@ -1,7 +1,7 @@
 // The birds that go with the sounds she hears: a little flock of songbirds crossing the sky now and then in spring
 // (more rarely in autumn), gulls gliding in lazy loops over the sea in summer, and robins on the winter fences and
-// snowmen, which flutter off as the train comes. When a gull calls (audio/ambience.js), one of the gulls she can see
-// flaps and banks, so the call has a source; with the sound off, they bank now and then on a clock of their own.
+// snowmen, which flutter off as the train comes. When a gull calls (audio/ambience.js), the gull nearest where she is
+// looking flaps and banks, so the call has a source; with the sound off, they bank now and then on a clock of their own.
 //
 // Each bird is a few flat-coloured parts (a body, a head, a beak, a tail and two wings) merged into one geometry, like
 // the props (util/geo.js). Its wings carry a `wing` number, 0 at the shoulder growing to 1 at the tip (and negative
@@ -104,9 +104,11 @@ const GULL_AHEAD = [[60, 80], [10, 30], [35, 55], [80, 100]];
  * How a robin flies off. TIME: seconds from its start to gone, once startled. STARTLE: how far through its take-off
  * it is the moment the train comes within LEAVE. OUT, UP and ON: how far (m) it flies out from the track, up, and on
  * ahead, over the take-off. RATE: its wingbeats a second. FEET: how far (m, life size) its feet are under the middle of
- * its body, where a bird's origin is. FADE: perched robins grow in over the last FADE metres of AHEAD.
+ * its body, where a bird's origin is. FADE: perched robins grow in over the last FADE metres of AHEAD. BACK: the train
+ * only goes forward, so a step back of more than this (m) is a jump (along the timeline, or Ride again), after which
+ * every robin more than LEAVE ahead of it is back on its perch.
  */
-const TAKE_OFF = Object.freeze({ TIME: 1.2, STARTLE: 0.1, OUT: 5, UP: 3, ON: 4, RATE: 9, FEET: 0.09, FADE: 8 });
+const TAKE_OFF = Object.freeze({ TIME: 1.2, STARTLE: 0.1, OUT: 5, UP: 3, ON: 4, RATE: 9, FEET: 0.09, FADE: 8, BACK: 3 });
 
 /** The zone the robins live in, whose perches they sit on (the flock's are spring and autumn, the gulls' summer). */
 const ROBIN_ZONE = 'winter';
@@ -480,17 +482,19 @@ function birdMesh(kind, count) {
  *   may sit (dressing.js `spots.perches`); only winter's are used.
  * @returns {{
  *   group: Group,
- *   update: (dt: number, env: Env, cameraPosition: Vector3, d: number) => void,
+ *   update: (dt: number, env: Env, cameraPosition: Vector3, d: number, view?: Vector3) => void,
  *   setQuality: (share: number) => void,
  *   setDensity: (share: number) => void,
  *   gullCall: () => void,
  *   targets: object[],
  * }}
  *   Add `group` to the scene. Call `update` every frame with the seconds since the last one, the environment where
- *   the train is, the camera's world position and the train's distance along the track (m). `setQuality` is the
- *   quality tier's `particles` share (0 to 1) of every kind; `setDensity` is the tier's `density`, so no robin sits
- *   on a fence the tier has thinned away. `gullCall` is a gull's call just heard: one of the gulls in view flaps and
- *   banks. `targets` are the birds' hit shapes for taps (none yet).
+ *   the train is, the camera's world position, the train's distance along the track (m) and, if it is known, the way
+ *   she is looking (`view`, a unit vector in the world). `setQuality` is the quality tier's `particles` share (0 to 1)
+ *   of every kind; `setDensity` is the tier's `density`, so no robin sits on a fence the tier has thinned away.
+ *   `gullCall` is a gull's call just heard: the gull nearest where she is looking (one inside her view whenever any
+ *   is) flaps and banks, or without a `view` the one nearest the line ahead. `targets` are the birds' hit shapes for
+ *   taps (none yet).
  */
 export function createBirds({ path, perches = [] }) {
   const { FLOCK, GULLS, ROBINS } = BIRDS;
@@ -533,7 +537,7 @@ export function createBirds({ path, perches = [] }) {
       called: -Infinity,
     };
   });
-  const gullSeen = new Float32Array(GULLS.COUNT); // how far off the track's heading each gull was last frame (rad)
+  const gullSeen = new Float32Array(GULLS.COUNT); // how far (rad) each gull was from where she looks, at the last update
   let selfCall = rngRange(rng, ...GULL_FLIGHT.CALLS); // seconds until the gulls' own next call
   let gullsShown = false;
 
@@ -547,9 +551,11 @@ export function createBirds({ path, perches = [] }) {
   let flockCount = FLOCK.COUNT, gullCount = GULLS.COUNT, robinCount = ROBINS.COUNT;
   let density = 1;
   let time = 0;
+  let lastD = NaN; // the train's distance at the last update, to tell a jump back
+  let looking = false; // whether `view` holds where she is looking
 
   // Per-frame scratch.
-  const cameraAt = new Vector3();
+  const cameraAt = new Vector3(), view = new Vector3();
   const weights = {};
   const local = new Vector3(), next = new Vector3();
   const position = new Vector3(), ahead = new Vector3(), centre = new Vector3();
@@ -650,14 +656,18 @@ export function createBirds({ path, perches = [] }) {
       const since = time - g.called;
       place(gulls, i, position, ahead, -inside * (TURN_BANK + gullBank(since)), scale);
       flap.setXYZ(i, g.flap[0], g.flap[1], Math.max(ownFlap(g, time), callFlap(since)));
-      // How far off the line ahead it is, for choosing one she can see to answer a call.
-      sight.copy(position).sub(cameraAt).setY(0).normalize();
-      gullSeen[i] = Math.acos(clamp(sight.dot(forward), -1, 1));
+      // How far it is from where she is looking (or, not knowing, from the line ahead), to answer a call.
+      if (looking) sight.copy(position).sub(cameraAt).normalize();
+      else sight.copy(position).sub(cameraAt).setY(0).normalize();
+      gullSeen[i] = Math.acos(clamp(sight.dot(looking ? view : forward), -1, 1));
     }
     show(gulls, gullCount);
   }
 
-  /** One of the gulls flaps and banks: the one nearest the line ahead, where she is likeliest to be looking. */
+  /**
+   * One of the gulls flaps and banks: the one nearest where she is looking, which is inside her view whenever any is
+   * (not knowing her view, the one nearest the line ahead, where she mostly looks).
+   */
   function callGull() {
     let best = -1;
     for (let i = 0; i < gullCount; i++) {
@@ -683,10 +693,7 @@ export function createBirds({ path, perches = [] }) {
       const perch = robinPerches[j];
       if (perch.rank >= density) continue;
       const along = sight.subVectors(perch, cameraAt).dot(forward);
-      if (leave[j] >= 1) {
-        if (along > AHEAD[1]) leave[j] = 0; // back on its perch, out of sight, after a jump back along the ride
-        continue;
-      }
+      if (leave[j] >= 1) continue;
       if (leave[j] > 0) leave[j] = Math.min(1, Math.max(leave[j] + step / TIME, robinLeave(Math.abs(along))));
       else leave[j] = robinLeave(Math.abs(along));
       const sitting = leave[j] === 0;
@@ -727,13 +734,25 @@ export function createBirds({ path, perches = [] }) {
     show(robins, n);
   }
 
+  /** After a jump back along the ride, every robin the train has yet to come near is back on its perch. */
+  function resettleRobins(d) {
+    path.tangentAt(d, forward);
+    for (let j = 0; j < robinPerches.length; j++) {
+      if (sight.subVectors(robinPerches[j], cameraAt).dot(forward) > ROBINS.LEAVE) leave[j] = 0;
+    }
+  }
+
   return {
     group,
-    update(seconds, env, cameraPosition, d) {
+    update(seconds, env, cameraPosition, d, where) {
       const step = seconds > 0 ? seconds : 0;
       time += step;
       uniforms.uBirdTime.value = time;
       cameraAt.copy(cameraPosition);
+      looking = Boolean(where);
+      if (looking) view.copy(where);
+      if (d < lastD - TAKE_OFF.BACK) resettleRobins(d);
+      lastD = d;
       zoneWeights(env, weights);
       updateFlock(d);
       updateGulls(d, step);

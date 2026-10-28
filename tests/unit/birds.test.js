@@ -28,13 +28,16 @@ function world({ layout = L, path = PATH, perches = [] } = {}) {
   const mesh = (kind) => birds.group.getObjectByName(`birds-${kind}`);
   return {
     birds, path, camera, mesh,
-    /** Runs `seconds` of frames of `dt` with the train standing at `d` (or moving from it at `speed`); `each` hears every frame. */
-    run(seconds, d, { dt = 1 / 30, speed = 0, each = () => {} } = {}) {
+    /**
+     * Runs `seconds` of frames of `dt` with the train standing at `d` (or moving from it at `speed`), her view along
+     * `view` if given; `each` hears every frame.
+     */
+    run(seconds, d, { dt = 1 / 30, speed = 0, view, each = () => {} } = {}) {
       const frames = Math.round(seconds / dt);
       for (let i = 0; i < frames; i++) {
         const at = d + speed * dt * i;
         path.frameAt(at, 0, EYE_HEIGHT, camera);
-        birds.update(dt, envAt(layout, at, env), camera, at);
+        birds.update(dt, envAt(layout, at, env), camera, at, view);
         each(at, i);
       }
     },
@@ -379,6 +382,35 @@ test('when a gull calls one of the gulls flaps and banks, and with no calls they
   assert.equal(spring.mesh('gull').count, 0);
 });
 
+test('a gull call is answered by a gull she can see: the one nearest where she is looking', () => {
+  const d = middleOf(L, 'summer');
+  const ahead = PATH.tangentAt(d), left = PATH.sideAt(d).negate();
+  // She looks out over the sea, 40 degrees left of the line and a little up, as ?look=40 does on a portrait phone.
+  const view = ahead.clone().multiplyScalar(Math.cos(0.7)).addScaledVector(left, Math.sin(0.7)).setY(0.3).normalize();
+  const offView = (b) => b.position.clone().sub(w.camera).normalize().angleTo(view);
+  const offLine = (b) => b.position.clone().sub(w.camera).setY(0).normalize().angleTo(ahead);
+  const argmin = (list, key) => list.reduce((best, b, i) => (key(b) < key(list[best]) ? i : best), 0);
+  const banking = () => seen(w.mesh('gull')).findIndex((b) => tilt(b) > 0.6);
+
+  const w = world();
+  w.run(1, d, { view });
+  const before = seen(w.mesh('gull'));
+  const looked = argmin(before, offView);
+  assert.ok(offView(before[looked]) < (20 * Math.PI) / 180, 'a gull is in her view');
+  assert.notEqual(argmin(before, offLine), looked, 'and it is not the one nearest the line ahead');
+  w.birds.gullCall();
+  w.run(0.4, d, { view });
+  assert.equal(banking(), looked, 'the gull in her view flaps and banks');
+
+  // Without her view, it is the one nearest the line ahead, where she mostly looks.
+  const blind = world();
+  blind.run(1, d);
+  const nearest = argmin(seen(blind.mesh('gull')), offLine);
+  blind.birds.gullCall();
+  blind.run(0.4, d);
+  assert.equal(seen(blind.mesh('gull')).findIndex((b) => tilt(b) > 0.6), nearest);
+});
+
 test('the gulls fly off as summer gives way to autumn, shrinking away to nothing rather than popping out', () => {
   const w = world();
   const boundary = zone(L, 'summer').end;
@@ -447,6 +479,21 @@ test('robins sit on the winter perches 2 to 60 m ahead, three at most, facing th
   // None in the evening, whatever perches there are.
   w.run(1, winter.end + 30);
   assert.equal(w.mesh('robin').count, 0);
+});
+
+test('after a jump back along the ride, the robins are back on the perches ahead of her', () => {
+  const perchAt = (d, right) => Object.assign(PATH.frameAt(d, right, 1.06), { rank: 0, zone: 'winter' });
+  const perches = [perchAt(660, 5), perchAt(680, -5)];
+  const onPerch = (w, p) => seen(w.mesh('robin')).some((b) => Math.hypot(b.position.x - p.x, b.position.z - p.z) < 0.05);
+  const w = world({ perches });
+  w.run(0.5, 640);
+  assert.ok(perches.every((p) => onPerch(w, p)), 'both sitting');
+  w.run(50 / 6.5, 640, { speed: 6.5 }); // the train rides past both: they fly off
+  w.run(2, 690);
+  assert.equal(seen(w.mesh('robin')).length, 0, 'both gone');
+  // A jump back along the timeline (or Ride again) puts the train 30 m before the first.
+  w.run(0.5, 630);
+  assert.ok(perches.every((p) => onPerch(w, p)), 'both back on their perches, 30 and 50 m ahead');
 });
 
 test('the quality tier thins every kind', () => {

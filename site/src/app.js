@@ -337,6 +337,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   const lightRight = new Vector3();
   const lightUp = new Vector3();
   const sight = new Vector3();
+  const view = new Vector3();
   const zoneShare = {};
   const shadowTexel = (2 * SHADOW.HALF) / SHADOW.MAP_SIZE;
 
@@ -485,7 +486,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     skyDecor.update(dt, eye, env);
     particles.update(dt, env, eye, inside); // nothing falls in the tunnel
     smoke.update(dt, eye);
-    birds.update(dt, env, eye, d);
+    birds.update(dt, env, eye, d, camera.getWorldDirection(view)); // a gull call is answered where she is looking
     dressing.update(dt, elapsed);
     updateWind(elapsed, windStrength(env));
     cabin.update(dt, ride.speed, elapsed);

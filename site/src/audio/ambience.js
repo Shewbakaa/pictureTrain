@@ -150,12 +150,13 @@ export function createAmbience(sfx) {
      * How many waves she has heard come in, its fraction how far into the one now (ambienceBeds.js waveAt); NaN
      * while none is heard, the sound's clock standing still (a video's sound, the page away) among those times.
      */
-    onEvent(listener) {
-      listeners.push(listener);
-    },
     seaWave() {
       const kit = sfx.kit;
       return kit && beds.summer && sfx.audible ? beds.summer.waveAt(kit.ctx.currentTime) : NaN;
+    },
+    /** `listener` hears the name of each passing sound as it plays. */
+    onEvent(listener) {
+      listeners.push(listener);
     },
     update(env, yaw, seconds, distance) {
       zoneWeights(env, weights);

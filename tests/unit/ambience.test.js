@@ -215,6 +215,21 @@ test('whoever listens hears each passing sound as it plays: a gull as the gull c
   assert.ok(heard.some((h) => h.name === 'bird-spring'), 'and the other zones\' sounds too');
 });
 
+test('a passing sound that does not play (no room in the node budget, say) is not heard', () => {
+  const t = setup();
+  const heard = [];
+  t.ambience.onEvent((name) => heard.push(name));
+  let asked = 0;
+  t.sfx.play = () => {
+    asked++;
+    return false;
+  };
+  t.on();
+  t.ride(120, middleOf('summer'));
+  assert.ok(asked >= 2, `${asked} gulls asked for`);
+  assert.deepEqual(heard, []);
+});
+
 test('without StereoPannerNode the sounds play unpanned', () => {
   const t = setup({ panning: false });
   t.on();
