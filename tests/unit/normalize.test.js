@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeContent, ZONE_IDS } from '../../site/src/content/normalize.js';
+import { normalizeContent, ZONE_IDS, POSES, DEFAULT_HINT } from '../../site/src/content/normalize.js';
 import shipped from '../../site/content.js';
 import fixture from '../fixtures/content.fixture.js';
 
@@ -100,11 +100,15 @@ test('an empty object gives every default, in exactly the shape later tasks cons
   assert.deepEqual(content, {
     herName: '',
     yourName: '',
-    intro: { eyebrow: 'Our first year', title: 'For you', note: '', button: 'Begin the ride' },
-    finale: { eyebrow: 'One year of us', wish: 'Happy 1 year', message: '', signoff: '' },
+    intro: {
+      eyebrow: 'Our first year', title: 'For you', note: '', button: 'Begin the ride',
+      hint: 'Best with sound on and headphones in.',
+    },
+    finale: { eyebrow: 'One year of us', wish: 'Happy 1 year', message: '', signoff: '', voice: '' },
     zones: ['spring', 'summer', 'autumn', 'winter', 'evening'],
     moments: [],
     characters: { her: DEFAULT_HER, you: DEFAULT_YOU },
+    pets: 'random',
     music: '',
   });
 });
@@ -126,8 +130,12 @@ test('written text wins over the derived defaults', () => {
     intro: { eyebrow: 'Hello', title: 'Our ride', note: 'Come in.', button: 'Go' },
     finale: { eyebrow: 'Forever', wish: 'Cheers, love', message: 'Thank you.', signoff: 'Love, Sam' },
   });
-  assert.deepEqual(content.intro, { eyebrow: 'Hello', title: 'Our ride', note: 'Come in.', button: 'Go' });
-  assert.deepEqual(content.finale, { eyebrow: 'Forever', wish: 'Cheers, love', message: 'Thank you.', signoff: 'Love, Sam' });
+  assert.deepEqual(content.intro, {
+    eyebrow: 'Hello', title: 'Our ride', note: 'Come in.', button: 'Go', hint: 'Best with sound on and headphones in.',
+  });
+  assert.deepEqual(content.finale, {
+    eyebrow: 'Forever', wish: 'Cheers, love', message: 'Thank you.', signoff: 'Love, Sam', voice: '',
+  });
 });
 
 test('blank text counts as empty, so the defaults apply', () => {
@@ -225,9 +233,12 @@ test('missing moment fields get their defaults, and a full moment is kept as wri
       { photo: ' photos/01.jpg ', date: 'Oct 2025', title: 'First coffee', caption: 'We met.', zone: 'spring' },
     ],
   });
-  assert.deepEqual(content.moments[0], { index: 0, photo: '', live: '', date: '', title: 'Moment 1', caption: '', zone: 'spring' });
+  assert.deepEqual(content.moments[0], {
+    index: 0, photo: '', live: '', date: '', title: 'Moment 1', caption: '', zone: 'spring', pose: 'holding-hands',
+  });
   assert.deepEqual(content.moments[1], {
     index: 1, photo: 'photos/01.jpg', live: '', date: 'Oct 2025', title: 'First coffee', caption: 'We met.', zone: 'spring',
+    pose: 'holding-hands',
   });
 });
 
@@ -381,6 +392,11 @@ test('the e2e fixture is clean and gives the exact strings the e2e specs look fo
   assert.deepEqual(content.moments.map((m) => m.zone),
     ['spring', 'spring', 'summer', 'summer', 'autumn', 'autumn', 'winter', 'winter', 'evening', 'evening']);
   assert.ok(content.moments.every((m) => m.photo === ''));
+  // The fixture leaves the immersion fields out on purpose, so the specs see their defaults.
+  assert.equal(content.intro.hint, DEFAULT_HINT);
+  assert.equal(content.finale.voice, '');
+  assert.equal(content.pets, 'random');
+  assert.ok(content.moments.every((m) => m.pose === 'holding-hands'));
   // Later specs copy fixture moments and read .zone straight off them, so each must say it outright.
   assert.ok(fixture.moments.every((m) => typeof m.zone === 'string'));
 });
@@ -405,4 +421,65 @@ test('live: left out, with a warning, when it is not a video or there is no stil
   ] });
   assert.deepEqual(content.moments.map((m) => m.live), ['', '', '']);
   for (const n of [1, 2, 3]) assert.ok(warnings.some((w) => w.includes(`Moment ${n} live`)), `Moment ${n}: ${warnings.join('\n')}`);
+});
+
+// Immersion fields: the sound hint, his voice note, a pose for each moment, and the pets.
+
+test('the sound hint: a default line, your own, or none', () => {
+  assert.equal(normalizeContent({}).content.intro.hint, 'Best with sound on and headphones in.');
+  assert.equal(normalizeContent({ intro: { hint: 'Headphones!' } }).content.intro.hint, 'Headphones!');
+  assert.equal(normalizeContent({ intro: { hint: 'none' } }).content.intro.hint, '');
+});
+
+test('the voice note is an audio file in the site folder, or nothing', () => {
+  const read = (voice) => normalizeContent({ finale: { voice } });
+  assert.equal(read('').content.finale.voice, '');
+  assert.equal(read('voice/message.m4a').content.finale.voice, 'voice/message.m4a');
+  assert.equal(read('/voice/a.mp3').content.finale.voice, 'voice/a.mp3');
+  const notAudio = read('voice/message.jpg');
+  assert.equal(notAudio.content.finale.voice, '');
+  assert.match(notAudio.warnings.join('\n'), /finale\.voice/);
+});
+
+test('each moment has a pose, holding hands unless it says otherwise', () => {
+  const { content, warnings } = normalizeContent({ zones: ['spring', 'evening'], moments: [
+    { zone: 'spring' }, { zone: 'spring', pose: 'hug' }, { zone: 'evening', pose: 'cartwheel' },
+  ] });
+  assert.deepEqual(content.moments.map((m) => m.pose), ['holding-hands', 'hug', 'holding-hands']);
+  assert.match(warnings.join('\n'), /Moment 3 pose/);
+});
+
+test('pets: random unless dog, cat or none', () => {
+  assert.equal(normalizeContent({}).content.pets, 'random');
+  assert.equal(normalizeContent({ pets: 'cat' }).content.pets, 'cat');
+  assert.equal(normalizeContent({ pets: 'hamster' }).content.pets, 'random');
+});
+
+test('the immersion fields: every pose is accepted, the warnings say what to write, and blank means the default', () => {
+  assert.ok(Object.isFrozen(POSES));
+  assert.deepEqual([...POSES], ['holding-hands', 'waving', 'hug', 'sitting', 'dancing', 'pointing', 'none']);
+  assert.equal(DEFAULT_HINT, 'Best with sound on and headphones in.');
+  const all = normalizeContent({ moments: POSES.map((pose) => ({ zone: 'spring', pose })) });
+  assert.deepEqual(all.content.moments.map((m) => m.pose), [...POSES]);
+  assert.deepEqual(all.warnings, []);
+
+  const odd = normalizeContent({
+    finale: { voice: 'voice/Message.M4A' }, pets: 'dog',
+    moments: [{ zone: 'spring', pose: '  ' }, { zone: 'spring', pose: 'cartwheel' }],
+  });
+  assert.equal(odd.content.finale.voice, 'voice/Message.M4A');
+  assert.equal(odd.content.pets, 'dog');
+  assert.deepEqual(odd.warnings, [
+    'Moment 2 pose: "cartwheel" is not one of holding-hands, waving, hug, sitting, dancing, pointing or none, so they hold hands.',
+  ]);
+
+  assert.deepEqual(normalizeContent({ finale: { voice: 'voice/note.jpg' } }).warnings, [
+    'finale.voice: "voice/note.jpg" is not an audio file (.m4a, .mp3, .aac or .wav), so there is no voice note.',
+  ]);
+  assert.match(normalizeContent({ finale: { voice: 5 } }).warnings[0], /^finale\.voice /);
+  assert.deepEqual(normalizeContent({ pets: 'hamster' }).warnings, [
+    'pets: "hamster" is not one of random, dog, cat or none, so random is used.',
+  ]);
+  assert.deepEqual(normalizeContent({ pets: ' ' }).warnings, []);
+  assert.equal(normalizeContent({ intro: { hint: '  ' } }).content.intro.hint, DEFAULT_HINT);
 });

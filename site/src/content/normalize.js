@@ -12,21 +12,39 @@ import { mediaKind } from '../photos/videos.js';
 /**
  * @typedef {'spring'|'summer'|'autumn'|'winter'|'evening'} ZoneId
  * @typedef {{ skin: string, hair: string, outfit: string }} Look  hex colours such as '#f2c9a5'
- * @typedef {{ index: number, photo: string, live: string, date: string, title: string, caption: string, zone: ZoneId }} Moment
+ * @typedef {'holding-hands'|'waving'|'hug'|'sitting'|'dancing'|'pointing'|'none'} Pose  how the couple stand at a stop
+ * @typedef {{ index: number, photo: string, live: string, date: string, title: string, caption: string, zone: ZoneId, pose: Pose }} Moment
  *   `live` is a Live Photo's motion clip, shown with the still `photo` ('' for none)
  *   `index` is the 0-based place in the ride; `photo` is a path relative to site/ ('' = no photo).
  * @typedef {{
  *   herName: string, yourName: string,
- *   intro: { eyebrow: string, title: string, note: string, button: string },
- *   finale: { eyebrow: string, wish: string, message: string, signoff: string },
+ *   intro: { eyebrow: string, title: string, note: string, button: string, hint: string },
+ *   finale: { eyebrow: string, wish: string, message: string, signoff: string, voice: string },
  *   zones: ZoneId[], moments: Moment[],
  *   characters: { her: Look, you: Look },
+ *   pets: 'random'|'dog'|'cat'|'none',
  *   music: string,
  * }} Content
+ *   `intro.hint` is the line under the start button: the default one, or '' when hidden.
+ *   `finale.voice` is his voice note, an audio file path relative to site/ ('' = none).
  */
 
 /** Every scenery zone, in the default ride order. */
 export const ZONE_IDS = Object.freeze(['spring', 'summer', 'autumn', 'winter', 'evening']);
+
+/** How the couple can stand at a stop. 'none' leaves them out of that stop. */
+export const POSES = Object.freeze(['holding-hands', 'waving', 'hug', 'sitting', 'dancing', 'pointing', 'none']);
+
+const DEFAULT_POSE = 'holding-hands';
+
+/** What the pets field can say. 'random' lets the ride choose, 'none' leaves them out. */
+const PET_CHOICES = Object.freeze(['random', 'dog', 'cat', 'none']);
+
+/** The line under the start button when content.js leaves intro.hint empty. */
+export const DEFAULT_HINT = 'Best with sound on and headphones in.';
+
+/** A voice note is one of these, which is what an iPhone Voice Memo exports (.m4a) and what browsers play. */
+const AUDIO_ENDING = /\.(?:m4a|mp3|aac|wav)$/i;
 
 /** The ride always ends here: the finale happens in the evening town. */
 const FINAL_ZONE = 'evening';
@@ -156,6 +174,7 @@ function readMoments(value, zones, warnings, errors) {
       title: text(moment.title, `Moment ${n}`),
       caption: text(moment.caption),
       zone,
+      pose: readPose(moment.pose, n, warnings),
     });
   }
   return moments;
@@ -176,6 +195,52 @@ function readLive(value, photo, n, warnings) {
     return '';
   }
   return live;
+}
+
+/** "a, b, c or d": a list of choices for a message. */
+const listOf = (choices) => `${choices.slice(0, -1).join(', ')} or ${choices[choices.length - 1]}`;
+
+/** How the couple stand at Moment `n`: one of POSES, or holding hands (with a warning when the author wrote something else). */
+function readPose(value, n, warnings) {
+  if (isMissing(value)) return DEFAULT_POSE;
+  const pose = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (POSES.includes(pose)) return pose;
+  if (typeof value === 'string' && pose === '') return DEFAULT_POSE; // blank counts as not written
+  warnings.push(`Moment ${n} pose: ${show(value)} is not one of ${listOf(POSES)}, so they hold hands.`);
+  return DEFAULT_POSE;
+}
+
+/** The line under the start button: the default when empty, '' (hidden) for 'none', otherwise the author's words. */
+function readHint(value) {
+  const hint = text(value);
+  if (hint === '') return DEFAULT_HINT;
+  return hint.toLowerCase() === 'none' ? '' : hint;
+}
+
+/** The voice note: an audio file in the site folder, or '' (with a warning when it is something else). */
+function readVoice(value, warnings) {
+  if (isMissing(value)) return '';
+  if (typeof value !== 'string') {
+    warnings.push(`finale.voice should be a file name in quotes, like 'voice/message.m4a', so there is no voice note.`);
+    return '';
+  }
+  const voice = sitePath(value, 'finale.voice', warnings);
+  if (!voice) return '';
+  if (!AUDIO_ENDING.test(voice.split(/[?#]/)[0])) {
+    warnings.push(`finale.voice: ${show(voice)} is not an audio file (.m4a, .mp3, .aac or .wav), so there is no voice note.`);
+    return '';
+  }
+  return voice;
+}
+
+/** Which pets wander the ride: one of PET_CHOICES, or 'random' (with a warning when the author wrote something else). */
+function readPets(value, warnings) {
+  if (isMissing(value)) return 'random';
+  const pets = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (PET_CHOICES.includes(pets)) return pets;
+  if (typeof value === 'string' && pets === '') return 'random'; // blank counts as not written
+  warnings.push(`pets: ${show(value)} is not one of ${listOf(PET_CHOICES)}, so random is used.`);
+  return 'random';
 }
 
 /** A '#rrggbb' colour, or `fallback` (with a warning when the author gave something else). */
@@ -219,6 +284,7 @@ export function normalizeContent(raw) {
   const yourName = text(source.yourName);
   const intro = readBlock(source, 'intro', warnings);
   const finale = readBlock(source, 'finale', warnings);
+  const voice = readVoice(finale.voice, warnings);
   const zones = readZones(source.zones, warnings);
   const moments = readMoments(source.moments, zones, warnings, errors);
   const characters = readBlock(source, 'characters', warnings);
@@ -234,12 +300,14 @@ export function normalizeContent(raw) {
       title: text(intro.title, herName ? `For ${herName}` : 'For you'),
       note: text(intro.note),
       button: text(intro.button, 'Begin the ride'),
+      hint: readHint(intro.hint),
     },
     finale: {
       eyebrow: text(finale.eyebrow, 'One year of us'),
       wish: text(finale.wish, herName ? `Happy 1 year, ${herName}` : 'Happy 1 year'),
       message: text(finale.message),
       signoff: text(finale.signoff, yourName ? `— ${yourName}` : ''),
+      voice,
     },
     zones,
     moments,
@@ -247,6 +315,7 @@ export function normalizeContent(raw) {
       her: readLook(readBlock(characters, 'her', warnings, 'characters.her'), DEFAULT_LOOKS.her, 'characters.her', warnings),
       you: readLook(readBlock(characters, 'you', warnings, 'characters.you'), DEFAULT_LOOKS.you, 'characters.you', warnings),
     },
+    pets: readPets(source.pets, warnings),
     music: readMusic(source.music, warnings),
   };
   return { content, warnings, errors };

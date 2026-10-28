@@ -46,6 +46,11 @@ export default {
 
     // The words on the start button. Leave it as '' to use "Begin the ride".
     button: '',
+
+    // Optional, and not written here: the small line under the start button. Leave it out to
+    // show "Best with sound on and headphones in." To say something else, add a line like
+    //   hint: 'Headphones on, please.',
+    // and to hide it, add   hint: 'none',   (README, "The sound hint").
   },
 
   // ---------------------------------------------------------------------------
@@ -64,6 +69,14 @@ export default {
 
     // How you sign off. Leave it as '' to use "— <your name>", or write your own, like 'Love, Sam'.
     signoff: '',
+
+    // Optional, and not written here: a voice note from you, played at the end after your
+    // message appears. To record one, make a Voice Memo on your iPhone, then choose Share →
+    // Save to Files to export it as a .m4a file. Put the file in site/voice/ (make the folder
+    // if it is not there) and add a line like
+    //   voice: 'voice/<name>.m4a',
+    // with the name of your file. It can be .m4a, .mp3, .aac or .wav. Leave it out and the
+    // ride has no voice note (README, "Voice note").
   },
 
   // ---------------------------------------------------------------------------
@@ -94,7 +107,7 @@ export default {
   //  after it) and paste it where you want it. To remove one, delete its block. The track
   //  gets longer or shorter to fit.
   //
-  //  Every moment has the same five fields (and an optional sixth, live):
+  //  Every moment has the same five fields (and two optional ones, live and pose):
   //
   //    photo    The picture for this stop. Put your pictures in the photos folder
   //             (site/photos/) and write the path here, like 'photos/01.jpg'. Use JPG or PNG.
@@ -106,6 +119,10 @@ export default {
   //             Live Photo. The photo is the still and this is its motion, like
   //             live: 'photos/04.mp4' (README, "Live Photos"). It plays once when the train
   //             stops, and again with its sound when she taps it.
+  //    pose     Optional, and not in the blocks below: how the little couple stand beside this
+  //             stop's sign, like pose: 'hug'. Choose 'holding-hands' (the one you get if you
+  //             leave it out), 'waving', 'hug', 'sitting', 'dancing', 'pointing' (she points at
+  //             the photo) or 'none' (no couple at this stop). See README, "Poses and pets".
   //    date     When it happened. It is just text, so write it however you like: 'Oct 2025',
   //             '14 Feb', 'Our first date'. Short is best, because it also appears on the
   //             photo sign.
@@ -297,6 +314,17 @@ export default {
       outfit: '#5b7fc4',
     },
   },
+
+  // ---------------------------------------------------------------------------
+  //  Pets
+  //
+  //  Optional, and not written here: a little dog or cat sits at the couple's feet at each
+  //  stop. Leave it out and the ride picks one at random for each stop. To always have the
+  //  same kind, add a line like
+  //    pets: 'cat',
+  //  using 'random' (the same as leaving it out), 'dog', 'cat' or 'none' (no pets at all).
+  //  See README, "Poses and pets".
+  // ---------------------------------------------------------------------------
 
   // ---------------------------------------------------------------------------
   //  Music

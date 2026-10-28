@@ -56,6 +56,40 @@ itself, so this is the place that decides what the link says when you send it (s
 there you can also reword the description line (`A little ride through our first year`) in both places it
 appears.
 
+### The sound hint
+
+Under the "Begin the ride" button the first screen shows a small line with a pair of headphones:
+*Best with sound on and headphones in.* The ride is much nicer with sound, so it is there to remind her. To
+say something of your own, add a `hint` line to the `intro` block in `content.js`:
+
+```js
+hint: 'Headphones on, please.',
+```
+
+To hide the line altogether, write `hint: 'none'`. Leave `hint` out, or as `''`, to keep the default.
+
+### Poses and pets
+
+The little couple stand beside the photo sign at every stop. By default they hold hands, but each moment can
+give them its own pose. Add a `pose` line to that moment's block in `content.js`:
+
+```js
+pose: 'hug',
+```
+
+The poses are `'holding-hands'` (the one you get if you leave `pose` out), `'waving'`, `'hug'`, `'sitting'`,
+`'dancing'`, `'pointing'` (she points at the photo) and `'none'` (no couple at that stop). A pose the ride
+does not know is swapped for `'holding-hands'`, and the console says so.
+
+A little dog or cat sits at their feet at each stop. Leave it to chance (`'random'`, which is what you get if
+you write nothing), or add a `pets` line to the main block of `content.js` (the one that holds `herName`):
+
+```js
+pets: 'cat',
+```
+
+Use `'dog'` or `'cat'` to always have that one, or `'none'` for no pets.
+
 ## 3. Add photos
 
 Put your pictures in `site/photos/` and point each moment at its file in `content.js`:
@@ -179,6 +213,20 @@ number in as its `lufs`. If a scene's file is missing or will not play, that sce
 made by the ride itself instead, and the console names the file.
 
 To hear the music without a phone, open the site on your computer (section 5) and tap Begin.
+
+### Voice note
+
+You can leave her a short voice note that plays at the end, after your message appears. Record it on your
+iPhone with the Voice Memos app, then open the recording, tap the **...** button, choose **Share**, and
+**Save to Files** to get an `.m4a` file. Make a `voice` folder inside `site/` (so `site/voice/`), put the file
+in it, and point `content.js` at it from the `finale` block:
+
+```js
+voice: 'voice/message.m4a',
+```
+
+`.m4a`, `.mp3`, `.aac` and `.wav` files all work. Keep it short, a minute or less. Leave `voice` out, or as
+`''`, and the ride has no voice note. A file with any other ending is ignored, and the console says so.
 
 ## 5. Preview it on your computer
 
