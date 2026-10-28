@@ -3,7 +3,8 @@
 //
 // The world is the sky, the ground, the track, the two stations, the props of every zone, clouds and hot-air
 // balloons, the ambient particles of the zone the train is in, a photo sign at every stop with the two of them
-// standing beside every other one, and the cabin she rides in. At dusk the sky fills with stars and a crescent moon
+// beside it, posed for its moment (holding hands, waving, in a hug, on a bench, dancing or pointing at the photo), and
+// the cabin she rides in. At dusk the sky fills with stars and a crescent moon
 // comes up, a shooting star crosses it 40 m before the last station and again as the finale's wish shows, and smoke
 // curls from the chimneys of the houses and of the station house. The track runs through a hill into winter, and the
 // world's light dims while she is in the tunnel, the world's sounds go muffled and the train's sounds echo. Birds go
@@ -54,7 +55,7 @@ import { createButterflies } from './world/butterflies.js';
 import { createDeer } from './world/deer.js';
 import { createAmbientParticles } from './world/particles.js';
 import { createPhotoSign, placeCouple, placeSign, SIGN, signLookYaw, signTurn, turnSign } from './world/signs.js';
-import { createCouple } from './world/figures.js';
+import { createStopCouple } from './world/stopCouple.js';
 import { createCabin } from './train/cabin.js';
 import { createTrainExterior } from './train/exterior.js';
 import { createFinale } from './finale/finale.js';
@@ -93,10 +94,15 @@ const SHADOW = Object.freeze({ HALF: 25, MAP_SIZE: 1024, AHEAD: 12, DISTANCE: 80
 const AMBIENT_PARTICLES = 600;
 
 /**
- * Photo signs (and the couples beside them) further than this along the track from the train are not drawn (m).
- * The fog has swallowed them long before (it ends 160 m out at most), and each sign costs four draw calls.
+ * Photo signs further than this along the track from the train are not drawn (m). The fog has swallowed them long
+ * before (it ends 160 m out at most), and each sign costs four draw calls.
  */
 const SIGN_RANGE = 200;
+/**
+ * The two of them at a stop are drawn only within this far of it along the track (m): further off they are a few
+ * pixels in the haze, and every stop has them now, at two or three draw calls each.
+ */
+const COUPLE_RANGE = 120;
 /** Smallest change in a sign's turn (rad) worth re-aiming it for. */
 const SIGN_TURN_EPSILON = 1e-4;
 
@@ -194,21 +200,22 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   const deer = createDeer({ layout, path });
   scene.add(dressing.group, skyDecor.group, nightSky.group, particles.points, smoke.points, birds.group, butterflies.mesh, deer.group);
 
-  // A photo sign at every stop, and the two of them beside every other one.
+  // A photo sign at every stop, and the two of them beside it, posed for the moment (unless its pose is 'none').
   const signs = new Group();
   signs.name = 'signs';
-  /** @type {Array<{ distance: number, group: Group, sign: Group, couple: ReturnType<typeof createCouple>|null }>} */
+  /** @type {Array<{ distance: number, group: Group, sign: Group, couple: ReturnType<typeof createStopCouple>|null }>} */
   const roadside = [];
   for (const stop of layout.stops) {
+    const moment = content.moments[stop.index];
     const asset = assets.find((a) => a.index === stop.index) || null;
-    const sign = createPhotoSign(asset, { date: content.moments[stop.index].date });
+    const sign = createPhotoSign(asset, { date: moment.date });
     placeSign(sign, path, stop);
     const group = new Group();
     group.add(sign);
     let couple = null;
-    if (stop.index % 2 === 1) {
-      couple = createCouple(content.characters);
-      placeCouple(couple.group, path, stop, sign.userData.photoW);
+    if (moment.pose !== 'none') {
+      couple = createStopCouple(content.characters, moment.pose, null, stop.side);
+      placeCouple(couple.group, path, stop, sign.userData.photoW, couple.halfWidth);
       group.add(couple.group);
     }
     signs.add(group);
@@ -513,7 +520,10 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       // Each sign keeps turning toward her as she comes, and is square-on when she stops beside it.
       const turn = signTurn(spot.distance + SIGN.AHEAD - d);
       if (Math.abs(turn - spot.sign.userData.turn) > SIGN_TURN_EPSILON) turnSign(spot.sign, turn);
-      if (spot.couple) spot.couple.update(elapsed);
+      if (spot.couple) {
+        spot.couple.group.visible = Math.abs(spot.distance - d) < COUPLE_RANGE;
+        if (spot.couple.group.visible) spot.couple.update(elapsed);
+      }
     }
     clipWhere.distance = d;
     clipWhere.stoppedIndex = ride.state === 'stopped' ? ride.stopIndex : -1;

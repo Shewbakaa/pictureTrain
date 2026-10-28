@@ -5,8 +5,9 @@
 // rigidly: each part follows exactly one bone (hips, head, a leg, an arm or a hand), and posing a figure turns
 // those bones. Every figure faces +Z with its feet on its origin, so its right is -X.
 //
-// A couple is the two of them side by side, holding hands, bobbing gently. They stand beside every other photo
-// sign (world/signs.js `placeCouple`).
+// A couple is the two of them side by side, holding hands, bobbing gently. The couples at the stops are posed for
+// their moments (world/poses.js, world/stopCouple.js), on top of the extra joints a Pose can turn: an arm raised out
+// sideways, the head turned and tilted, and sitting.
 //
 // DOM-free (only Three's classes are used), so the Node unit tests can import it.
 
@@ -24,13 +25,22 @@ import { clamp } from '../util/math.js';
 const BODY = Object.freeze({ HIP: 0.36, HIP_X: 0.075, SHOULDER: 0.665, SHOULDER_X: 0.2, NECK: 0.72, ARM: 0.3, HEAD: 0.2 });
 
 /** At rest the arms hang this far out from the body (rad), so they clear the round tummy. */
-const ARM_SPREAD = 0.1;
+export const ARM_SPREAD = 0.1;
 
 /** How far a walk swings the legs and the arms either way (rad), and how high the body bounces (m). */
 const WALK = Object.freeze({ LEG: 0.4, ARM: 0.35, BOB: 0.035 });
 
-/** The couple: how far each stands from their middle (m), how far each holding arm reaches in (rad), the idle bob. */
-const COUPLE = Object.freeze({ APART: 0.26, REACH: 0.2, HOLD_SWING: 0.12, HEAD_TILT: 0.1, BOB: 0.012, PERIOD: 1.8 });
+/**
+ * The couple: how far each stands from their middle (m), how far each holding arm reaches in (rad) and swings forward
+ * (rad), how far each head tilts toward the other (rad), and the idle bob: BOB metres up and down every PERIOD seconds.
+ */
+export const COUPLE = Object.freeze({ APART: 0.26, REACH: 0.2, HOLD_SWING: 0.12, HEAD_TILT: 0.1, BOB: 0.012, PERIOD: 1.8 });
+
+/**
+ * Sitting (a Pose's `sit` at 1): the hips go DROP metres lower and the legs LEGS (rad) further forward, out along the
+ * seat like a little child's. The hip joints are then SEAT metres above what they sit on: his trousers rest on it.
+ */
+const SIT = Object.freeze({ DROP: 0.2, LEGS: 1.4, SEAT: 0.06 });
 
 /** How far either side of its middle a couple reaches (m): out to the far side of the outer hand. */
 export const COUPLE_HALF_WIDTH = COUPLE.APART + BODY.SHOULDER_X + BODY.ARM * Math.sin(ARM_SPREAD) + 0.052;
@@ -42,8 +52,12 @@ const COLOURS = Object.freeze({
 });
 
 /**
- * @typedef {{ leftLeg: number, rightLeg: number, leftArm: number, rightArm: number, bob: number }} Pose
- *   Each limb's swing (rad, + forward) and how far the body rises (m, >= 0).
+ * @typedef {{ leftLeg: number, rightLeg: number, leftArm: number, rightArm: number, bob: number,
+ *             leftArmOut?: number, rightArmOut?: number, headTurn?: number, headTilt?: number, sit?: number }} Pose
+ *   Each limb's swing (rad, + forward) and how far the body rises (m, >= 0). Optionally, all in rad but `sit`: how far
+ *   each arm is raised out sideways beyond its rest (ARM_SPREAD), the head's turn (+ to the figure's left) and its
+ *   tilt (+ toward its right), and how far the figure sits (0 standing to 1 sitting, SIT). An arm's raise or the
+ *   head's turn or tilt left out leaves that joint as it was; `sit` left out is standing.
  */
 
 /** Standing still. */
@@ -173,7 +187,7 @@ function skinnedGeometry(tagged) {
  * @param {{ skin: string, hair: string, outfit: string, style: 'her'|'him' }} look  colours as '#rrggbb'
  * @returns {{ group: Group, parts: Record<string, Bone>, setPose: (pose: Pose) => void }}
  *   `parts` are the bones: hips, head, leftLeg, rightLeg, leftArm, rightArm, leftHand and rightHand (where the
- *   finale puts the bouquet). `setPose` swings the limbs and bobs the body; nothing else about the bones changes.
+ *   finale puts the bouquet). `setPose` swings the limbs and bobs the body, and turns what else its Pose gives.
  */
 export function createFigure(look) {
   const { HIP, HIP_X, SHOULDER, SHOULDER_X, NECK, ARM } = BODY;
@@ -208,15 +222,29 @@ export function createFigure(look) {
   parts.rightArm.rotation.z = -ARM_SPREAD;
 
   function setPose(pose) {
-    parts.leftLeg.rotation.x = -pose.leftLeg;
-    parts.rightLeg.rotation.x = -pose.rightLeg;
+    const sit = pose.sit ?? 0;
+    parts.leftLeg.rotation.x = -(pose.leftLeg + SIT.LEGS * sit);
+    parts.rightLeg.rotation.x = -(pose.rightLeg + SIT.LEGS * sit);
     parts.leftArm.rotation.x = -pose.leftArm;
     parts.rightArm.rotation.x = -pose.rightArm;
-    parts.hips.position.y = HIP + pose.bob;
+    parts.hips.position.y = HIP + pose.bob - SIT.DROP * sit;
+    // Turning about Z by + raises the left arm out to the figure's left (+X); the right arm goes out by -.
+    if (pose.leftArmOut !== undefined) parts.leftArm.rotation.z = ARM_SPREAD + pose.leftArmOut;
+    if (pose.rightArmOut !== undefined) parts.rightArm.rotation.z = -(ARM_SPREAD + pose.rightArmOut);
+    if (pose.headTurn !== undefined) parts.head.rotation.y = pose.headTurn;
+    if (pose.headTilt !== undefined) parts.head.rotation.z = pose.headTilt;
   }
 
   group.updateMatrixWorld(true);
   return { group, parts, setPose };
+}
+
+/**
+ * How far up (m) to stand a figure that sits (a Pose's `sit` at 1) so that it sits on a seat `seat` metres high.
+ * @param {number} seat
+ */
+export function sittingLift(seat) {
+  return seat + SIT.SEAT - (BODY.HIP - SIT.DROP);
 }
 
 /**

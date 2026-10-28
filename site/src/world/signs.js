@@ -323,23 +323,25 @@ export function placeSign(sign, path, stop) {
 /**
  * Stands the couple beside a stop's sign, just ahead of it and SIGN.COUPLE_OUT metres further out, facing her
  * seat. Seen from her seat they stand just clear of the sign's front edge, so the sign never hides them; the wider
- * the photo, the further ahead that is.
- * @param {import('../three.js').Object3D} couple  facing +Z, its middle on its origin (world/figures.js `createCouple`)
+ * the photo, or the wider they are (a bench, a wave), the further ahead that is.
+ * @param {import('../three.js').Object3D} couple  facing +Z, its middle on its origin (world/stopCouple.js
+ *   `createStopCouple`, or world/figures.js `createCouple`)
  * @param {import('./trackPath.js').TrackPath} path
  * @param {import('./layout.js').Stop} stop
  * @param {number} photoW  the width of the photo on the sign (`signDimensions`)
+ * @param {number} [halfWidth]  how far either side of their middle they reach (m): holding hands, unless told
  */
-export function placeCouple(couple, path, stop, photoW) {
+export function placeCouple(couple, path, stop, photoW, halfWidth = COUPLE_HALF_WIDTH) {
   const { AHEAD, OUT, FRAME, COUPLE_OUT } = SIGN;
-  const halfWidth = photoW / 2 + FRAME;
+  const signHalf = photoW / 2 + FRAME;
   // Bearings from her seat, round from straight ahead toward the sign's side. The track is straight enough over
   // these few metres to work them out on the flat.
-  const edge = Math.atan2(OUT, AHEAD + halfWidth);
+  const edge = Math.atan2(OUT, AHEAD + signHalf);
   const out = OUT + COUPLE_OUT;
   // Their own width takes up more of her view the nearer they are, and how near depends on where they stand:
   // settle the two together (three rounds is plenty).
   let bearing = edge;
-  for (let i = 0; i < 3; i++) bearing = edge - Math.atan2(COUPLE_HALF_WIDTH, out / Math.sin(bearing)) - COUPLE_MARGIN;
+  for (let i = 0; i < 3; i++) bearing = edge - Math.atan2(halfWidth, out / Math.sin(bearing)) - COUPLE_MARGIN;
   const side = stop.side === 'right' ? 1 : -1;
   path.frameAt(stop.distance + out / Math.tan(bearing), out * side, 0, couple.position);
   face(couple, path.pointAt(stop.distance).sub(couple.position).setY(0).normalize());

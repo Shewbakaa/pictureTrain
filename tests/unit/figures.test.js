@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../../site/src/three.js';
-import { createFigure, walkPose, createCouple, IDLE_POSE } from '../../site/src/world/figures.js';
+import { createFigure, walkPose, createCouple, IDLE_POSE, ARM_SPREAD, sittingLift } from '../../site/src/world/figures.js';
 import { triangleCount } from '../../site/src/util/geo.js';
 
 const look = { skin: '#f2c9a5', hair: '#3b2416', outfit: '#e98aa6' };
@@ -98,4 +98,50 @@ test('the couple hold hands, and bob gently without leaving the ground', () => {
     const { low } = heights(c.group);
     assert.ok(low > -0.005 && low < 0.03, `feet at ${low} m at ${t} s`);
   }
+});
+
+test('setPose raises an arm out sideways, beyond its rest; leaving the field out leaves the arm as it was', () => {
+  const f = createFigure({ ...look, style: 'her' });
+  f.setPose({ ...IDLE_POSE, leftArmOut: 1 });
+  assert.equal(f.parts.leftArm.rotation.z, ARM_SPREAD + 1);
+  assert.equal(f.parts.rightArm.rotation.z, -ARM_SPREAD, 'the other arm hangs as before');
+  f.setPose({ ...IDLE_POSE, rightArmOut: 0.5 });
+  assert.equal(f.parts.rightArm.rotation.z, -(ARM_SPREAD + 0.5), 'out to her right is -Z');
+  assert.equal(f.parts.leftArm.rotation.z, ARM_SPREAD + 1, 'left out, the left arm stays where it was put');
+  f.parts.leftArm.rotation.z = 0.3;
+  f.setPose(walkPose(0.4));
+  assert.equal(f.parts.leftArm.rotation.z, 0.3, 'today\'s poses leave the arms\' spread alone');
+  f.setPose({ ...IDLE_POSE, leftArmOut: 0, rightArmOut: 0 });
+  assert.equal(f.parts.leftArm.rotation.z, ARM_SPREAD);
+  assert.equal(f.parts.rightArm.rotation.z, -ARM_SPREAD);
+});
+
+test('setPose turns and tilts the head, and sits: the hips 0.2 m lower and the legs 1.4 rad forward', () => {
+  const f = createFigure({ ...look, style: 'him' });
+  const hips = f.parts.hips.position.y;
+  f.parts.head.rotation.z = 0.1;
+  f.setPose({ ...IDLE_POSE, headTurn: 0.5 });
+  assert.equal(f.parts.head.rotation.y, 0.5);
+  assert.equal(f.parts.head.rotation.z, 0.1, 'no tilt given, the head keeps its tilt');
+  f.setPose({ ...IDLE_POSE, headTilt: -0.2 });
+  assert.equal(f.parts.head.rotation.z, -0.2);
+  assert.equal(f.parts.head.rotation.y, 0.5);
+
+  f.setPose({ ...IDLE_POSE, sit: 1, leftLeg: 0.1, bob: 0.01 });
+  assert.ok(Math.abs(f.parts.hips.position.y - (hips - 0.2 + 0.01)) < 1e-12);
+  assert.ok(Math.abs(f.parts.leftLeg.rotation.x + 1.5) < 1e-12, 'the swing adds to the sit');
+  assert.ok(Math.abs(f.parts.rightLeg.rotation.x + 1.4) < 1e-12);
+  f.setPose({ ...IDLE_POSE, sit: 0.5 });
+  assert.ok(Math.abs(f.parts.hips.position.y - (hips - 0.1)) < 1e-12, 'half sat');
+  f.setPose(IDLE_POSE);
+  assert.equal(f.parts.hips.position.y, hips, 'no sit given, standing');
+  assert.ok(f.parts.leftLeg.rotation.x === 0);
+});
+
+test('sittingLift stands a sitting figure so his trousers rest on the seat', () => {
+  const f = createFigure({ ...look, style: 'him' });
+  f.setPose({ ...IDLE_POSE, sit: 1 });
+  f.group.position.y = sittingLift(0.49);
+  const hips = f.parts.hips.getWorldPosition(new THREE.Vector3()).y;
+  assert.ok(Math.abs(hips - 0.55) < 1e-9, `hips at ${hips} m`);
 });

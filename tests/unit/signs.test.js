@@ -2,13 +2,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { signDimensions, coverUv, signLookYaw, createPhotoSign, placeSign, placeCouple, signTurn, turnSign, SIGN } from '../../site/src/world/signs.js';
-import { createCouple } from '../../site/src/world/figures.js';
+import { createCouple, COUPLE_HALF_WIDTH } from '../../site/src/world/figures.js';
+import { createStopCouple } from '../../site/src/world/stopCouple.js';
 import { createTrackPath, TRACK } from '../../site/src/world/trackPath.js';
 import { buildLayout } from '../../site/src/world/layout.js';
-import { normalizeContent } from '../../site/src/content/normalize.js';
+import { normalizeContent, POSES } from '../../site/src/content/normalize.js';
 import { fovForAspect } from '../../site/src/ride/look.js';
 import { cabinAnchors } from '../../site/src/train/cabin.js';
-import { Group, MathUtils, Vector3 } from '../../site/src/three.js';
+import { Group, MathUtils, Quaternion, Vector3 } from '../../site/src/three.js';
 import fixture from '../fixtures/content.fixture.js';
 
 test('sign size clamps extreme photos', () => {
@@ -190,5 +191,57 @@ test('the couple stands beside the sign, toward the front, just clear of it in h
       const feet = Math.min(...worldVertices(couple.group).map((p) => p.y));
       assert.ok(feet > -0.01 && feet < 0.02, `${label}: standing on the ground (${feet})`);
     }
+  }
+});
+
+test('a wider couple stands further ahead, so the sign still hides none of them, whatever their pose', () => {
+  const ahead = (halfWidth) => {
+    const couple = new Group();
+    placeCouple(couple, path, rightStop, 1.28, halfWidth);
+    return trackOffset(couple.position, rightStop.distance).d;
+  };
+  assert.equal(ahead(undefined), ahead(COUPLE_HALF_WIDTH), 'the holding-hands couple\'s width unless told');
+  assert.ok(ahead(0.8) > ahead(COUPLE_HALF_WIDTH) + 0.2, `${ahead(0.8)} m vs ${ahead(COUPLE_HALF_WIDTH)} m`);
+
+  for (const stop of [leftStop, rightStop]) {
+    for (const aspect of [0.8, 3]) {
+      const sign = createPhotoSign({ index: stop.index, aspect, width: 0, height: 0, canvas: null, src: '', isPlaceholder: true }, { date: 'Oct 2025' });
+      placeSign(sign, path, stop);
+      const signSpan = bearings(worldVertices(sign), stop);
+      for (const pose of POSES.filter((p) => p !== 'none')) {
+        const couple = createStopCouple(content.characters, pose, null, stop.side);
+        placeCouple(couple.group, path, stop, sign.userData.photoW, couple.halfWidth);
+        for (const t of [0, 1.1, 3.4, 6.3, 9.8]) {
+          couple.update(t);
+          const coupleSpan = bearings(worldVertices(couple.group), stop);
+          assert.ok(Math.max(...coupleSpan) < Math.min(...signSpan), `${stop.side}, ${pose}, photo aspect ${aspect}, at ${t} s: the sign hides none of them`);
+        }
+        const toSeat = path.pointAt(stop.distance).sub(couple.group.position).setY(0).normalize();
+        assert.ok(couple.group.getWorldDirection(new Vector3()).dot(toSeat) > 0.999, `${stop.side}, ${pose}: they face her`);
+      }
+    }
+  }
+});
+
+test('pointing, she points toward the sign, and he looks at it', () => {
+  for (const stop of [leftStop, rightStop]) {
+    const sign = createPhotoSign({ index: stop.index, aspect: 0.8, width: 0, height: 0, canvas: null, src: '', isPlaceholder: true }, { date: 'Oct 2025' });
+    placeSign(sign, path, stop);
+    const couple = createStopCouple(content.characters, 'pointing', null, stop.side);
+    placeCouple(couple.group, path, stop, sign.userData.photoW, couple.halfWidth);
+    couple.update(0);
+    couple.group.updateMatrixWorld(true);
+    const her = couple.group.getObjectByName('figure-her'), him = couple.group.getObjectByName('figure-him');
+    const near = stop.side === 'right' ? 'leftArm' : 'rightArm';
+    const shoulder = her.getObjectByName(near).getWorldPosition(new Vector3());
+    const hand = her.getObjectByName(near === 'leftArm' ? 'leftHand' : 'rightHand').getWorldPosition(new Vector3());
+    const toSign = sign.position.clone().sub(shoulder).setY(0).normalize();
+    const pointing = hand.clone().sub(shoulder).setY(0).normalize();
+    assert.ok(pointing.angleTo(toSign) < MathUtils.degToRad(25), `${stop.side}: she points ${MathUtils.radToDeg(pointing.angleTo(toSign)).toFixed(1)} deg off the sign`);
+    const head = him.getObjectByName('head');
+    const looking = new Vector3(0, 0, 1).applyQuaternion(head.getWorldQuaternion(new Quaternion())).setY(0).normalize();
+    const fromHim = sign.position.clone().sub(head.getWorldPosition(new Vector3())).setY(0).normalize();
+    const facing = him.getWorldDirection(new Vector3()).setY(0).normalize();
+    assert.ok(looking.angleTo(fromHim) < facing.angleTo(fromHim) - 0.4, `${stop.side}: his head turns toward the sign`);
   }
 });
