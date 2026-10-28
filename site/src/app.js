@@ -26,9 +26,10 @@
 // brakes (ride/trainMotion.js), all of it left out if her phone asks for less motion.
 //
 // At the Day 365 station the ride ends in the finale (finale/finale.js): under a blush fade her seat gives way to
-// the train seen from outside, the two of them meet on the platform (a little dog or cat trots over with him), and his
-// message comes up on a card with the timeline below it. "Ride again" takes her back to the start; a moment on the
-// timeline takes her back there. The music plays on throughout.
+// the train seen from outside, the two of them meet on the platform (a little dog or cat trots over with him, and doves
+// fly off the station house's roof as the fireworks start), and his message comes up on a card with the timeline below
+// it. "Ride again" takes her back to the start; a moment on the timeline takes her back there. The music plays on
+// throughout.
 
 import { DirectionalLight, Fog, Group, HemisphereLight, Matrix4, Vector3 } from './three.js';
 import { appState } from './state.js';
@@ -406,6 +407,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     }
     appState.finaleTime = finale.active ? finale.time : null;
     appState.finalePets = finale.pets;
+    appState.finaleDoves = finale.doves;
     if (wakeLock) appState.wakeLock = wakeLock.state;
     appState.quality = governor.tier;
     const { drawCalls, triangles } = stage.info();

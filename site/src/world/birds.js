@@ -21,15 +21,22 @@
 // the gulls and the flock fly off, up and away, shrinking to nothing, and the robins fade; a ride without summer has
 // no gulls anywhere. The quality tier's `particles` share thins every kind.
 //
+// The finale has doves too (createDoves): a handful of white ones sitting along the ridge of the Day 365 station house's
+// roof, which burst up and circle away over the town as the fireworks start, at the moment the finale's dove sound plays.
+// Where each is at a moment is a pure function of the finale's clock (`dovesAt`), so skipping about the finale shows any
+// instant; only their wingbeats keep to the birds' own clock.
+//
 // Nothing is allocated in a frame. DOM-free at import, so the Node unit tests can import it.
 
 import {
-  BufferGeometry, ConeGeometry, CylinderGeometry, DynamicDrawUsage, Float32BufferAttribute, Group,
+  BufferGeometry, Color, ConeGeometry, CylinderGeometry, DynamicDrawUsage, Float32BufferAttribute, Group,
   InstancedBufferAttribute, InstancedMesh, Matrix4, MeshLambertMaterial, Quaternion, SphereGeometry, Vector3,
 } from '../three.js';
 import { addAfter, glslFloat as f } from '../render/shaderPatch.js';
 import { zoneWeights } from '../audio/ambienceTiming.js';
+import { FINALE_TIMES } from '../finale/finaleTimes.js';
 import { EYE_HEIGHT } from './layout.js';
+import { RIDGE } from './stations.js';
 import { mergeParts, moveParts, part, triangleSoup } from '../util/geo.js';
 import { clamp, smoothstep } from '../util/math.js';
 import { createRng, rngRange } from '../util/rng.js';
@@ -486,6 +493,29 @@ function birdMesh(kind, count) {
   return mesh;
 }
 
+const axisX = new Vector3(), axisY = new Vector3(), axisZ = new Vector3();
+const basis = new Matrix4(), matrix = new Matrix4(), turn = new Quaternion(), roll = new Quaternion(), size = new Vector3();
+
+/** Stands bird `i` of `mesh` at `at`, heading along `heading`, banked `bank` (rad, + lifts its +X wing), `scale` big. */
+function placeBird(mesh, i, at, heading, bank, scale) {
+  axisZ.copy(heading).normalize();
+  axisX.crossVectors(UP, axisZ);
+  if (axisX.lengthSq() < 1e-10) axisX.set(1, 0, 0);
+  else axisX.normalize();
+  axisY.crossVectors(axisZ, axisX);
+  turn.setFromRotationMatrix(basis.makeBasis(axisX, axisY, axisZ)).multiply(roll.setFromAxisAngle(Z_AXIS, bank));
+  mesh.setMatrixAt(i, matrix.compose(at, turn, size.setScalar(scale)));
+}
+
+/** Draws `count` of `mesh`'s birds (none hides it) and sends their matrices and flaps to the GPU. */
+function showBirds(mesh, count) {
+  mesh.count = count;
+  mesh.visible = count > 0;
+  if (count === 0) return;
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.geometry.getAttribute('aFlap').needsUpdate = true;
+}
+
 /**
  * The birds of the ride.
  * @param {{ path: import('./trackPath.js').TrackPath, perches?: Perch[] }} options  `perches` are where the robins
@@ -570,32 +600,10 @@ export function createBirds({ path, perches = [] }) {
   const local = new Vector3(), next = new Vector3();
   const position = new Vector3(), ahead = new Vector3(), centre = new Vector3();
   const forward = new Vector3(), right = new Vector3(), across = new Vector3(), sight = new Vector3();
-  const axisX = new Vector3(), axisY = new Vector3(), axisZ = new Vector3();
-  const basis = new Matrix4(), matrix = new Matrix4(), turn = new Quaternion(), roll = new Quaternion(), size = new Vector3();
   const crossing = { start: 0, time: 0, dir: 1, height: 0, from: 0, to: 0 };
-
-  /** Stands bird `i` of `mesh` at `at`, heading along `heading`, banked `bank` (rad, + lifts its +X wing), `scale` big. */
-  function place(mesh, i, at, heading, bank, scale) {
-    axisZ.copy(heading).normalize();
-    axisX.crossVectors(UP, axisZ);
-    if (axisX.lengthSq() < 1e-10) axisX.set(1, 0, 0);
-    else axisX.normalize();
-    axisY.crossVectors(axisZ, axisX);
-    turn.setFromRotationMatrix(basis.makeBasis(axisX, axisY, axisZ)).multiply(roll.setFromAxisAngle(Z_AXIS, bank));
-    mesh.setMatrixAt(i, matrix.compose(at, turn, size.setScalar(scale)));
-  }
 
   /** A point from the track at the train (x right, y up, z ahead), in the world. */
   const toWorld = (p, d, out) => path.frameAt(d + p.z, p.x, p.y, out);
-
-  /** Draws `count` of `mesh`'s birds (none hides it) and sends their matrices and flaps to the GPU. */
-  function show(mesh, count) {
-    mesh.count = count;
-    mesh.visible = count > 0;
-    if (count === 0) return;
-    mesh.instanceMatrix.needsUpdate = true;
-    mesh.geometry.getAttribute('aFlap').needsUpdate = true;
-  }
 
   function updateFlock(d) {
     const weight = weights.spring + weights.autumn;
@@ -606,7 +614,7 @@ export function createBirds({ path, perches = [] }) {
       crossingShows = k >= 0 && noise(flock.seed, k, 5) < weights.spring + FLOCK_FLIGHT.AUTUMN * weights.autumn;
     }
     if (!crossingShows || !(weight > 0) || !flockPlace(flock, time, centre)) {
-      show(songbirds, 0);
+      showBirds(songbirds, 0);
       return;
     }
     const { ACROSS, SPEED, SIZE } = FLOCK;
@@ -627,17 +635,17 @@ export function createBirds({ path, perches = [] }) {
       toWorld(local, d, position);
       toWorld(next, d, ahead);
       const shown = smoothstep(ACROSS, ACROSS - RAMP, Math.abs(local.x)) * away;
-      place(songbirds, i, position, ahead.sub(position), 0, SIZE * b.size * shown);
+      placeBird(songbirds, i, position, ahead.sub(position), 0, SIZE * b.size * shown);
       flap.setXYZ(i, b.flap[0], b.flap[1], b.flap[2]);
     }
-    show(songbirds, flockCount);
+    showBirds(songbirds, flockCount);
   }
 
   function updateGulls(d, step) {
     const weight = weights.summer;
     gullsShown = weight > 0;
     if (!gullsShown) {
-      show(gulls, 0);
+      showBirds(gulls, 0);
       return;
     }
     const { SIZE } = GULLS;
@@ -664,14 +672,14 @@ export function createBirds({ path, perches = [] }) {
       path.frameAt(d + g.ahead, -g.out - offOut, local.y, centre).sub(position);
       const inside = Math.sign(across.crossVectors(ahead, centre).y) || 1;
       const since = time - g.called;
-      place(gulls, i, position, ahead, -inside * (TURN_BANK + gullBank(since)), scale);
+      placeBird(gulls, i, position, ahead, -inside * (TURN_BANK + gullBank(since)), scale);
       flap.setXYZ(i, g.flap[0], g.flap[1], Math.max(ownFlap(g, time), callFlap(since)));
       // How far it is from where she is looking (or, not knowing, from the line ahead), to answer a call.
       if (looking) sight.copy(position).sub(cameraAt).normalize();
       else sight.copy(position).sub(cameraAt).setY(0).normalize();
       gullSeen[i] = Math.acos(clamp(sight.dot(looking ? view : forward), -1, 1));
     }
-    show(gulls, gullCount);
+    showBirds(gulls, gullCount);
   }
 
   /**
@@ -690,7 +698,7 @@ export function createBirds({ path, perches = [] }) {
   function updateRobins(d, step) {
     const weight = weights[ROBIN_ZONE];
     if (!(weight > 0)) {
-      show(robins, 0);
+      showBirds(robins, 0);
       return;
     }
     const { AHEAD, SIZE } = ROBINS;
@@ -738,10 +746,10 @@ export function createBirds({ path, perches = [] }) {
       if (p > 0) ahead.copy(across);
       else ahead.subVectors(cameraAt, perch).setY(0);
       const far = smoothstep(AHEAD[1], AHEAD[1] - FADE, pickedAhead[i]);
-      place(robins, i, position, ahead, 0, SIZE * shown * far * (1 - smoothstep(0.7, 1, p)));
+      placeBird(robins, i, position, ahead, 0, SIZE * shown * far * (1 - smoothstep(0.7, 1, p)));
       flap.setXYZ(i, robinFlap[j], RATE, p > 0 ? 1 : 0);
     }
-    show(robins, n);
+    showBirds(robins, n);
   }
 
   /** After a jump back along the ride, every robin the train has yet to come near is back on its perch. */
@@ -784,5 +792,171 @@ export function createBirds({ path, perches = [] }) {
     },
     /** @type {object[]} */
     targets: [],
+  };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The finale's doves
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * The finale's doves. COUNT of them sit on the ridge of the station house's roof (RIDGE, stations.js) until TAKE_OFF
+ * (s on the finale's clock: the moment the finale's dove sound plays, as the fireworks start), then burst up and
+ * circle away over the town, and are gone TIME seconds later. SIZE: how many times life size they are drawn, sitting
+ * (PERCH) and a few seconds into their flight (FLY), so that a dove far over the town still reads as a dove on her phone.
+ */
+export const DOVES = Object.freeze({
+  COUNT: 5, TAKE_OFF: FINALE_TIMES.fireworks, TIME: 6, SIZE: Object.freeze({ PERCH: 1.4, FLY: 5.5 }),
+});
+
+/**
+ * How a dove flies. TRAVEL: it gets to the middle of its circle over this long (s), and the middle drifts on away from
+ * the roof at DRIFT m/s after that. BLOOM: its circle opens out over this long (s). RISE: it settles to the height of its
+ * circle over about this long (s). BURST: it springs up this much (m) higher still, at its highest PEAK seconds after it
+ * sets off, and settles back down. BLAST: how fast it sets off for the middle of its circle (1: at a steady pace; more:
+ * in a burst, slowing as it comes near). BOB: how far (m) and how fast (rad/s) it rises and falls as it goes. GROW: how long it
+ * takes (s) to grow from PERCH to FLY size. FADE: it shrinks away over the last this many seconds before TIME. FEET: how
+ * far (m, life size) its belly is under the middle of its body, where a bird's origin is. FOLD: sitting, its wings hang
+ * down by this much of a full flap (0 to 1). FLAP: flying, its wings open to a full flap over OPEN seconds, and it eases
+ * off by EASE (0 to 1) between FROM and TO seconds into its flight. PITCH: how much of the climb in its way it noses up
+ * by (0 level to 1 all of it). BANK: how far (rad) it leans for each rad/s it turns, and the most it leans. GLOW: how
+ * much brighter than their colours they are drawn (as a multiple of them, by their instances' colour), so that they
+ * read as white doves against the dusk sky, seen from below in their own shade, and not as grey gulls.
+ */
+const DOVE_FLIGHT = Object.freeze({
+  TRAVEL: 3.5, BLAST: 1.7, DRIFT: 2, BLOOM: 1.0, RISE: 0.8, BURST: Object.freeze({ HEIGHT: 1.7, PEAK: 0.6 }), BOB: Object.freeze([0.3, 2.6]),
+  GROW: 2.5, FADE: 1, FEET: 0.066, FOLD: 0.85, FLAP: Object.freeze({ OPEN: 0.1, EASE: 0.3, FROM: 1.5, TO: 5 }),
+  PITCH: 0.5, BANK: Object.freeze([0.3, 0.5]), GLOW: 1.5,
+});
+
+/**
+ * Each dove: where it sits (`along` the track, m, from the station's middle: in the order the quality tier thins them,
+ * which keeps what is left spread along the ridge), which way it faces on the ridge (`facing`: +1 ahead along the
+ * track, −1 back) and so which way it takes off, how long it waits after TAKE_OFF (`delay`, s), where the middle of
+ * the circle it wheels in is (`centre`, [along, right] m: over the town beyond the track, where the fireworks bloom,
+ * and on the finale camera's side of it, in front of the lens) and how high (`up`, m above the rails' ground: low, so
+ * that it stays in the sliver of sky the camera has over the platform), the circle's radius (`radius`, m) and how fast
+ * it goes round it (`spin`, rad/s, + from along towards right), and its wingbeats a second and their phase (`rate`,
+ * `phase`, rad).
+ */
+const DOVE_TABLE = Object.freeze([
+  { along: 5.9, facing: 1, delay: 0, centre: [13.4, -17.6], up: 5.2, radius: 5.5, spin: -1.2, rate: 4.4, phase: 0 },
+  { along: 9.1, facing: -1, delay: 0.12, centre: [21.1, -16.7], up: 5.7, radius: 6.5, spin: 0.95, rate: 5.0, phase: 1.7 },
+  { along: 7.5, facing: 1, delay: 0.05, centre: [14.1, -13.5], up: 4.7, radius: 5.0, spin: -1.45, rate: 4.6, phase: 3.1 },
+  { along: 6.7, facing: -1, delay: 0.22, centre: [14.4, -24], up: 6.0, radius: 6.0, spin: 1.05, rate: 4.8, phase: 4.4 },
+  { along: 8.3, facing: 1, delay: 0.32, centre: [19.8, -13.7], up: 5.4, radius: 5.5, spin: -1.3, rate: 5.2, phase: 5.5 },
+].map((dove) => Object.freeze(dove)));
+
+/**
+ * Where dove `i` (0 to COUNT − 1) is at `t` seconds on the finale's clock, written into `out` in the frame of the
+ * finale station ([along, right, up] metres, the frame finale.js describes), and whether it shows and how hard it
+ * flaps (0 sitting to 1). It sits on the ridge of the station house's roof until TAKE_OFF (a moment later each, by its
+ * `delay`), then springs up and goes out over the town in a widening circle, which settles over the town beyond the
+ * track and wheels there, drifting on away; TIME seconds after take-off it has gone (`visible` false). Pure: it depends
+ * on nothing but `t` and `i`.
+ * @param {number} t
+ * @param {number} i
+ * @param {Vector3} out  x is along, y is right, z is up
+ * @param {{ visible: boolean, flap: number }} [result]  where to write the other two, so that nothing is allocated
+ * @returns {{ visible: boolean, flap: number }}
+ */
+export function dovesAt(t, i, out, result = { visible: false, flap: 0 }) {
+  const dove = DOVE_TABLE[i];
+  if (!dove) throw new RangeError(`dovesAt: there is no dove ${i}`);
+  const { TRAVEL, BLAST, DRIFT, BLOOM, RISE, BURST, BOB, FEET, FLAP } = DOVE_FLIGHT;
+  const since = t - DOVES.TAKE_OFF;
+  const u = Math.max(0, since - dove.delay); // seconds it has been flying
+  const perchUp = RIDGE.TOP + FEET * DOVES.SIZE.PERCH;
+  const toAlong = dove.centre[0] - dove.along, toRight = dove.centre[1] - RIDGE.RIGHT;
+  const way = 1 - (1 - Math.min(u / TRAVEL, 1)) ** BLAST + (DRIFT * u) / Math.hypot(toAlong, toRight); // how far to the circle's middle, drifting on
+  const reach = dove.radius * (1 - Math.exp(-u / BLOOM)); // the circle, opening out from the perch
+  const turn = (dove.facing > 0 ? 0 : Math.PI) + dove.spin * u; // it sets off the way it faces
+  const rise = 1 - Math.exp(-u / RISE);
+  const burst = BURST.HEIGHT * (u / BURST.PEAK) * Math.exp(1 - u / BURST.PEAK);
+  out.set(
+    dove.along + toAlong * way + Math.cos(turn) * reach,
+    RIDGE.RIGHT + toRight * way + Math.sin(turn) * reach,
+    perchUp + (dove.up - perchUp + BOB[0] * Math.sin(BOB[1] * u + dove.phase)) * rise + burst,
+  );
+  result.visible = since < DOVES.TIME;
+  result.flap = u > 0 ? smoothstep(0, FLAP.OPEN, u) * (1 - FLAP.EASE * smoothstep(FLAP.FROM, FLAP.TO, u)) : 0;
+  return result;
+}
+
+/** How big (times life size) dove `i` is drawn `t` seconds into the finale: PERCH sitting, growing to FLY and shrinking away at the end. */
+function doveSize(t, i) {
+  const { PERCH, FLY } = DOVES.SIZE;
+  const u = Math.max(0, t - DOVES.TAKE_OFF - DOVE_TABLE[i].delay);
+  const fade = 1 - smoothstep(DOVES.TIME - DOVE_FLIGHT.FADE, DOVES.TIME, t - DOVES.TAKE_OFF);
+  return (PERCH + (FLY - PERCH) * smoothstep(0, DOVE_FLIGHT.GROW, u)) * fade;
+}
+
+/** How far ahead and behind (s) a dove's heading and its turn are measured. */
+const DOVE_LOOK = 0.1;
+
+/**
+ * The finale's doves: one InstancedMesh of up to `count` (COUNT at the most) on the birds' flapping material, in the
+ * frame of the finale station as the station house is built in it (x right of the track, y up, z back along it: the
+ * finale puts the mesh at the station with the same turn as the train's exterior has), so that it needs nothing
+ * but the finale's clock.
+ * @param {number} [count]
+ * @returns {{
+ *   mesh: InstancedMesh,
+ *   update: (t: number) => number,
+ *   setQuality: (share: number) => void,
+ * }}
+ *   `update` draws the doves as they are `t` seconds into the finale and returns how many are showing (the mesh is
+ *   hidden when none is). `setQuality` is the quality tier's `particles` share (0 to 1) of them: the first few, which are
+ *   spread along the ridge.
+ */
+export function createDoves(count = DOVES.COUNT) {
+  const total = Math.min(Math.max(0, Math.floor(count)), DOVES.COUNT);
+  const mesh = birdMesh('dove', total);
+  const flap = mesh.geometry.getAttribute('aFlap');
+  const glow = new Color().setScalar(DOVE_FLIGHT.GLOW);
+  for (let i = 0; i < total; i++) mesh.setColorAt(i, glow);
+  let wanted = total;
+  const { PITCH, FOLD, BANK } = DOVE_FLIGHT;
+  const spot = new Vector3(), position = new Vector3(), heading = new Vector3();
+  const before = new Vector3(), after = new Vector3(), came = new Vector3(), goes = new Vector3();
+  const state = { visible: false, flap: 0 };
+
+  /** Dove `i`'s place `t` seconds in, in the mesh's frame (x right, y up, z back), written into `out`. */
+  const placeAt = (t, i, out) => {
+    dovesAt(t, i, spot, state);
+    return out.set(spot.y, spot.z, -spot.x);
+  };
+
+  return {
+    mesh,
+    setQuality(share) {
+      wanted = Math.ceil(total * clamp(share, 0, 1));
+    },
+    update(t) {
+      let shown = 0;
+      for (let i = 0; i < wanted; i++) {
+        const dove = DOVE_TABLE[i];
+        placeAt(t, i, position);
+        if (!state.visible) continue;
+        const flapping = state.flap; // (placeAt below leaves its answers for other moments in `state`)
+        const flying = Math.max(0, t - DOVES.TAKE_OFF - dove.delay);
+        // It points the way it goes, nosing up only some of the way it climbs; sitting, along the ridge the way it will set off.
+        heading.subVectors(placeAt(t + DOVE_LOOK / 2, i, after), placeAt(t - DOVE_LOOK / 2, i, before));
+        heading.y *= PITCH * smoothstep(0, 0.3, flying); // (its nose comes up over its first 0.3 s)
+        if (heading.lengthSq() < 1e-12) heading.set(0, 0, -dove.facing);
+        // It banks into its turn, left wing down for a left turn (its heading turning from +Z towards +X).
+        came.subVectors(position, placeAt(t - DOVE_LOOK, i, before)).setY(0);
+        goes.subVectors(placeAt(t + DOVE_LOOK, i, after), position).setY(0);
+        const speeds = came.length() * goes.length();
+        const turning = speeds > 1e-9 ? Math.asin(clamp(came.cross(goes).y / speeds, -1, 1)) / DOVE_LOOK : 0;
+        placeBird(mesh, shown, position, heading, -clamp(BANK[0] * turning, -BANK[1], BANK[1]), doveSize(t, i));
+        // Sitting, its wings hang down along the roof (held at the bottom of the flap's swing); flying, it flaps.
+        if (flapping > 0) flap.setXYZ(shown, dove.phase, dove.rate, flapping);
+        else flap.setXYZ(shown, -Math.PI / 2, 0, FOLD);
+        shown++;
+      }
+      showBirds(mesh, shown);
+      return shown;
+    },
   };
 }

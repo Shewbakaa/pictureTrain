@@ -1,7 +1,7 @@
 // The two stations (Task 9): where their platforms are, the finale's door, and room for the finale to play out.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createStation, STATION, START_STATION_DISTANCE } from '../../site/src/world/stations.js';
+import { createStation, HOUSE, RIDGE, STATION, START_STATION_DISTANCE } from '../../site/src/world/stations.js';
 import { createTrackPath } from '../../site/src/world/trackPath.js';
 import { triangleCount } from '../../site/src/util/geo.js';
 import { MATERIALS } from '../../site/src/render/materials.js';
@@ -129,4 +129,20 @@ test('the finale station house has a chimney, and the group says where its top i
   const right = top.clone().sub(path.pointAt(FINALE)).dot(path.sideAt(FINALE));
   assert.ok(along > 5.6 && along < 9.4 && right > 7.0 && right < 10.4, `${along.toFixed(1)} m along, ${right.toFixed(1)} m right`);
   assert.ok(top.y - path.pointAt(FINALE).y > STATION.PLATFORM_TOP + 3 + 1.5, 'above the ridge of the roof');
+});
+
+test('the roof ridge the finale\'s doves sit on is where RIDGE says: its top at RIDGE.TOP, from RIDGE.ALONG, falling away either side', () => {
+  for (const along of [RIDGE.ALONG[0] + 0.05, (HOUSE.FROM + HOUSE.TO) / 2, RIDGE.ALONG[1] - 0.05]) {
+    const y = surfaceUnder(finale, FINALE + along, RIDGE.RIGHT, RIDGE.TOP + 1);
+    assert.ok(y !== null && Math.abs(y - RIDGE.TOP) < 0.01, `${along} m along: the top of the roof is at ${y}, RIDGE.TOP is ${RIDGE.TOP}`);
+  }
+  const mid = FINALE + (HOUSE.FROM + HOUSE.TO) / 2;
+  for (const dRight of [-1, 1]) {
+    assert.ok(surfaceUnder(finale, mid, RIDGE.RIGHT + dRight, RIDGE.TOP + 1) < RIDGE.TOP - 0.7, 'the roof slopes away from the ridge');
+  }
+  assert.equal(RIDGE.RIGHT, (HOUSE.FRONT + HOUSE.BACK) / 2);
+  // Past either end there is only the platform under the house, far below.
+  for (const along of [RIDGE.ALONG[1] + 0.1, RIDGE.ALONG[0] - 0.1]) {
+    assert.ok(surfaceUnder(finale, FINALE + along, RIDGE.RIGHT, RIDGE.TOP + 1) < 1, 'it ends where RIDGE.ALONG says');
+  }
 });

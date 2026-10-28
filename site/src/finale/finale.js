@@ -5,7 +5,8 @@
 // figure at the carriage door: she steps to the edge, crouches and hops down onto the platform, and turns to the
 // station house, where he has been waiting by the door with a bouquet. He walks over to her with a happy bob and
 // holds the flowers out, she takes them in both hands and hugs them, and hearts rise between them while soft
-// fireworks bloom over the town and confetti flutters down. Their pet, a little dog or cat (world/pets.js), trots out
+// fireworks bloom over the town, confetti flutters down and a handful of white doves burst off the station house's
+// roof and wheel away over the town (world/birds.js). Their pet, a little dog or cat (world/pets.js), trots out
 // of the station house as he sets off, keeps beside him all the way over, then runs on round him and sits at their
 // feet, facing the camera, for the photo. Then the app shows his message.
 //
@@ -28,9 +29,11 @@ import {
   Points, Quaternion, ShaderMaterial, SphereGeometry, TorusGeometry, Vector2, Vector3,
 } from '../three.js';
 import { MATERIALS } from '../render/materials.js';
+import { TIERS } from '../perf/quality.js';
 import { EYE_HEIGHT } from '../world/layout.js';
 import { fovForAspect } from '../ride/look.js';
 import { createFigure, walkPose } from '../world/figures.js';
+import { createDoves } from '../world/birds.js';
 import { createPet, petFor, TROT } from '../world/pets.js';
 import { heartShape } from '../world/signs.js';
 import { mergeParts, moveParts, part, triangleSoup } from '../util/geo.js';
@@ -497,13 +500,15 @@ function reachFor(figure, side, target, weight) {
  *           cabin: { setVisible: (visible: boolean) => void }, exterior: import('../three.js').Group }} options
  *   `exterior` is train/exterior.js's train; the finale places it at the station and shows it while it plays.
  * @returns {{ readonly active: boolean, readonly time: number, readonly bursts: number, readonly pets: number,
- *             begin: () => void, update: (dt: number) => string[], skipTo: (t: number) => void,
+ *             readonly doves: number, begin: () => void, update: (dt: number) => string[], skipTo: (t: number) => void,
  *             freeze: (frozen: boolean) => void, reset: () => void, setQuality: (tier: 'low'|'medium'|'high') => void }}
  *   `pets` is how many pets it is showing: 1 once theirs has come out with him (none with content.js pets 'none').
+ *   `doves` is how many doves are showing, on the station house's roof and then in the air (none before `begin`, and
+ *   none by 6 s after the fireworks start).
  *   `begin` swaps her cabin for the train outside and starts the clock at 0. `update` moves the clock on by `dt`
  *   seconds (at most a tenth of a second per frame), draws that instant and returns the events passed on the way
  *   ('hearts', 'fireworks', 'card'), each once. `skipTo` moves the clock to `t`; `freeze` stops it. `reset` puts
- *   her back in her seat with the cabin, as before `begin`. `setQuality` thins the effects on the low tier.
+ *   her back in her seat with the cabin, as before `begin`. `setQuality` thins the effects (and the doves) on the lower tiers.
  */
 export function createFinale({ stage, path, layout, content, cabin, exterior }) {
   const { scene, camera, rig } = stage;
@@ -520,7 +525,9 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
 
   // The train outside, where the ride stopped.
   path.frameAt(fd, 0, 0, exterior.position);
-  exterior.quaternion.setFromRotationMatrix(new Matrix4().makeBasis(side, up, ahead.clone().negate()));
+  // The frame the station is built in (x right of the track, y up, z back along it): the train outside is laid in it.
+  const stationTurn = new Quaternion().setFromRotationMatrix(new Matrix4().makeBasis(side, up, ahead.clone().negate()));
+  exterior.quaternion.copy(stationTurn);
   exterior.visible = false;
   scene.add(exterior);
 
@@ -548,8 +555,12 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
   const hearts = createHearts();
   const fireworks = createFireworks();
   const confetti = createConfetti();
-  scene.add(bouquet, hearts, fireworks.points, confetti.mesh);
-  const effects = [hearts, fireworks.points, confetti.mesh];
+  // The doves on the station house's roof, in the station's frame (they know only the finale's clock).
+  const doves = createDoves();
+  path.frameAt(fd, 0, 0, doves.mesh.position);
+  doves.mesh.quaternion.copy(stationTurn);
+  scene.add(bouquet, hearts, fireworks.points, confetti.mesh, doves.mesh);
+  const effects = [hearts, fireworks.points, confetti.mesh, doves.mesh];
 
   let active = false;
   let time = 0;
@@ -882,6 +893,7 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
     updateHearts(t);
     updateFireworks(t);
     updateConfetti(t);
+    doves.update(t);
   }
 
   function setShown(shown) {
@@ -900,6 +912,8 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
     get bursts() { return bursts; },
     /** How many pets it is showing: theirs, once it has come out with him. */
     get pets() { return pet && pet.group.visible ? 1 : 0; },
+    /** How many doves it is showing: those on the roof, and those in the air until they are gone. */
+    get doves() { return doves.mesh.visible ? doves.mesh.count : 0; },
     begin() {
       active = true;
       time = 0;
@@ -941,6 +955,7 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
       const low = tier === 'low';
       bursts = low ? FIREWORKS.LOW : FIREWORKS.MAX;
       confetti.mesh.count = low ? CONFETTI.LOW : CONFETTI.MAX;
+      doves.setQuality((TIERS[tier] || TIERS.high).particles);
     },
   };
 }

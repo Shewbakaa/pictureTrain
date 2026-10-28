@@ -100,14 +100,31 @@ const ROOF = Object.freeze({ FRONT: 2.4, BACK: 6.3, LOW: 3.55, HIGH: 3.9, THICK:
 const BOARD = Object.freeze({ WIDTH: 1.7, HEIGHT: 0.53, BOTTOM: 2.5, RIGHT: 3.35, FRAME: 0.07, DEPTH: 0.08 });
 
 /** The station house on the finale platform: its front wall's offset, its extent along the track and its walls' height. */
-const HOUSE = Object.freeze({ FRONT: 7.0, BACK: 10.4, FROM: 5.6, TO: 9.4, WALL: 3.0, RISE: 1.5, DOOR_AT: 7.5 });
+export const HOUSE = Object.freeze({ FRONT: 7.0, BACK: 10.4, FROM: 5.6, TO: 9.4, WALL: 3.0, RISE: 1.5, DOOR_AT: 7.5 });
 
 /** The station house's chimney stack: how far it runs along the track and right of it (m), and the height of its base and top. */
-const CHIMNEY = Object.freeze({
+export const CHIMNEY = Object.freeze({
   ALONG: [HOUSE.TO - 1.1, HOUSE.TO - 0.6],
   RIGHT: [(HOUSE.FRONT + HOUSE.BACK) / 2 + 0.5, (HOUSE.FRONT + HOUSE.BACK) / 2 + 1.0],
   BASE: STATION.PLATFORM_TOP + HOUSE.WALL + 0.6,
   TOP: STATION.PLATFORM_TOP + HOUSE.WALL + HOUSE.RISE + 0.7,
+});
+
+/**
+ * The station house's roof: how thick its slabs are, how far they reach past the eaves and how far the roof overhangs the
+ * gable ends (m), and the size of the cap along its ridge.
+ */
+const HOUSE_ROOF = Object.freeze({ SLAB: 0.16, EAVE: 0.3, OVERHANG: 0.3, CAP: Object.freeze({ WIDTH: 0.2, HEIGHT: 0.12 }) });
+
+/**
+ * The ridge of the station house's roof, in the station's frame (m): the stretch of it along the track (the ridge cap's
+ * length), how far right of the track it runs and the height of its top above the rails' ground. The finale's doves
+ * (birds.js) sit on it.
+ */
+export const RIDGE = Object.freeze({
+  ALONG: Object.freeze([HOUSE.FROM - HOUSE_ROOF.OVERHANG, HOUSE.TO + HOUSE_ROOF.OVERHANG]),
+  RIGHT: (HOUSE.FRONT + HOUSE.BACK) / 2,
+  TOP: STATION.PLATFORM_TOP + HOUSE.WALL + HOUSE.RISE + HOUSE_ROOF.SLAB * 0.9 + HOUSE_ROOF.CAP.HEIGHT / 2,
 });
 
 /** Lamps, bench and planters stand this far right, on the back of the platform. */
@@ -231,7 +248,7 @@ function stationHouse() {
     scale: [depth / Math.sqrt(3), 1, RISE / 1.5],
   }));
   // The roof: two slabs from the eaves up to the ridge, overhanging all round, and a ridge cap.
-  const SLAB = 0.16, EAVE = 0.3, OVERHANG = 0.3;
+  const { SLAB, EAVE, OVERHANG } = HOUSE_ROOF;
   const slope = Math.hypot(depth / 2, RISE);
   const angle = Math.atan2(RISE, depth / 2);
   for (const side of [-1, 1]) {
@@ -243,7 +260,9 @@ function stationHouse() {
       rotation: [0, 0, -side * angle],
     }));
   }
-  body.push(part(box(0.2, 0.12, length + 2 * OVERHANG + 0.02), COLOURS.houseRoof, { position: at(mid, centre, TOP + WALL + RISE + SLAB * 0.9) }));
+  body.push(part(box(HOUSE_ROOF.CAP.WIDTH, HOUSE_ROOF.CAP.HEIGHT, length + 2 * OVERHANG + 0.02), COLOURS.houseRoof, {
+    position: at(mid, centre, TOP + WALL + RISE + SLAB * 0.9),
+  }));
   body.push(slab(...CHIMNEY.ALONG, ...CHIMNEY.RIGHT, CHIMNEY.BASE, CHIMNEY.TOP, COLOURS.chimney));
   // The door, its knob and a step, on the front wall facing the track; a little clock above it.
   const face = FRONT - 0.02;

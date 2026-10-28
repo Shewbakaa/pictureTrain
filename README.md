@@ -285,7 +285,8 @@ second.)
 - Her own song plays at the phone's volume on iPhones (see section 4).
 - After the phone is locked and unlocked again, the sound may need one tap on the Sound button to come back.
 - A phone call or a Siri interruption can leave the Sound button showing the wrong state until you tap it.
-- The finale plays: the train pulls into the Day 365 station, fireworks go off, and your message appears.
+- The finale plays: the train pulls into the Day 365 station, fireworks go off and doves fly up off the station
+  roof, and your message appears.
 - Try it inside the app you will send the link with. Instagram and WhatsApp open links in their own small
   browser, which can behave a little differently. iMessage opens Safari, so that one is the same as above.
 

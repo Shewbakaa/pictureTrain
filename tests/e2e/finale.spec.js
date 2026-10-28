@@ -54,6 +54,28 @@ test('no pet in the finale with pets: none', async ({ page }) => {
   expect((await appState(page)).finalePets).toBe(0);
 });
 
+test('five doves fly off the station roof as the fireworks start, and are gone six seconds on', async ({ page }) => {
+  // Sitting on the roof until the fireworks start (8.5 s), flying a moment after, and gone by 14.5 s.
+  await page.goto('index.html?finale=1&ft=8.4&quality=high&ui=0');
+  await expect.poll(async () => (await appState(page)).finaleTime).toBe(8.4);
+  expect((await appState(page)).finaleDoves).toBe(5);
+  await page.goto('index.html?finale=1&ft=9&quality=high&ui=0');
+  await expect.poll(async () => (await appState(page)).finaleTime).toBe(9);
+  expect((await appState(page)).finaleDoves).toBe(5);
+  await page.goto('index.html?finale=1&ft=14.6&quality=high&ui=0');
+  await expect.poll(async () => (await appState(page)).finaleTime).toBe(14.6);
+  expect((await appState(page)).finaleDoves).toBe(0);
+});
+
+test('no doves outside the finale, and fewer on the low tier', async ({ page }) => {
+  await page.goto('index.html?at=300&quality=high&ui=0');
+  await expect.poll(async () => (await appState(page)).mode).toBe('3d');
+  expect((await appState(page)).finaleDoves).toBe(0);
+  await page.goto('index.html?finale=1&ft=9&quality=low&ui=0');
+  await expect.poll(async () => (await appState(page)).finaleTime).toBe(9);
+  expect((await appState(page)).finaleDoves).toBe(2);
+});
+
 test('full ride end to end', async ({ page, browserName }) => {
   test.skip(browserName === 'webkit', 'one full ride is enough');
   const errors = collectConsoleErrors(page);

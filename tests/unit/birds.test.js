@@ -3,8 +3,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  BIRD_KINDS, BIRD_MATERIAL, BIRDS, birdGeometry, createBirds, flockPlace, gullBank, gullPlace, robinLeave,
+  BIRD_KINDS, BIRD_MATERIAL, BIRDS, birdGeometry, createBirds, createDoves, DOVES, dovesAt, flockPlace, gullBank,
+  gullPlace, robinLeave,
 } from '../../site/src/world/birds.js';
+import { CHIMNEY, HOUSE, RIDGE } from '../../site/src/world/stations.js';
+import { FINALE_TIMES, finaleTracks } from '../../site/src/finale/finale.js';
+import { FOLEY_CUES } from '../../site/src/finale/foleyTiming.js';
+import { createTimeline } from '../../site/src/finale/timeline.js';
+import { TIERS } from '../../site/src/perf/quality.js';
+import { FINALE_PATH } from './finaleStage.js';
 import { createTrackPath, TRACK } from '../../site/src/world/trackPath.js';
 import { buildLayout, EYE_HEIGHT } from '../../site/src/world/layout.js';
 import { envAt } from '../../site/src/world/environment.js';
@@ -509,4 +516,240 @@ test('the quality tier thins every kind', () => {
   assert.deepEqual(counts(1), { songbird: 6, gull: 4, robin: 3 });
   assert.deepEqual(counts(0.7), { songbird: 5, gull: 3, robin: 3 });
   assert.deepEqual(counts(0.35), { songbird: 3, gull: 2, robin: 2 });
+});
+
+// ---------------------------------------------------------------------------------------------
+// The finale's doves (Task 12): on the station house's ridge until the fireworks, then up and away over the town
+// ---------------------------------------------------------------------------------------------
+
+const T = FINALE_TIMES;
+const doveIndexes = Array.from({ length: DOVES.COUNT }, (_, i) => i);
+const dove = new Vector3();
+/** Every dove at each moment from `from` (s into the finale) to a second after they are gone: `visit(t, i, visible)`, `dove` where it is. */
+function eachDove(visit, { from = 0, step = 0.05 } = {}) {
+  for (let t = from; t <= T.fireworks + DOVES.TIME + 1; t += step) {
+    for (const i of doveIndexes) visit(t, i, dovesAt(t, i, dove).visible);
+  }
+}
+
+test('five doves, which take off at the moment the finale plays its dove sound', () => {
+  assert.equal(DOVES.COUNT, 5);
+  assert.ok(Object.isFrozen(DOVES));
+  const cue = FOLEY_CUES.find((c) => c.name === 'doves');
+  assert.equal(DOVES.TAKE_OFF, cue.t);
+  assert.equal(DOVES.TAKE_OFF, T.fireworks);
+  // Not one moves until then; each has left its perch and is flapping hard half a second after.
+  const sat = new Vector3(), early = new Vector3(), away = new Vector3();
+  for (const i of doveIndexes) {
+    dovesAt(0, i, sat);
+    assert.equal(dovesAt(cue.t - 0.01, i, early).flap, 0);
+    assert.ok(early.distanceTo(sat) < 1e-9, `dove ${i} has not moved before the cue`);
+    assert.ok(dovesAt(cue.t + 0.5, i, away).flap > 0.9, `dove ${i} flaps hard half a second in`);
+    assert.ok(away.distanceTo(sat) > 1, `dove ${i} has left its perch by then`);
+  }
+  // And the first goes at once, as the sound plays.
+  dovesAt(0, 0, sat);
+  dovesAt(cue.t + 0.1, 0, away);
+  assert.ok(away.distanceTo(sat) > 0.2);
+});
+
+test('until then they sit on the station house roof\'s ridge, spaced out along it, not flapping', () => {
+  const along = [];
+  for (const i of doveIndexes) {
+    for (const t of [0, 3, T.fireworks - 0.1]) {
+      const r = dovesAt(t, i, dove);
+      assert.equal(r.visible, true, `dove ${i} at ${t}`);
+      assert.equal(r.flap, 0, 'not flapping while it sits');
+      // [along, right, up]: on the ridge line, from its top up by a dove's own half height (it is drawn bigger than life).
+      assert.ok(dove.x >= RIDGE.ALONG[0] && dove.x <= RIDGE.ALONG[1], `along the ridge: ${dove.x}`);
+      assert.ok(Math.abs(dove.y - RIDGE.RIGHT) < 1e-9, `right of the track: ${dove.y}`);
+      assert.ok(dove.z >= RIDGE.TOP && dove.z <= RIDGE.TOP + 0.35, `up: ${dove.z} on a ridge ${RIDGE.TOP} high`);
+    }
+    along.push(dove.x);
+  }
+  const sorted = [...along].sort((a, b) => a - b);
+  for (let k = 1; k < sorted.length; k++) assert.ok(sorted[k] - sorted[k - 1] >= 0.75, `spaced out: ${sorted}`);
+  // The quality tier takes the last ones away, so whichever first few are left are spread along the ridge too.
+  for (const n of [2, 3]) {
+    const some = along.slice(0, n).sort((a, b) => a - b);
+    assert.ok(some[some.length - 1] - some[0] >= n, `the first ${n} are spread out: ${some}`);
+  }
+});
+
+test('they burst up and out, then wheel over the town beyond the track and never come back to the roof', () => {
+  const sat = new Vector3(), at = new Vector3();
+  for (const i of doveIndexes) {
+    dovesAt(0, i, sat);
+    const flying = dovesAt(T.fireworks + 1, i, at);
+    assert.ok(flying.visible && flying.flap > 0.8, `dove ${i} flaps`);
+    let top = 0;
+    for (let tau = 0; tau <= 1.5; tau += 0.05) {
+      dovesAt(T.fireworks + tau, i, at);
+      top = Math.max(top, at.z - sat.z);
+    }
+    assert.ok(top > 1, `dove ${i} springs up from the roof: ${top} m`);
+    dovesAt(T.fireworks + 1, i, at);
+    assert.ok(Math.hypot(at.x - sat.x, at.y - sat.y) > 2, `and out: ${Math.hypot(at.x - sat.x, at.y - sat.y)}`);
+    // Further and further from where it sat as it goes out over the town...
+    let last = 0;
+    for (let tau = 0.5; tau <= 2.5; tau += 0.25) {
+      dovesAt(T.fireworks + tau, i, at);
+      const far = at.distanceTo(sat);
+      assert.ok(far > last, `dove ${i} ${tau} s in: ${far} m from its perch, after ${last}`);
+      last = far;
+    }
+    // ... then it wheels over the town (across the track and beyond it), a good way from the roof, up in the sky.
+    for (let tau = 3; tau <= DOVES.TIME - 0.05; tau += 0.25) {
+      dovesAt(T.fireworks + tau, i, at);
+      assert.ok(at.distanceTo(sat) > 15, `dove ${i} ${tau} s in is ${at.distanceTo(sat)} m from its perch`);
+      assert.ok(at.y < -5 && at.x > 5, `dove ${i} ${tau} s in is over the town: ${at.toArray()}`);
+      assert.ok(at.z > RIDGE.TOP - 2.5 && at.z < RIDGE.TOP + 4, `and flies about the height of the roof: ${at.z}`);
+    }
+  }
+});
+
+test('they are gone by 6 s after take-off, and a moment before that they are still there', () => {
+  assert.equal(DOVES.TIME, 6);
+  for (const i of doveIndexes) {
+    assert.equal(dovesAt(T.fireworks + DOVES.TIME - 0.05, i, dove).visible, true);
+    assert.equal(dovesAt(T.fireworks + DOVES.TIME, i, dove).visible, false, `dove ${i} at 6 s`);
+    assert.equal(dovesAt(T.fireworks + 6.5, i, dove).visible, false);
+    assert.equal(dovesAt(T.fireworks + 30, i, dove).visible, false);
+  }
+});
+
+test('where a dove is depends only on the finale\'s clock: any order, any skip, the same answer, with nothing allocated', () => {
+  const a = new Vector3(), b = new Vector3();
+  const times = [9.2, 3, 14, 8.5, 11.1, 0, 9.2];
+  const first = times.map((t) => { const r = dovesAt(t, 2, a); return [a.x, a.y, a.z, r.visible, r.flap]; });
+  for (let k = times.length - 1; k >= 0; k--) {
+    const r = dovesAt(times[k], 2, b);
+    assert.deepEqual([b.x, b.y, b.z, r.visible, r.flap], first[k], `at ${times[k]}`);
+  }
+  // It writes its answer into the result it is handed, so that a frame allocates nothing.
+  const into = { visible: false, flap: 0 };
+  assert.equal(dovesAt(9.2, 2, a, into), into);
+  assert.deepEqual([into.visible, into.flap], [first[0][3], first[0][4]]);
+});
+
+test('on their way up they are never inside the roof or the chimney', () => {
+  const slope = HOUSE.RISE / ((HOUSE.BACK - HOUSE.FRONT) / 2);
+  eachDove((t, i, visible) => {
+    if (!visible) return;
+    // Over the house, no lower than the roof's surface, which falls away either side of the ridge.
+    const over = dove.y > HOUSE.FRONT - 0.3 && dove.y < HOUSE.BACK + 0.3 && dove.x > HOUSE.FROM - 0.3 && dove.x < HOUSE.TO + 0.3;
+    if (over) assert.ok(dove.z >= RIDGE.TOP - slope * Math.abs(dove.y - RIDGE.RIGHT), `dove ${i} at ${t} is in the roof: ${dove.toArray()}`);
+    const inChimney = dove.x > CHIMNEY.ALONG[0] - 0.4 && dove.x < CHIMNEY.ALONG[1] + 0.4
+      && dove.y > CHIMNEY.RIGHT[0] - 0.4 && dove.y < CHIMNEY.RIGHT[1] + 0.4 && dove.z < CHIMNEY.TOP + 0.4;
+    assert.ok(!inChimney, `dove ${i} at ${t} is in the chimney: ${dove.toArray()}`);
+  });
+});
+
+test('they are never in front of the couple\'s faces: always well off the line of sight to them', () => {
+  const timeline = createTimeline(finaleTracks(FINALE_PATH, 960));
+  const sample = {};
+  const camera = new Vector3(), face = new Vector3(), place = new Vector3();
+  // Where the two of them stand once he has reached her, their faces about 1.1 m above the platform's 0.6.
+  FINALE_PATH.frameAt(960 + 0.8, 3.5, 1.7, face);
+  eachDove((t, i, visible) => {
+    if (!visible) return;
+    timeline.sample(t, sample);
+    camera.fromArray(sample.camera);
+    FINALE_PATH.frameAt(960 + dove.x, dove.y, dove.z, place);
+    const angle = (place.sub(camera).angleTo(new Vector3().copy(face).sub(camera)) * 180) / Math.PI;
+    assert.ok(angle > 14, `dove ${i} at ${t} is ${angle.toFixed(1)} degrees from their faces`);
+  }, { from: T.fireworks });
+});
+
+test('createDoves: one instanced mesh on the birds\' material, each dove drawn where dovesAt puts it', () => {
+  assert.equal(createDoves().mesh.instanceMatrix.count, 5, 'five by default');
+  const doves = createDoves(3);
+  const { mesh } = doves;
+  assert.ok(mesh.isInstancedMesh && mesh.material === BIRD_MATERIAL);
+  assert.equal(mesh.name, 'birds-dove');
+  assert.equal(mesh.instanceMatrix.count, 3);
+  assert.equal(mesh.frustumCulled, false);
+  assert.ok(mesh.geometry.getAttribute('wing') && mesh.geometry.getAttribute('aFlap').count === 3);
+  const matrix = new Matrix4(), at = new Vector3(), want = new Vector3();
+  // The mesh's own frame is the station's, the one the station house is built in: x right of the track, y up, z back.
+  for (const t of [0, T.fireworks - 0.1, T.fireworks + 0.7, T.fireworks + 2.5, T.fireworks + 5.5]) {
+    assert.equal(doves.update(t), 3, `three showing at ${t}`);
+    assert.ok(mesh.visible && mesh.count === 3);
+    for (let i = 0; i < 3; i++) {
+      dovesAt(t, i, want);
+      mesh.getMatrixAt(i, matrix);
+      at.setFromMatrixPosition(matrix);
+      assert.ok(at.distanceTo(want.set(want.y, want.z, -want.x)) < 1e-4, `dove ${i} at ${t}: ${at.toArray()} for ${want.toArray()}`);
+    }
+  }
+  assert.equal(doves.update(T.fireworks + DOVES.TIME), 0);
+  assert.ok(!mesh.visible && mesh.count === 0, 'none once they are gone');
+  assert.equal(doves.update(T.fireworks + 1), 3, 'and they are back, skipping back along the finale');
+});
+
+test('a dove sits with its wings folded down, flaps once it flies, grows as it goes and shrinks to nothing as it is gone', () => {
+  const doves = createDoves();
+  const { mesh } = doves;
+  const flap = mesh.geometry.getAttribute('aFlap');
+  const matrix = new Matrix4();
+  const scaleOf = (i) => { mesh.getMatrixAt(i, matrix); return new Vector3().setFromMatrixScale(matrix).x; };
+  doves.update(T.fireworks - 1);
+  const sitting = scaleOf(0);
+  for (let i = 0; i < DOVES.COUNT; i++) {
+    // Rate 0: the wings hold still, at the bottom of the flap's swing (the sine of the phase is −1), `amount` of the way.
+    assert.equal(flap.getY(i), 0, 'no wingbeats');
+    assert.ok(Math.abs(Math.sin(flap.getX(i)) + 1) < 1e-6, 'held at the bottom of the swing');
+    assert.ok(flap.getZ(i) > 0.5 && flap.getZ(i) < 1, 'folded down against the roof');
+  }
+  // They fold their wings until the moment each takes off, not a moment before (the first goes at the cue).
+  doves.update(T.fireworks - 0.05);
+  assert.equal(flap.getY(0), 0, 'still folded a moment before the cue');
+  doves.update(T.fireworks + 0.2);
+  assert.ok(flap.getY(0) > 0 && flap.getZ(0) > 0.9, 'and flapping a moment after it');
+  doves.update(T.fireworks + 1.5);
+  for (let i = 0; i < DOVES.COUNT; i++) {
+    assert.ok(flap.getY(i) >= 3 && flap.getY(i) <= 6, `wingbeats a second: ${flap.getY(i)}`);
+    assert.ok(flap.getZ(i) > 0.6, 'flapping hard');
+  }
+  assert.ok(scaleOf(0) > sitting * 1.4, 'bigger as it gets further, so that it still reads as a dove on her phone');
+  doves.update(T.fireworks + DOVES.TIME - 0.02);
+  assert.ok(scaleOf(0) < 0.1 * sitting, 'and almost nothing as it goes');
+});
+
+test('a dove points the way it goes: along the ridge to start, then the way it flies', () => {
+  const doves = createDoves();
+  const matrix = new Matrix4(), forward = new Vector3(), before = new Vector3(), after = new Vector3(), flew = new Vector3();
+  const heading = (i) => { doves.mesh.getMatrixAt(i, matrix); return forward.setFromMatrixColumn(matrix, 2).normalize(); };
+  doves.update(0);
+  for (let i = 0; i < DOVES.COUNT; i++) {
+    const h = heading(i);
+    assert.ok(Math.abs(h.y) < 1e-6 && Math.abs(h.x) < 1e-6 && Math.abs(Math.abs(h.z) - 1) < 1e-6, `dove ${i} faces along the ridge: ${h.toArray()}`);
+  }
+  // In the air it points the way it moves (the mesh's frame: x right, y up, z back), its nose never far from level.
+  for (const t of [T.fireworks + 2, T.fireworks + 4]) {
+    doves.update(t);
+    for (let i = 0; i < DOVES.COUNT; i++) {
+      const h = heading(i);
+      dovesAt(t - 0.05, i, before);
+      dovesAt(t + 0.05, i, after);
+      flew.set(after.y - before.y, 0, -(after.x - before.x)).normalize();
+      assert.ok(new Vector3(h.x, 0, h.z).normalize().dot(flew) > 0.98, `dove ${i} at ${t} points the way it goes: ${h.toArray()} against ${flew.toArray()}`);
+      assert.ok(Math.abs(h.y) < 0.6, `dove ${i} at ${t} is nowhere near upright`);
+    }
+  }
+});
+
+test('on the lower tiers fewer doves show (the particles share), the ones left spread along the ridge', () => {
+  const counts = [];
+  for (const tier of ['low', 'medium', 'high']) {
+    const doves = createDoves();
+    doves.setQuality(TIERS[tier].particles);
+    counts.push(doves.update(T.fireworks - 1));
+    assert.equal(doves.mesh.count, counts[counts.length - 1]);
+  }
+  assert.deepEqual(counts, [2, 4, 5]);
+  const none = createDoves();
+  none.setQuality(0);
+  assert.equal(none.update(T.fireworks + 1), 0);
+  assert.ok(!none.mesh.visible);
 });

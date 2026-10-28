@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { FINALE_TIMES, finaleTracks } from '../../site/src/finale/finale.js';
 import { createTimeline } from '../../site/src/finale/timeline.js';
 import { STATION } from '../../site/src/world/stations.js';
+import { DOVES, dovesAt } from '../../site/src/world/birds.js';
 import * as THREE from '../../site/src/three.js';
 import { FINALE_PATH, finaleOnStage } from './finaleStage.js';
 
@@ -278,4 +279,50 @@ test('a pet in the finale is drawn in two calls, and with pets: \'none\' there i
   finale.skipTo(9);
   finale.update(0);
   assert.equal(finale.pets, 1);
+});
+
+test('doves sit on the station house roof from the start and fly off as the fireworks start, only while the finale plays', () => {
+  const { scene, finale } = finaleOnStage();
+  const mesh = scene.getObjectByName('birds-dove');
+  assert.ok(mesh && mesh.isInstancedMesh, 'one instanced mesh of doves, in the scene');
+  assert.equal(finale.doves, 0);
+  assert.equal(mesh.visible, false, 'hidden until the finale begins');
+  const show = (t) => { finale.skipTo(t); finale.update(0); scene.updateMatrixWorld(true); };
+  const worldPosition = (i) => new THREE.Vector3().setFromMatrixPosition(new THREE.Matrix4().fromArray(mesh.instanceMatrix.array, i * 16).premultiply(mesh.matrixWorld));
+  finale.begin();
+  assert.equal(finale.doves, DOVES.COUNT, 'sitting on the roof as it begins');
+  // The mesh is in the station's frame: each dove is where dovesAt puts it, in the world, on the roof of the station house.
+  const want = new THREE.Vector3(), put = new THREE.Vector3();
+  for (const t of [0, T.fireworks - 0.1, T.fireworks + 0.5, T.fireworks + 2, T.fireworks + 4.5]) {
+    show(t);
+    assert.equal(finale.doves, DOVES.COUNT, `${DOVES.COUNT} at ${t}`);
+    for (let i = 0; i < DOVES.COUNT; i++) {
+      dovesAt(t, i, want);
+      path.frameAt(960 + want.x, want.y, want.z, put);
+      assert.ok(worldPosition(i).distanceTo(put) < 1e-3, `dove ${i} at ${t}: ${worldPosition(i).toArray()} for ${put.toArray()}`);
+    }
+  }
+  show(T.fireworks + DOVES.TIME);
+  assert.equal(finale.doves, 0, 'gone');
+  assert.equal(mesh.visible, false);
+  show(T.fireworks + 1);
+  assert.equal(finale.doves, DOVES.COUNT, 'skipping back brings them back');
+  finale.reset();
+  assert.equal(finale.doves, 0);
+  assert.equal(mesh.visible, false, 'and not after the ride starts again');
+});
+
+test('on the lower tiers fewer doves go (the particles share of five)', () => {
+  const { finale } = finaleOnStage();
+  finale.begin();
+  finale.skipTo(9);
+  finale.setQuality('low');
+  finale.update(0);
+  assert.equal(finale.doves, 2);
+  finale.setQuality('medium');
+  finale.update(0);
+  assert.equal(finale.doves, 4);
+  finale.setQuality('high');
+  finale.update(0);
+  assert.equal(finale.doves, 5);
 });
