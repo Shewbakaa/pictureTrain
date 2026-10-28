@@ -195,3 +195,25 @@ test('only the fireflies within 6 m of the tap scatter, none more than 3 m, and 
   snow.run(0.5, 'winter');
   for (let i = 0; i < 200; i++) assert.ok(snow.at(snow.tapped, i).distanceTo(snow.at(snow.still, i)) < 1e-6);
 });
+
+test('a tap while the fireflies are still scattered starts from where they are: none jumps (fix round 1)', () => {
+  const { tapped, still, run, at, camera, now } = twins();
+  const point = camera.clone().add(new Vector3(0, 0, -6));
+  const where = () => Array.from({ length: 200 }, (_, i) => at(tapped, i));
+  tapped.scatterFrom(point, now());
+  for (const wait of [0.2, 1, 3]) {
+    // Pushed out, easing back, nearly home: tapped again, every firefly is where it was, and moves on smoothly.
+    run(wait);
+    const before = where();
+    tapped.scatterFrom(point.clone().add(new Vector3(1, 0, 0)), now());
+    tapped.update(0, inside('evening'), camera);
+    const moved = Math.max(...where().map((p, i) => p.distanceTo(before[i])));
+    assert.ok(moved < 1e-4, `after ${wait} s: one moves ${moved.toFixed(4)} m as she taps`);
+  }
+  // Out again from the last tap, and all back on their paths once it has eased off.
+  run(0.5);
+  assert.ok(Math.max(...where().map((p, i) => p.distanceTo(at(still, i)))) > 1, 'scattered again');
+  run(4.5);
+  const off = Math.max(...where().map((p, i) => p.distanceTo(at(still, i))));
+  assert.ok(off < 1e-4, `back on their paths (${off.toFixed(4)} m)`);
+});

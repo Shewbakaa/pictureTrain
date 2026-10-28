@@ -58,6 +58,9 @@ const EVENTS = Object.freeze([
 /** How near an event sounds: its level is its zone's weight times a share drawn from NEAR. */
 const NEAR = [0.55, 1];
 
+/** A tapped gull's or balloon's own gate against doubles (s): as short as the taps' own cooldown allows. */
+const TAP_GAP = 1;
+
 /** The events' timing, the same on every ride. */
 const EVENT_SEED = 1026;
 
@@ -92,6 +95,11 @@ export function createAmbience(sfx) {
     sfx.define(event.name, { gap: event.gap, play: (kit, at, level) => play[event.name](voice(kit), at, level) });
   }
   sfx.define('chime', { gap: 10, play: (kit, at, level) => voice(kit).chime(at, level) });
+  // Her taps on a gull and on a hot-air balloon (ride/taps.js) call with the same voices, at their full level, on gates
+  // of their own: a call the ambience has just played never silences her tap. The gull she taps is where she is
+  // looking, so it calls from in front of her rather than from the sea's side.
+  sfx.define('gull-tap', { gap: TAP_GAP, play: (kit, at, level) => voice(kit).gull(at, level, 0) });
+  sfx.define('burner-tap', { gap: TAP_GAP, play: (kit, at, level) => voice(kit).burner(at, level) });
 
   const random = createRng(EVENT_SEED);
   const clocks = EVENTS.map((event) => ({ zone: event.zone, name: event.name, clock: createEventClock(event.min, event.max, random) }));

@@ -288,7 +288,7 @@ export function createDressing({ path, layout, seed = 1 }) {
         radius: CLUSTER_TAP.REACH * c.scale,
         position: (out) => onProp(mesh, i, middle, out),
         react(now, fx) {
-          c.tapped = now;
+          if (!(now - c.tapped < CLUSTER_TAP.TIME)) c.tapped = now; // a hop under way is not started again
           fx.burst(onProp(mesh, i, top, burst));
           fx.play('pop');
         },
@@ -309,9 +309,8 @@ export function createDressing({ path, layout, seed = 1 }) {
         radius: SNOWMAN_TAP.REACH * p.scale,
         position: (out) => onProp(snowman.mesh, i, middleOfSnowman, out),
         react(now, fx) {
-          const already = waving.find((w) => w.snowman === snowman && w.i === i);
-          if (already) already.since = now;
-          else waving.push({ snowman, i, since: now });
+          // A wave under way is not started again, or its arm would snap back down.
+          if (!waving.some((w) => w.snowman === snowman && w.i === i)) waving.push({ snowman, i, since: now });
           fx.play('jingle');
         },
       },

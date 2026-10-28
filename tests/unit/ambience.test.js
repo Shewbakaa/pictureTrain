@@ -337,3 +337,26 @@ test('no ambience sound starts an oscillator below 20 Hz (the e2e tests count th
   assert.ok(tones.length > 50);
   for (const s of tones) assert.ok(s.node.frequency.value >= 20, `an oscillator at ${s.node.frequency.value} Hz`);
 });
+
+// Her taps on a gull and on a hot-air balloon (Task 14, fix round 1): the same voices, on gates of their own.
+
+test('a tapped gull or balloon calls even just after the ambience\'s own, with the same voice, from in front of her', () => {
+  const t = setup();
+  t.on();
+  t.ride(0.2, middleOf('summer'));
+  assert.equal(t.sfx.play('gull'), true, 'the ambience\'s gull');
+  assert.equal(t.sfx.play('gull'), false, 'whose gate holds the next for 6 s');
+  const tones = t.starts.filter((s) => s.type === 'osc').length;
+  assert.equal(t.sfx.play('gull-tap'), true, 'but her tap is heard');
+  assert.equal(t.starts.filter((s) => s.type === 'osc').length, tones + 1, 'one sawtooth: the gull\'s voice');
+  const pan = t.panners[t.panners.length - 1].pan.value;
+  assert.ok(Math.abs(pan) <= 0.15 + 1e-9, `from in front of her: ${pan}`);
+  assert.equal(t.sfx.play('gull-tap'), false, 'and has a gate of its own');
+  t.ride(1.1, middleOf('summer'));
+  assert.equal(t.sfx.play('gull-tap'), true, 'a second later, another');
+
+  assert.equal(t.sfx.play('burner'), true);
+  const noises = t.starts.filter((s) => s.type === 'noise').length;
+  assert.equal(t.sfx.play('burner-tap'), true, 'the burner she taps roars though the ambience\'s just has');
+  assert.ok(t.starts.filter((s) => s.type === 'noise').length > noises);
+});

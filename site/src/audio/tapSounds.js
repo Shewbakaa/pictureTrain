@@ -3,7 +3,8 @@
 // soft pop of a balloon cluster (world/dressing.js), a snowman's jingle of little bells and the rustle of leaves as a
 // deer bounds off (world/deer.js). sfx.js defines each as a one-shot, so it keeps to the Sound button, a video's
 // sound and the page going into the background like every other sound. (A gull she taps calls with the ambience's own
-// gull, and a hot-air balloon roars with its burner: natureSounds.js.)
+// gull voice, and a hot-air balloon roars with its burner, natureSounds.js, on one-shots of their own that ambience.js
+// defines: 'gull-tap' and 'burner-tap'.)
 //
 // Each is built of oscillators on the kit's context and played into the output it is given (the effects bus unless
 // told otherwise) from context time `at`, at `level` (0 to 1). It returns false, playing nothing, at no level or when

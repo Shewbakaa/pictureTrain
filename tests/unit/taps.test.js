@@ -261,3 +261,18 @@ test('debugTargets says which targets the cabin hides from her', () => {
   const hidden = Object.fromEntries(router.debugTargets().map((t) => [t.name, t.hidden]));
   assert.deepEqual(hidden, { 'behind-the-dash': true, 'beside-it': false, lantern: false });
 });
+
+// Fix round 1: a tap inside a target's own sphere counts before one that finds a nearer target only through its cone.
+
+test('pickTarget: a target the ray passes inside the radius of beats a nearer one it only finds through the cone', () => {
+  // 30 m out: a small thing a little nearer and lower, whose cone takes in the bigger one's whole sphere.
+  const pet = target('pet', new Vector3(0, -0.7, -29.55), 0.35);
+  const couple = target('couple', new Vector3(0, 0, -30), 0.85);
+  assert.equal(pickTarget(ORIGIN, AHEAD, [pet, couple]), couple, 'aimed at the couple');
+  assert.equal(pickTarget(ORIGIN, new Vector3(0, -0.7, -29.55).normalize(), [pet, couple]), pet, 'aimed at the pet');
+  // With only cone hits, the nearest still wins; with only sphere hits, too.
+  const far = target('far', new Vector3(0.5, 0, -100), 0.1);
+  const farther = target('farther', new Vector3(-0.5, 0, -120), 0.1);
+  assert.equal(pickTarget(ORIGIN, AHEAD, [farther, far]), far);
+  assert.equal(pickTarget(ORIGIN, AHEAD, [target('b', new Vector3(0, 0, -9), 0.5), target('a', new Vector3(0, 0, -5), 0.5)]).name, 'a');
+});

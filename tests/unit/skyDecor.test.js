@@ -89,7 +89,7 @@ test('tapped, a balloon\'s burner roars, its flame glows for 1.2 s, and it bobs 
   assert.ok(halo && !halo.visible, 'nor its halo');
   const fx = { played: [], play: (name) => fx.played.push(name), burst() {} };
   tapped.targets[0].react(1, fx);
-  assert.deepEqual(fx.played, ['burner']);
+  assert.deepEqual(fx.played, ['burner-tap'], 'the burner, on a gate of its own (ambience.js)');
   const balloon = (decor) => decor.group.getObjectByName('sky-balloon-0').position.y;
   let lit = 0, highest = 0;
   for (let t = 0.05; t <= 10; t += 0.05) {
@@ -103,4 +103,40 @@ test('tapped, a balloon\'s burner roars, its flame glows for 1.2 s, and it bobs 
   assert.ok(highest > 2.9 && highest <= 3.0001, `it rises ${highest.toFixed(2)} m`);
   assert.ok(Math.abs(balloon(tapped) - balloon(still)) < 1e-6, 'and sinks back to where it was');
   assert.equal(tapped.group.getObjectByName('sky-balloon-1').position.y, still.group.getObjectByName('sky-balloon-1').position.y, 'the other is untouched');
+});
+
+test('a balloon tapped again while it is up rises again from where it is: it never jumps (fix round 1)', () => {
+  const camera = new Vector3(0, 2, 0);
+  const tapped = createSkyDecor(), still = createSkyDecor();
+  const fx = { played: [], play: (name) => fx.played.push(name), burst() {} };
+  const up = () => tapped.group.getObjectByName('sky-balloon-0').position.y - still.group.getObjectByName('sky-balloon-0').position.y;
+  const run = (seconds) => {
+    for (let t = 0; t < seconds - 1e-9; t += 0.05) {
+      tapped.update(0.05, camera);
+      still.update(0.05, camera);
+    }
+  };
+  run(1);
+  tapped.targets[0].react(0, fx);
+  const flame = tapped.group.getObjectByName('sky-balloon-0-flame');
+  for (const wait of [1, 3.5]) {
+    // Rising, and then sinking back: tapped again, it is where it was, and goes on up.
+    run(wait);
+    const before = up();
+    assert.ok(before > 0.5, `${before.toFixed(2)} m up after ${wait} s`);
+    const burning = flame.visible ? flame.material.opacity : 0;
+    tapped.targets[0].react(0, fx);
+    tapped.update(0, camera);
+    still.update(0, camera);
+    assert.ok(Math.abs(up() - before) < 1e-6, `after ${wait} s it stays put as she taps it`);
+    if (burning > 0) assert.ok(flame.material.opacity > 0.5 * burning, 'a flame still burning burns on');
+  }
+  let highest = 0;
+  for (let t = 0; t < 2.2; t += 0.05) {
+    run(0.05);
+    highest = Math.max(highest, up());
+  }
+  assert.ok(highest > 2.9 && highest <= 3.0001, `up to 3 m again (${highest.toFixed(2)})`);
+  run(6);
+  assert.ok(Math.abs(up()) < 1e-6, 'and back down');
 });

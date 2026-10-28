@@ -53,7 +53,8 @@ const EDGE_FADE = 0.6;
 /**
  * How fireflies scatter from a tap: those within REACH (m) of the point are pushed straight away from it, PUSH metres
  * at the point itself and less the further off they were, over OUT seconds, and ease back over BACK seconds. Up and
- * down they go only LIFT of the way, so they keep to their band.
+ * down they go only LIFT of the way, so they keep to their band. A tap while they are still scattered starts from where
+ * they are: how far out the last one had them eases back over OUT + BACK as the new push comes in, so none jumps.
  */
 const SCATTER = Object.freeze({ REACH: 6, PUSH: 3, OUT: 0.4, BACK: 4, LIFT: 0.5 });
 
@@ -62,6 +63,13 @@ function scattered(since) {
   if (!(since >= 0) || since >= SCATTER.OUT + SCATTER.BACK) return 0;
   if (since < SCATTER.OUT) return Math.sin((Math.PI / 2) * (since / SCATTER.OUT));
   return 0.5 + 0.5 * Math.cos((Math.PI * (since - SCATTER.OUT)) / SCATTER.BACK);
+}
+
+/** How much (0 to 1) of where an earlier scatter had them is left `since` seconds after the next tap. */
+function held(since) {
+  const time = SCATTER.OUT + SCATTER.BACK;
+  if (!(since >= 0) || since >= time) return 0;
+  return 0.5 + 0.5 * Math.cos((Math.PI * since) / time);
 }
 
 /**
@@ -266,8 +274,10 @@ export function createAmbientParticles({ maxCount = 260 } = {}) {
   let time = 0;
   let current = null;
   const showing = {};
-  // The last scatter: when it was (s), and how far (m) each firefly is pushed at its fullest.
+  // The last scatter: when it was (s), how far (m) each firefly is pushed at its fullest, and how far out (m) an earlier
+  // one still had it then.
   const push = new Float32Array(count * 3);
+  const hold = new Float32Array(count * 3);
   let scatteredAt = -Infinity;
 
   /** Sets the colours, the shape and the blending for a new style (while it shows at opacity 0). */
@@ -302,6 +312,7 @@ export function createAmbientParticles({ maxCount = 260 } = {}) {
     const spins = spinAttribute.array;
     const flips = flipAttribute.array;
     const pushed = fireflies ? scattered(time - scatteredAt) : 0;
+    const kept = fireflies ? held(time - scatteredAt) : 0;
     for (let i = 0; i < drawCount; i++) {
       const a = i * 3;
       const ph = i * 4;
@@ -314,10 +325,10 @@ export function createAmbientParticles({ maxCount = 260 } = {}) {
         x += style.sway * 1.5 * Math.sin(time * 0.31 * p + phase[ph]);
         z += style.sway * 1.5 * Math.cos(time * 0.27 * p + phase[ph + 2]);
         up = FIREFLY_BOB + anchor[a + 1] * (height - 2 * FIREFLY_BOB) + FIREFLY_BOB * Math.sin(time * 0.53 * p + phase[ph + 1]);
-        if (pushed > 0) {
-          x += push[a] * pushed;
-          up += push[a + 1] * pushed;
-          z += push[a + 2] * pushed;
+        if (pushed > 0 || kept > 0) {
+          x += push[a] * pushed + hold[a] * kept;
+          up += push[a + 1] * pushed + hold[a + 1] * kept;
+          z += push[a + 2] * pushed + hold[a + 2] * kept;
         }
         const blink = 0.5 + 0.5 * Math.sin(time * 1.7 * p + phase[ph + 3]);
         alphas[i] = 0.15 + 0.85 * blink * blink;
@@ -356,6 +367,9 @@ export function createAmbientParticles({ maxCount = 260 } = {}) {
       if (!points.visible || current === null || current.kind !== 'fireflies') return;
       // From where each one is drawn now: straight away from the point, the nearest the furthest.
       const { REACH, PUSH, LIFT } = SCATTER;
+      // Where the last scatter has them now is where this one starts from.
+      const pushed = scattered(now - scatteredAt), kept = held(now - scatteredAt);
+      for (let k = 0; k < push.length; k++) hold[k] = push[k] * pushed + hold[k] * kept;
       push.fill(0);
       for (let i = 0; i < drawCount; i++) {
         const a = i * 3;

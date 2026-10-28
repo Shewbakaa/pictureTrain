@@ -387,3 +387,21 @@ test('the couple and their pet are tap targets: they wave, it hops, and neither 
 
   assert.deepEqual(createStopCouple(characters, 'sitting').targets.map((t) => t.name), ['couple'], 'no pet, no pet target');
 });
+
+test('far off, a tap on the two of them reaches them, and one at their pet\'s paws reaches it (fix round 1)', async () => {
+  const { pickTarget } = await import('../../site/src/ride/taps.js');
+  for (const kind of ['dog', 'cat']) {
+    const couple = createStopCouple(characters, 'holding-hands', { kind, coat: PET_COATS[kind][0] }, 'right');
+    couple.group.updateMatrixWorld(true);
+    const [them, pet] = couple.targets;
+    const paws = pet.position(new Vector3());
+    for (const away of [6, 15, 20, 30, 50, 70, 110]) {
+      const eye = new Vector3(0, 2.05, away);
+      const aim = (at) => at.clone().sub(eye).normalize();
+      for (const [part, y] of [['middle', 0.9], ['chest', 1.2], ['heads', 1.5]]) {
+        assert.equal(pickTarget(eye, aim(new Vector3(0, y, 0)), couple.targets), them, `${kind}, ${away} m, at their ${part}`);
+      }
+      assert.equal(pickTarget(eye, aim(paws), couple.targets), pet, `${kind}, ${away} m, at the pet`);
+    }
+  }
+});

@@ -793,7 +793,7 @@ test('a gull she taps squawks and flaps away 25 m, then glides back to its loop 
   still.run(1, d);
   const fx = effects();
   tapped.birds.targets[1].react(1, fx);
-  assert.deepEqual(fx.played, ['gull']);
+  assert.deepEqual(fx.played, ['gull-tap'], 'the gull call, on a gate of its own (ambience.js)');
   const gull = (w) => drawn(w.mesh('gull'))[1];
   const gap = () => gull(tapped).position.distanceTo(gull(still).position);
   let furthest = 0, when = 0, flapped = 0;
@@ -810,4 +810,37 @@ test('a gull she taps squawks and flaps away 25 m, then glides back to its loop 
   tapped.run(7.2, d);
   still.run(7.2, d);
   assert.ok(gap() < 0.5, `back on its loop 9.7 s after the tap (${gap().toFixed(2)} m off)`);
+});
+
+test('a gull tapped again while it is off its loop flies off again from where it is: it never jumps (fix round 1)', () => {
+  const d = middleOf(L, 'summer');
+  const w = world();
+  w.run(1, d);
+  const [, target] = w.birds.targets;
+  const gull = () => drawn(w.mesh('gull'))[1].position;
+  const fx = effects();
+  target.react(1, fx);
+  for (const wait of [0.7, 3, 6]) {
+    // Partway out, and twice on its way back: tapped again, it is where it was, and flies off once more.
+    w.run(wait, d);
+    const before = gull();
+    target.react(0, fx);
+    w.run(0, d);
+    w.birds.update(0, envAt(L, d, envAt(L, 0)), w.camera, d);
+    assert.ok(gull().distanceTo(before) < 1e-3, `after ${wait} s: it moves ${gull().distanceTo(before).toFixed(3)} m as she taps it`);
+  }
+  // Out again, 25 m off its loop at most, and back in the end.
+  const still = world();
+  still.run(1 + 0.7 + 3 + 6, d);
+  let furthest = 0;
+  for (let t = 0; t < 2; t += 0.1) {
+    w.run(0.1, d);
+    still.run(0.1, d);
+    furthest = Math.max(furthest, gull().distanceTo(drawn(still.mesh('gull'))[1].position));
+  }
+  assert.ok(furthest > 23 && furthest < 28, `off again, ${furthest.toFixed(1)} m`);
+  w.run(8, d);
+  still.run(8, d);
+  assert.ok(gull().distanceTo(drawn(still.mesh('gull'))[1].position) < 0.5, 'and back on its loop');
+  assert.equal(fx.played.length, 4, 'it squawks each time');
 });

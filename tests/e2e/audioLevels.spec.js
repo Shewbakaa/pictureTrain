@@ -97,11 +97,26 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
       const tap = createTapSounds(createKit(mixer, { budget: Infinity }));
       for (const at of [0.2, 2.2, 4.2]) tap[name](at);
     });
+    // A gull and a hot-air balloon she taps call with the ambience's own voices at their full level, into the ambience
+    // bus ('gull-tap' and 'burner-tap', ambience.js); measured in stereo, as tests/e2e/ambienceLevels.spec.js measures
+    // those voices, the gull from in front of her.
+    const stereo = async (seconds, build) => {
+      const ctx = new OfflineAudioContext(2, seconds * RATE, RATE);
+      const mixer = createMixer(ctx);
+      mixer.fade(true, 0.01);
+      build(createNatureSounds(createKit(mixer, { budget: Infinity })));
+      const rendered = await ctx.startRendering();
+      return [rendered.getChannelData(0), rendered.getChannelData(1)];
+    };
+    const gullTap = await stereo(8, (voices) => { for (const at of [0.2, 2.7, 5.2]) voices.gull(at, 1, 0); });
+    const burnerTap = await stereo(11, (voices) => { for (const at of [0.2, 3.7, 7.2]) voices.burner(at, 1); });
+    const louder = (channels, measure) => Math.max(...channels.map(measure));
     const pop = await tapSound('pop');
     const jingle = await tapSound('jingle');
     const rustle = await tapSound('rustle');
     // Every sound a tap can make, all at once, on a kit with the ride's own node budget: the cord's whistle, the
-    // lantern, the pop, the jingle, the rustle, a hot-air balloon's burner and a gull.
+    // lantern, the pop, the jingle, the rustle, a hot-air balloon's burner and a gull (the voices 'burner-tap' and
+    // 'gull-tap' play).
     let tapsPlayed = [];
     let tapsNodes = 0;
     await render(3, (ctx, mixer) => {
@@ -198,6 +213,10 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
       jingleLoudestDb: loudest(jingle),
       rustlePeakDb: db(peak(rustle)),
       rustleLoudestDb: loudest(rustle),
+      gullTapPeakDb: db(louder(gullTap, peak)),
+      gullTapLoudestDb: louder(gullTap, loudest),
+      burnerTapPeakDb: db(louder(burnerTap, peak)),
+      burnerTapLoudestDb: louder(burnerTap, loudest),
       tapsAllPlayed: tapsPlayed.every(Boolean) ? 1 : 0,
       tapsPeakNodes: tapsNodes,
       mixPeak: peak(mix),
@@ -244,6 +263,13 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
     expect(Math.abs(m[`${key}PeakDb`] - -24), key).toBeLessThanOrEqual(2);
     expect(m[`${key}LoudestDb`], key).toBeLessThan(m.musicNewLoudestDb);
   }
+  // A tapped gull and a tapped balloon's burner keep the ambience's own levels: the same voices at full level. The gull,
+  // about −24 dBFS from the sea's side, calls from in front of her, its power shared between the two channels: about
+  // −26 dBFS in each. The burner is softer, as far off as the balloon (−32 to −24 dBFS, as the ambience's).
+  expect(Math.abs(m.gullTapPeakDb - -26)).toBeLessThanOrEqual(2);
+  expect(m.burnerTapPeakDb).toBeLessThanOrEqual(-24);
+  expect(m.burnerTapPeakDb).toBeGreaterThanOrEqual(-32);
+  for (const key of ['gullTapLoudestDb', 'burnerTapLoudestDb']) expect(m[key], key).toBeLessThan(m.musicNewLoudestDb);
   expect(m.tapsAllPlayed).toBe(1);
   expect(m.tapsPeakNodes).toBeLessThanOrEqual(40);
   expect(m.sighHeardS).toBeGreaterThanOrEqual(1.2);

@@ -5,8 +5,10 @@
 //
 // Each tappable thing has a generous invisible hit shape: a sphere `radius` round its position, so a fingertip need
 // not land on a thin cord exactly, and for things far off (a balloon, a gull) a cone MIN_ANGLE either side of the
-// ray, so even a tiny one is easy to tap. Each answers at most once per COOLDOWN, so mashing a tap does not stack
-// sounds past the node budget.
+// ray, so even a tiny one is easy to tap. A tap inside a target's own sphere counts before one that only finds a target
+// through its cone: far off, the cones of two things side by side (the two of them at a stop, and their pet a little
+// nearer) both take in the whole of each, and the one she aimed at should answer. Each answers at most once per
+// COOLDOWN, so mashing a tap does not stack sounds past the node budget.
 //
 // A tappable animates itself and asks for its effects (a sound, a burst of hearts) through the TapEffects it is
 // handed, so the world modules never import the sound or the hearts.
@@ -58,8 +60,9 @@ const spot = new Vector3();
 
 /**
  * The target a ray from `origin` along `direction` (a unit vector) hits: one whose position is within its radius of
- * the ray, or within MIN_ANGLE of it. Only targets ahead count, and the nearest along the ray wins. Beyond
- * `hiddenBeyond` metres along it (where the ray meets the cabin's body) only `aboard` targets count.
+ * the ray, or within MIN_ANGLE of it. Only targets ahead count. Of those the ray passes within their radius of, the
+ * nearest along the ray wins; only if there are none, the nearest of those within MIN_ANGLE. Beyond `hiddenBeyond`
+ * metres along it (where the ray meets the cabin's body) only `aboard` targets count.
  * @param {Vector3} origin
  * @param {Vector3} direction
  * @param {Tappable[]} targets
@@ -67,21 +70,26 @@ const spot = new Vector3();
  * @returns {Tappable|null}
  */
 export function pickTarget(origin, direction, targets, hiddenBeyond = Infinity) {
-  let best = null;
-  let bestAlong = Infinity;
+  let inside = null; // the nearest the ray passes within the radius of
+  let insideAlong = Infinity;
+  let near = null; // the nearest it passes within MIN_ANGLE of
+  let nearAlong = Infinity;
   for (const target of targets) {
     if (!target.position(spot)) continue;
     toTarget.subVectors(spot, origin);
     const along = toTarget.dot(direction);
-    if (!(along > 0) || along >= bestAlong) continue;
+    if (!(along > 0) || along >= insideAlong) continue;
     if (along > hiddenBeyond && !target.aboard) continue;
     const off = Math.sqrt(Math.max(0, toTarget.lengthSq() - along * along));
-    if (off <= target.radius || Math.atan2(off, along) <= TAP.MIN_ANGLE) {
-      best = target;
-      bestAlong = along;
+    if (off <= target.radius) {
+      inside = target;
+      insideAlong = along;
+    } else if (along < nearAlong && Math.atan2(off, along) <= TAP.MIN_ANGLE) {
+      near = target;
+      nearAlong = along;
     }
   }
-  return best;
+  return inside ?? near;
 }
 
 /** Whether `object` is drawn: it and everything it hangs from are visible. */

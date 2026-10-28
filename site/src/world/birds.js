@@ -112,12 +112,15 @@ const GULL_FLEE = Object.freeze({ AWAY: 25, UP: 6, OUT: 1.5, BACK: 8, REACH: 2.5
 
 /**
  * How far (0 to 1) a gull is off its loop `since` seconds after her tap: away fast and slowing over OUT, back over BACK.
+ * A gull tapped again while it is still off its loop flies off again from `from`, how far off it was then, so it never
+ * jumps.
  * @param {number} since
+ * @param {number} [from]
  */
-export function gullFlee(since) {
+export function gullFlee(since, from = 0) {
   const { OUT, BACK } = GULL_FLEE;
-  if (!(since > 0) || since >= OUT + BACK) return 0;
-  if (since < OUT) return Math.sin((Math.PI / 2) * (since / OUT));
+  if (!(since >= 0) || since >= OUT + BACK) return 0;
+  if (since < OUT) return from + (1 - from) * Math.sin((Math.PI / 2) * (since / OUT));
   return 1 - smoothstep(OUT, OUT + BACK, since);
 }
 
@@ -458,9 +461,12 @@ export function gullPlace(gull, time, out) {
   );
 }
 
+/** How long (s) a gull takes to answer a call: it banks and flaps, and is level again by then. */
+const CALL_TIME = 2;
+
 /**
  * How far (rad) a gull banks `sinceCall` seconds after its call: none before it, rising to 0.6 at 0.4 s, and easing
- * back to level by 2 s.
+ * back to level by 2 s (CALL_TIME).
  * @param {number} sinceCall
  */
 export function gullBank(sinceCall) {
@@ -596,7 +602,8 @@ export function createBirds({ path, perches = [] }) {
       flap: [rngRange(rng, 0, TAU), rngRange(rng, 2.2, 2.8)],
       called: -Infinity,
       fled: -Infinity, // when she last tapped it
-      away: new Vector3(), // which way it flew off then: away from her, level
+      fledFrom: 0, // how far off its loop it already was then (0 to 1)
+      away: new Vector3(), // which way it flies off: away from her, level, as it was when she first tapped it
       at: new Vector3(), // where it is, at the last update
       shown: false, // whether it is drawn there, at a size to tap
     };
@@ -714,7 +721,7 @@ export function createBirds({ path, perches = [] }) {
 
   /** Moves the point `at` of gull `g`'s loop to where it is at `when`, if she has tapped it: off and away from her. */
   function fleeFrom(g, when, at) {
-    const off = gullFlee(when - g.fled);
+    const off = gullFlee(when - g.fled, g.fledFrom);
     if (off > 0) at.addScaledVector(g.away, GULL_FLEE.AWAY * off).addScaledVector(UP, GULL_FLEE.UP * off);
   }
 
@@ -725,7 +732,7 @@ export function createBirds({ path, perches = [] }) {
   function callGull() {
     let best = -1;
     for (let i = 0; i < gullCount; i++) {
-      if (time - gullBirds[i].called < 2) continue; // still answering the last
+      if (time - gullBirds[i].called < CALL_TIME) continue; // still answering the last
       if (best < 0 || gullSeen[i] < gullSeen[best]) best = i;
     }
     if (best >= 0) gullBirds[best].called = time;
@@ -831,11 +838,15 @@ export function createBirds({ path, perches = [] }) {
       radius: GULL_FLEE.REACH,
       position: (out) => (gullsShown && g.shown ? out.copy(g.at) : null),
       react(now, fx) {
-        // It squawks, banks and flaps hard (as for a call), and flies off straight away from her.
-        g.called = time;
+        // It squawks, and flies off straight away from her; tapped again while still off its loop, it flies off again
+        // the way it was going, from where it is.
+        const off = gullFlee(time - g.fled, g.fledFrom);
+        if (!(off > 0)) g.away.subVectors(g.at, cameraAt).setY(0).normalize();
+        g.fledFrom = off;
         g.fled = time;
-        g.away.subVectors(g.at, cameraAt).setY(0).normalize();
-        fx.play('gull');
+        // It banks and flaps hard, as for a call, unless it is still answering one.
+        if (!(time - g.called < CALL_TIME)) g.called = time;
+        fx.play('gull-tap');
       },
     })),
   };

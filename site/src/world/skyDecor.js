@@ -74,10 +74,13 @@ function flameAt(since) {
   return smoothstep(0, 0.08, u) * (1 - smoothstep(0.7, 1, u)) * flicker;
 }
 
-/** How far up (m) the balloon is `since` seconds after her tap: up LIFT over RISE, and back down over SINK. */
-function liftAt(since) {
+/**
+ * How far up (m) the balloon is `since` seconds after her tap: up to LIFT over RISE, and back down over SINK. Tapped
+ * again while it is still up, it rises again from `from`, how far up it was then, so it never jumps.
+ */
+function liftAt(since, from = 0) {
   if (!(since >= 0 && since < BURN.RISE + BURN.SINK)) return 0;
-  if (since < BURN.RISE) return BURN.LIFT * smoothstep(0, BURN.RISE, since);
+  if (since < BURN.RISE) return from + (BURN.LIFT - from) * smoothstep(0, BURN.RISE, since);
   return BURN.LIFT * (1 - smoothstep(BURN.RISE, BURN.RISE + BURN.SINK, since));
 }
 
@@ -197,7 +200,9 @@ export function createSkyDecor() {
   balloons.forEach((b, i) => {
     b.mesh.name = `sky-balloon-${i}`;
     b.phase = rngRange(rng, 0, TAU);
-    b.tapped = -Infinity;
+    b.tapped = -Infinity; // when she last tapped it
+    b.liftFrom = 0; // how far up it already was then (m)
+    b.lit = -Infinity; // when its flame last lit
     b.flame = new Mesh(flameShape, new MeshBasicMaterial({ color: FLAME.COLOUR, transparent: true, opacity: 0, depthWrite: false, fog: false }));
     b.flame.name = `sky-balloon-${i}-flame`;
     b.flame.visible = false;
@@ -242,11 +247,10 @@ export function createSkyDecor() {
 
     for (const b of balloons) {
       const angle = b.angle + 0.06 * Math.sin(time * 0.05 + b.phase);
-      const since = time - b.tapped;
-      onRing(cameraPosition, angle, b.radius, b.height + 1.6 * Math.sin(time * 0.6 + b.phase) + liftAt(since), b.mesh.position);
+      onRing(cameraPosition, angle, b.radius, b.height + 1.6 * Math.sin(time * 0.6 + b.phase) + liftAt(time - b.tapped, b.liftFrom), b.mesh.position);
       // The heart faces the train (its +Z towards the ring's centre) with a gentle sway; the round one turns slowly.
       b.mesh.rotation.y = b.faceCamera ? -angle + 0.25 * Math.sin(time * 0.3 + b.phase) : time * 0.05 + b.phase;
-      const glow = flameAt(since);
+      const glow = flameAt(time - b.lit);
       b.flame.visible = b.halo.visible = glow > 0;
       b.flame.material.opacity = glow;
       b.halo.material.opacity = 0.9 * glow;
@@ -260,8 +264,11 @@ export function createSkyDecor() {
     radius: BURN.REACH,
     position: (out) => out.copy(b.mesh.position).add(middle),
     react(now, fx) {
+      // It rises again from where it is; its flame, if still burning, burns on.
+      b.liftFrom = liftAt(time - b.tapped, b.liftFrom);
       b.tapped = time;
-      fx.play('burner');
+      if (!(flameAt(time - b.lit) > 0)) b.lit = time;
+      fx.play('burner-tap');
     },
   }));
 
