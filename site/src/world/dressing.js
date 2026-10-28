@@ -15,6 +15,10 @@
 // thinned with it. The balloon clusters sway and bob on their strings (`update`). The trees, bushes, flowers and
 // grass sway in the breeze, in the vertex shader of their own material (wind.js).
 //
+// It also says where things stand that others need (`spots`): the top of every house's and snowy cottage's chimney in
+// the world, for the smoke, each with the share of the density (`rank`) above which its house is drawn, so the smoke
+// goes with the house when a slow phone thins the props.
+//
 // DOM-free (only Three's classes are used), so the Node unit tests can import it.
 
 import { BufferGeometry, Float32BufferAttribute, Group, InstancedMesh, Matrix4, Points, Quaternion, Vector3 } from '../three.js';
@@ -22,7 +26,7 @@ import { MATERIALS } from '../render/materials.js';
 import { clamp } from '../util/math.js';
 import { createRng } from '../util/rng.js';
 import { envAt } from './environment.js';
-import { createPropGeometry } from './props.js';
+import { chimneyTop, createPropGeometry } from './props.js';
 import { scatterZone } from './scatter.js';
 import { SIGN } from './signs.js';
 import { START_STATION_DISTANCE } from './stations.js';
@@ -79,13 +83,23 @@ function footprintRadius(geometry) {
 }
 
 /**
+ * @typedef {Vector3 & { rank?: number }} Chimney
+ *   The world position of a chimney's top. Its house is drawn while the density is above `rank` (0 to 1; none
+ *   means always, the way the station house is).
+ */
+
+/**
  * Builds the props of every zone of the ride.
  * @param {{ path: import('./trackPath.js').TrackPath, layout: import('./layout.js').Layout, seed?: number }} options
  *   `seed` is the first zone's scatter seed; each zone after it takes the next one (the default, 1, gives every
  *   zone its position in the ride + 1, as the world is meant to be built).
- * @returns {{ group: Group, setDensity: (share: number) => void, update: (dt: number, time: number) => void }}
+ * @returns {{
+ *   group: Group, setDensity: (share: number) => void, update: (dt: number, time: number) => void,
+ *   spots: { chimneys: Chimney[] },
+ * }}
  *   Add `group` to the scene. `setDensity` draws that share (0 to 1) of every mesh's props: the quality tier's
  *   `density`. Call `update` every frame with the seconds since the last frame and the seconds since the start.
+ *   `spots` lists where things stand: `chimneys`, the top of every chimney (smoke.js).
  */
 export function createDressing({ path, layout, seed = 1 }) {
   const group = new Group();
@@ -100,6 +114,8 @@ export function createDressing({ path, layout, seed = 1 }) {
   const position = new Vector3();
   const turn = new Quaternion();
   const size = new Vector3();
+  /** @type {Chimney[]} */
+  const chimneys = [];
 
   layout.zones.forEach((zone, index) => {
     const def = ZONES[zone.id];
@@ -134,10 +150,14 @@ export function createDressing({ path, layout, seed = 1 }) {
       solid.receiveShadow = true;
       const lit = glow ? new InstancedMesh(glow, MATERIALS.glow, list.length) : null;
       if (lit) lit.name = `${name}-glow`;
+      const top = chimneyTop(type, Number(variant));
       list.forEach((p, i) => {
         matrix.compose(position.set(p.x, p.y, p.z), turn.setFromAxisAngle(UP, p.rotY), size.setScalar(p.scale));
         solid.setMatrixAt(i, matrix);
         if (lit) lit.setMatrixAt(i, matrix);
+        // Where the smoke leaves it, in the world: the house's turn and size put on the point the prop's frame gives.
+        // Its house is the i-th of the list, so it is drawn while the density is more than i / total.
+        if (top) chimneys.push(Object.assign(new Vector3(...top).applyMatrix4(matrix), { rank: i / list.length }));
       });
       for (const mesh of lit ? [solid, lit] : [solid]) {
         mesh.computeBoundingSphere();
@@ -203,5 +223,6 @@ export function createDressing({ path, layout, seed = 1 }) {
       }
     },
     update,
+    spots: { chimneys },
   };
 }

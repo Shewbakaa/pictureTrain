@@ -94,3 +94,19 @@ test('the name board faces the arriving train and reads from both sides', () => 
     assert.equal(board.material.map, null, 'no canvas in Node, so a plain board');
   }
 });
+
+test('the finale station house has a chimney, and the group says where its top is in the world', () => {
+  assert.equal(start.userData.chimney, undefined, 'the start station has no house');
+  const top = finale.userData.chimney;
+  assert.ok(top instanceof Vector3);
+  // Its top is the top of the chimney stack in the geometry: a ray from above lands on it.
+  ray.set(new Vector3(top.x, top.y + 1, top.z), DOWN);
+  ray.far = 2;
+  const hit = ray.intersectObject(finale, true).find((h) => h.object.isMesh);
+  assert.ok(hit && Math.abs(hit.point.y - top.y) < 0.01, `the chimney's top is at ${hit && hit.point.y}, the point at ${top.y}`);
+  // It is over the roof's ridge, on the house (7 to 10.4 m right of the track, 5.6 to 9.4 m along).
+  const along = top.clone().sub(path.pointAt(FINALE)).dot(path.tangentAt(FINALE));
+  const right = top.clone().sub(path.pointAt(FINALE)).dot(path.sideAt(FINALE));
+  assert.ok(along > 5.6 && along < 9.4 && right > 7.0 && right < 10.4, `${along.toFixed(1)} m along, ${right.toFixed(1)} m right`);
+  assert.ok(top.y - path.pointAt(FINALE).y > STATION.PLATFORM_TOP + 3 + 1.5, 'above the ridge of the roof');
+});

@@ -1,7 +1,8 @@
 // The ride's sound effects, and the engine the ambience (ambience.js) and the cues (cueSounds.js) play through. Its
 // own are the train's sounds (trainSounds.js): a "choo-choo" and a puff of steam as it sets off, chugs and the
 // clickety-clack of the rail joints following its speed, a brake hiss as it slows for a stop, a long steam sigh once
-// it stands there, and a longer, happy whistle at the Day 365 station.
+// it stands there, and a longer, happy whistle at the Day 365 station; and, from tapSounds.js, the soft shimmer of a
+// shooting star.
 //
 // They play on the music's AudioContext, into the effects bus of its master chain (mixer.js), so the Sound button,
 // a video's sound and the page going into the background govern them together with the music (music.js). Nothing
@@ -39,6 +40,7 @@ import {
   FINALE_WHISTLE_AFTER, TRAIN, bogieDelay, chugLevel, clickLevel, createChugClock, createGate, isBraking, jointCrossed,
 } from './sfxTiming.js';
 import { createTrainSounds } from './trainSounds.js';
+import { createTapSounds } from './tapSounds.js';
 import { RIDE } from '../ride/rideController.js';
 import { createRng } from '../util/rng.js';
 
@@ -161,6 +163,8 @@ export function createSfx(music, { now = () => performance.now() } = {}) {
   let kit = null;
   /** @type {import('./trainSounds.js').TrainSounds|null} */
   let train = null;
+  /** @type {ReturnType<typeof createTapSounds>|null} */
+  let tap = null;
 
   /** @type {Map<string, { gate: ReturnType<typeof createGate>, play: (kit: Kit, at: number, level: number) => boolean|void }>} */
   const shots = new Map();
@@ -184,6 +188,7 @@ export function createSfx(music, { now = () => performance.now() } = {}) {
     if (!music.mixer) return null;
     kit = createKit(music.mixer);
     train = createTrainSounds(kit);
+    tap = createTapSounds(kit);
     return kit;
   }
 
@@ -329,5 +334,7 @@ export function createSfx(music, { now = () => performance.now() } = {}) {
   sfx.define('puff', { gap: 1, play: (k, at) => train.steam('puff', at) });
   sfx.define('brake', { gap: 1, play: (k, at) => train.steam('brake', at) });
   sfx.define('sigh', { gap: 1.5, play: (k, at) => train.steam('sigh', at) });
+  // The scenery's small sounds (tapSounds.js): the shimmer of a shooting star.
+  sfx.define('shimmer', { gap: 2, play: (k, at, level) => tap.shimmer(at, level) });
   return sfx;
 }

@@ -3,7 +3,9 @@
 //
 // The world is the sky, the ground, the track, the two stations, the props of every zone, clouds and hot-air
 // balloons, the ambient particles of the zone the train is in, a photo sign at every stop with the two of them
-// standing beside every other one, and the cabin she rides in.
+// standing beside every other one, and the cabin she rides in. At dusk the sky fills with stars and a crescent moon
+// comes up, a shooting star crosses it 40 m before the last station and again as the finale's wish shows, and smoke
+// curls from the chimneys of the houses and of the station house.
 //
 // On top of it sits the ride UI: the intro card, a card at every stop, the timeline, the controls and the progress
 // pill, with the furthest moment she has reached remembered across reloads. If the phone takes the GPU away
@@ -25,6 +27,7 @@
 
 import { DirectionalLight, Fog, Group, HemisphereLight, Matrix4, Vector3 } from './three.js';
 import { appState } from './state.js';
+import { clamp } from './util/math.js';
 import { createStage } from './render/stage.js';
 import { MATERIALS } from './render/materials.js';
 import { createQualityGovernor, effectivePixelRatio } from './perf/quality.js';
@@ -32,6 +35,8 @@ import { buildLayout, EYE_HEIGHT } from './world/layout.js';
 import { createTrackPath, TRACK } from './world/trackPath.js';
 import { envAt } from './world/environment.js';
 import { createSky } from './world/sky.js';
+import { createNightSky, shootingStarDue } from './world/nightSky.js';
+import { createSmoke } from './world/smoke.js';
 import { createTerrain } from './world/terrain.js';
 import { followWave, SEA_MATERIAL, updateSea } from './world/seaWaves.js';
 import { createTrackMesh } from './world/trackMesh.js';
@@ -61,6 +66,7 @@ import { showToast } from './ui/toast.js';
 import { createMusic } from './audio/music.js';
 import { zonesToLoad } from './audio/zoneMusic.js';
 import { createSfx } from './audio/sfx.js';
+import { zoneWeights } from './audio/ambienceTiming.js';
 import { createAmbience } from './audio/ambience.js';
 import { createCues } from './audio/cueSounds.js';
 import { createVideoDirector, videoToPlay } from './photos/videos.js';
@@ -157,14 +163,15 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   const terrain = createTerrain(path, layout, { seed: TRACK.SEED });
   scene.add(sky.mesh, terrain.mesh, createTrackMesh(path, layout));
   if (terrain.water) scene.add(terrain.water);
-  scene.add(
-    createStation({ path, distance: START_STATION_DISTANCE, kind: 'start' }),
-    createStation({ path, distance: layout.finaleDistance, kind: 'finale' }),
-  );
+  const finaleStation = createStation({ path, distance: layout.finaleDistance, kind: 'finale' });
+  scene.add(createStation({ path, distance: START_STATION_DISTANCE, kind: 'start' }), finaleStation);
   const dressing = createDressing({ path, layout });
   const skyDecor = createSkyDecor();
+  const nightSky = createNightSky();
   const particles = createAmbientParticles({ maxCount: AMBIENT_PARTICLES });
-  scene.add(dressing.group, skyDecor.group, particles.points);
+  // Smoke from every house's chimney, and from the station house's.
+  const smoke = createSmoke([...dressing.spots.chimneys, finaleStation.userData.chimney]);
+  scene.add(dressing.group, skyDecor.group, nightSky.group, particles.points, smoke.points);
 
   // A photo sign at every stop, and the two of them beside every other one.
   const signs = new Group();
@@ -229,6 +236,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     reachedMax,
   });
   if (at !== null) ride.setPaused(true);
+  let prevD = ride.distance; // where the train was a frame ago, for the shooting star
 
   // Looking around. ?look= turns her head to start with (degrees, + is left).
   const look = createLook();
@@ -257,8 +265,8 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   const onDensity = [];
   /** @type {Array<(particles: number) => void>} */
   const onParticles = [];
-  onDensity.push(dressing.setDensity);
-  onParticles.push(particles.setQuality);
+  onDensity.push(dressing.setDensity, smoke.setDensity); // the smoke goes with its house
+  onParticles.push(particles.setQuality, smoke.setQuality);
   function applyTier() {
     const tier = governor.settings();
     stage.setPixelRatio(effectivePixelRatio(tier, window.devicePixelRatio));
@@ -312,6 +320,8 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   const focus = new Vector3();
   const lightRight = new Vector3();
   const lightUp = new Vector3();
+  const sight = new Vector3();
+  const zoneShare = {};
   const shadowTexel = (2 * SHADOW.HALF) / SHADOW.MAP_SIZE;
 
   /** Her seat at `d`: EYE_HEIGHT above the track, facing along it. */
@@ -394,6 +404,18 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   /** The hold on the screen, asked for at Begin (ui/wakeLock.js); null before. */
   let wakeLock = null;
 
+  /** A shooting star across the upper half of the camera's view. */
+  function shootStar() {
+    camera.getWorldDirection(sight);
+    const up = (camera.fov * Math.PI) / 360;
+    nightSky.shoot({
+      bearing: Math.atan2(sight.x, -sight.z),
+      elevation: Math.asin(clamp(sight.y, -1, 1)),
+      up,
+      across: Math.atan(Math.tan(up) * camera.aspect),
+    });
+  }
+
   /** Metres from `d` to where the moving train stops next (a stop or the finale); Infinity when it is not moving. */
   function toStop(d) {
     if (ride.state !== 'moving') return Infinity;
@@ -416,6 +438,12 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       if (cues) cues.finale(finale.time, finale.bursts); // its own sounds, the sparkle and the fireworks, on its clock
     } else {
       camera.rotation.set(look.pitch, look.yaw, 0, 'YXZ');
+      // The shooting star comes where the train first reaches its place, 40 m before the Day 365 station.
+      if (shootingStarDue(prevD, d, layout.finaleDistance)) {
+        shootStar();
+        if (sfx) sfx.play('shimmer');
+      }
+      prevD = d;
       if (reducedMotion) {
         camera.position.y = 0;
       } else {
@@ -431,9 +459,11 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     applyEnvironment();
     placeSun(d);
     camera.getWorldPosition(eye);
-    sky.update(env, eye);
+    sky.update(env, eye, elapsed);
+    nightSky.update(dt, eye, zoneWeights(env, zoneShare).evening);
     skyDecor.update(dt, eye, env);
     particles.update(dt, env, eye);
+    smoke.update(dt, eye);
     dressing.update(dt, elapsed);
     updateWind(elapsed, windStrength(env));
     cabin.update(dt, ride.speed, elapsed);
@@ -555,6 +585,9 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   // the hearts' sparkle among them, keep to its clock: cues.finale in the frame loop.)
   onFinaleEvent = (name) => {
     if (name !== 'card' || !finale.active) return;
+    // The wish shows: another shooting star, and its shimmer on the finale's own bus, which Ride again hushes at once.
+    shootStar();
+    cues.wish();
     appState.phase = 'done';
     showFinaleCard(content, { onRideAgain: () => app.rideAgain() });
     const items = timelineItems(content.moments, { reachedMax: ride.reachedMax, currentIndex: -1 });

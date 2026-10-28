@@ -4,7 +4,8 @@
 // name board facing the arriving train (its name drawn on a canvas in Cormorant Garamond, its digits in Nunito as
 // util/canvasText.js explains), a bench, flower planters and an old street lamp. The finale station adds a little
 // station house behind the platform, whose door the boy comes out of in the finale (Task 14), more lamps and string
-// lights between them.
+// lights between them. The station house has a chimney, and the group says where its top is (`userData.chimney`), for
+// the smoke (smoke.js).
 //
 // Both stations stand on straight track (app.js keeps the start and the finale straight), so each is built in
 // the frame of its centre: local +X is right of the track, +Y up and -Z ahead (further along the track). On the
@@ -100,6 +101,14 @@ const BOARD = Object.freeze({ WIDTH: 1.7, HEIGHT: 0.53, BOTTOM: 2.5, RIGHT: 3.35
 
 /** The station house on the finale platform: its front wall's offset, its extent along the track and its walls' height. */
 const HOUSE = Object.freeze({ FRONT: 7.0, BACK: 10.4, FROM: 5.6, TO: 9.4, WALL: 3.0, RISE: 1.5, DOOR_AT: 7.5 });
+
+/** The station house's chimney stack: how far it runs along the track and right of it (m), and the height of its base and top. */
+const CHIMNEY = Object.freeze({
+  ALONG: [HOUSE.TO - 1.1, HOUSE.TO - 0.6],
+  RIGHT: [(HOUSE.FRONT + HOUSE.BACK) / 2 + 0.5, (HOUSE.FRONT + HOUSE.BACK) / 2 + 1.0],
+  BASE: STATION.PLATFORM_TOP + HOUSE.WALL + 0.6,
+  TOP: STATION.PLATFORM_TOP + HOUSE.WALL + HOUSE.RISE + 0.7,
+});
 
 /** Lamps, bench and planters stand this far right, on the back of the platform. */
 const FURNITURE_RIGHT = 5.55;
@@ -235,7 +244,7 @@ function stationHouse() {
     }));
   }
   body.push(part(box(0.2, 0.12, length + 2 * OVERHANG + 0.02), COLOURS.houseRoof, { position: at(mid, centre, TOP + WALL + RISE + SLAB * 0.9) }));
-  body.push(slab(TO - 1.1, TO - 0.6, centre + 0.5, centre + 1.0, TOP + WALL + 0.6, TOP + WALL + RISE + 0.7, COLOURS.chimney));
+  body.push(slab(...CHIMNEY.ALONG, ...CHIMNEY.RIGHT, CHIMNEY.BASE, CHIMNEY.TOP, COLOURS.chimney));
   // The door, its knob and a step, on the front wall facing the track; a little clock above it.
   const face = FRONT - 0.02;
   body.push(slab(DOOR_AT - 0.48, DOOR_AT + 0.48, face - 0.05, face, TOP, TOP + 1.95, COLOURS.houseTrim));
@@ -453,5 +462,11 @@ export function createStation({ path, distance, kind }) {
   const basis = new Matrix4().makeBasis(path.sideAt(distance), new Vector3(0, 1, 0), path.tangentAt(distance).negate());
   group.quaternion.setFromRotationMatrix(basis);
   path.pointAt(distance, group.position);
+  if (look.house) {
+    // The smoke leaves the middle of the top of the chimney stack, wherever the station stands.
+    group.updateMatrixWorld(true);
+    const [along, right] = [CHIMNEY.ALONG, CHIMNEY.RIGHT].map(([a, b]) => (a + b) / 2);
+    group.userData.chimney = group.localToWorld(new Vector3(...at(along, right, CHIMNEY.TOP)));
+  }
   return group;
 }

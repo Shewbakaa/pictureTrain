@@ -20,6 +20,7 @@ import { foleyCues } from '../finale/foleyTiming.js';
 import { MAX_STEP } from '../finale/finaleTimes.js';
 import { brushNodes, createBrush, createFoleySounds, FOLEY_NAMES } from './foleySounds.js';
 import { STATION_BELL } from './sfxTiming.js';
+import { createTapSounds } from './tapSounds.js';
 import { TAIL, toSilence, voiceParts } from './voiceParts.js';
 
 /** The stop card rises a beat after the train stops (styles.css: #stop-card's 0.6 s animation delay). */
@@ -156,8 +157,9 @@ export function createCueSounds(kit, out = kit.buses.effects) {
  * The cues, played through `sfx`'s one-shots once the sound is on: `card()` as a stop's card comes up; `arrival()` as
  * the train pulls in at the Day 365 station (the station bell, and the finale's sounds back on); `finale(time,
  * bursts)` every frame while the finale plays, with its clock and how many firework bursts are going (finale.time,
- * finale.bursts); and `silence()` as she rides again or jumps back from the finale. `heard` lists the finale's
- * sounds played since the train pulled in, by name ('bell', 'hop', ..., 'step', ..., 'firework'), the first
+ * finale.bursts); `wish()` as the finale's shooting star crosses the sky, a shimmer on the finale's bus (not among
+ * the sounds `heard` lists); and `silence()` as she rides again or jumps back from the finale. `heard` lists the
+ * finale's sounds played since the train pulled in, by name ('bell', 'hop', ..., 'step', ..., 'firework'), the first
  * HEARD_MAX of them, for app state. The frame loop's call allocates nothing unless a sound starts.
  * @param {import('./sfx.js').Sfx} sfx
  */
@@ -168,6 +170,7 @@ export function createCues(sfx) {
   let card = null;
   let celebration = null;
   let foley = null;
+  let wishing = null;
   const finaleBus = (kit) => {
     if (!bus) {
       busCtx = kit.ctx;
@@ -179,9 +182,12 @@ export function createCues(sfx) {
   const cardVoice = (kit) => card || (card = createCueSounds(kit));
   const finaleVoice = (kit) => celebration || (celebration = createCueSounds(kit, finaleBus(kit)));
   const foleyVoice = (kit) => foley || (foley = createFoleySounds(kit, finaleBus(kit)));
+  const wishVoice = (kit) => wishing || (wishing = createTapSounds(kit, finaleBus(kit)));
 
   sfx.define('rustle', { gap: 0.5, play: (kit, at, level) => cardVoice(kit).rustle(at, level) });
   sfx.define('sparkle', { gap: 2, play: (kit, at, level) => finaleVoice(kit).sparkle(at, level) });
+  // The shimmer of the finale's shooting star, the same as the ride's (tapSounds.js) but on the finale's bus.
+  sfx.define('wish', { gap: 2, play: (kit, at, level) => wishVoice(kit).shimmer(at, level) });
   for (const name of FOLEY_NAMES) {
     const gap = name in FOLEY_GAP ? FOLEY_GAP[name] : FOLEY_GAP_ELSE;
     sfx.define(name, { gap, play: (kit, at, level) => foleyVoice(kit)[name](at, level) });
@@ -234,6 +240,9 @@ export function createCues(sfx) {
         fireworkBlooms(heardTo, time, count, pop);
       }
       heardTo = time;
+    },
+    wish() {
+      if (!hushed) sfx.play('wish');
     },
     silence() {
       if (hushed) return;

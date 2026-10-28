@@ -15,6 +15,7 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
     const { composeLoop } = await import('./src/audio/compose.js');
     const { createKit } = await import('./src/audio/sfx.js');
     const { createTrainSounds } = await import('./src/audio/trainSounds.js');
+    const { createTapSounds } = await import('./src/audio/tapSounds.js');
     const { TRAIN, chugInterval, chugLevel, clickLevel, bogieDelay } = await import('./src/audio/sfxTiming.js');
     const { RIDE } = await import('./src/ride/rideController.js');
 
@@ -78,6 +79,11 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
     const clickOnly = await render(SECONDS, (ctx, mixer) => clicks(train(mixer), 0.3));
     const steam = {};
     for (const kind of ['puff', 'brake', 'sigh']) steam[kind] = await render(3, (ctx, mixer) => train(mixer).steam(kind, 0.1));
+    // The shooting star's shimmer, struck three times a few seconds apart: its peak is the same each time.
+    const shimmer = await render(8, (ctx, mixer) => {
+      const tap = createTapSounds(createKit(mixer, { budget: Infinity }));
+      for (const at of [0.2, 3, 5.8]) tap.shimmer(at);
+    });
     const mix = await render(SECONDS, (ctx, mixer) => {
       playTune(ctx, mixer, 0);
       const sounds = train(mixer);
@@ -127,6 +133,8 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
       sighPeakDb: db(peak(steam.sigh)),
       sighLoudestDb: loudest(steam.sigh),
       sighHeardS: sighHeard,
+      shimmerPeakDb: db(peak(shimmer)),
+      shimmerLoudestDb: loudest(shimmer),
       mixPeak: peak(mix),
       mixRmsDb: db(rms(mix, afterFade)),
     };
@@ -154,6 +162,10 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
   // The steam is softer than the whistle, the clicks softer than the chug.
   for (const key of ['puffLoudestDb', 'brakeLoudestDb', 'sighLoudestDb']) expect(m[key], key).toBeLessThan(m.whistleLoudestDb);
   expect(m.clickLoudestDb).toBeLessThan(m.chugLoudestDb);
+  // The shooting star's shimmer is the softest sound in the ride: about −30 dBFS at its loudest, under the steam.
+  expect(Math.abs(m.shimmerPeakDb - -30)).toBeLessThanOrEqual(2);
+  expect(m.shimmerLoudestDb).toBeLessThan(m.musicNewLoudestDb);
+  for (const key of ['puffLoudestDb', 'brakeLoudestDb', 'sighLoudestDb']) expect(m.shimmerLoudestDb, key).toBeLessThan(m[key]);
   expect(m.sighHeardS).toBeGreaterThanOrEqual(1.2);
   expect(m.sighHeardS).toBeLessThanOrEqual(2);
 });

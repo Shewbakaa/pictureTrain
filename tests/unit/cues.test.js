@@ -306,3 +306,43 @@ test('a cue at no level plays nothing', () => {
   assert.equal(voices.firework(0, 0), false);
   assert.equal(audio.starts.length, 0);
 });
+
+test('the wish: a shimmer for the finale\'s shooting star, on the finale\'s own bus, hushed with the rest', () => {
+  const { audio, music, cues } = engine();
+  cues.arrival();
+  const tones = () => audio.starts.filter((s) => s.type === 'osc').length;
+  const before = tones();
+  cues.wish();
+  assert.equal(tones() - before, 6, 'three bells, each two sines');
+  // It joins the effects bus by the finale's bus, the same one node as every other sound of the finale.
+  const [bus, ...others] = audio.made.filter((n) => n.outputs.includes(music.mixer.effects));
+  assert.equal(others.length, 0, 'one way into the effects bus');
+  assert.ok(audio.made.some((n) => n.outputs.includes(bus) && n.gain && n.gain.value > 0.004 && n.gain.value < 0.006), 'the shimmer plays into it');
+  assert.deepEqual(cues.heard, ['bell'], 'it is not one of the sounds the app state lists');
+
+  // Ride again or a jump hushes it with the rest, and none comes while hushed; the next arrival brings it back.
+  cues.silence();
+  assert.equal(bus.gain.log.at(-1)[1], 0, 'faded out at once');
+  audio.advance(5);
+  const heard = tones();
+  cues.wish();
+  assert.equal(tones(), heard, 'nothing while hushed');
+  const afterHush = tones();
+  cues.arrival(); // the station bell rings, with oscillators of its own
+  const bell = tones() - afterHush;
+  audio.advance(10);
+  cues.wish();
+  assert.equal(tones() - afterHush - bell, 6, 'back, six sines');
+});
+
+test('the wish is only asked for, never noted: the finale\'s state is as it was', () => {
+  const sfx = fakeSfx();
+  const cues = createCues(sfx);
+  cues.arrival();
+  cues.wish();
+  assert.deepEqual(sfx.asked.map((a) => a.name), ['bell', 'wish']);
+  assert.deepEqual(cues.heard, ['bell']);
+  cues.silence();
+  cues.wish();
+  assert.equal(sfx.asked.length, 2, 'not while hushed');
+});

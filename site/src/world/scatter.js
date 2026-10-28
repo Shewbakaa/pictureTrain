@@ -35,7 +35,7 @@ const CORRIDOR_REACH = 40;
 const CORRIDOR_STEP = 1;
 
 /** Built things that face the track, and how far (radians) each may turn either way from facing it squarely. */
-const FACES_TRACK = new Map([['house', 0.1], ['bench', 0.08], ['fence', 0.03], ['lamp_post', 0.1], ['snowman', 0.4], ['balloon_cluster', 0.6]]);
+const FACES_TRACK = new Map([['house', 0.1], ['cottage_snowy', 0.1], ['bench', 0.08], ['fence', 0.03], ['lamp_post', 0.1], ['snowman', 0.4], ['balloon_cluster', 0.6]]);
 
 /** How much a prop's offset sways its priority: the rest is chance. */
 const NEAR_FIRST = 0.35;

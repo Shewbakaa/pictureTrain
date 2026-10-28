@@ -1,5 +1,6 @@
-// The scenery's props: 21 chunky little low-poly things to stand beside the track, from round trees and
-// palms to a beach umbrella, a snowman in a bobble hat and cottages with lit windows.
+// The scenery's props: 22 chunky little low-poly things to stand beside the track, from round trees and
+// palms to a beach umbrella, a snowman in a bobble hat and cottages with lit windows, one kind of them under a
+// cap of snow.
 //
 // Each prop is a few coloured primitives (geo.js) merged into one vertex-coloured geometry; dressing.js
 // (Task 9) turns each type and variant into instanced meshes and scatter.js decides where they stand.
@@ -28,11 +29,11 @@ import { clamp } from '../util/math.js';
 export const PROP_TYPES = Object.freeze([
   'tree_round', 'tree_autumn', 'pine', 'pine_snowy', 'palm', 'bush', 'bush_autumn', 'rock', 'rock_snowy',
   'flower_patch', 'grass_tuft', 'balloon_cluster', 'beach_ball', 'umbrella', 'pumpkin', 'hay_bale',
-  'snowman', 'house', 'lamp_post', 'bench', 'fence',
+  'snowman', 'house', 'cottage_snowy', 'lamp_post', 'bench', 'fence',
 ]);
 
 /** How many looks a type has: variants 0 up to this number. Every type not listed has one. */
-export const PROP_VARIANTS = Object.freeze({ tree_autumn: 3, house: 3, flower_patch: 2, balloon_cluster: 2 });
+export const PROP_VARIANTS = Object.freeze({ tree_autumn: 3, house: 3, cottage_snowy: 3, flower_patch: 2, balloon_cluster: 2 });
 
 const TAU = Math.PI * 2;
 
@@ -53,6 +54,7 @@ const COLOURS = {
   needles: ['#2f7d55', '#3a8c5f', '#2a704c'],
   needlesSnowy: ['#2d6a52', '#357a5c', '#2a604b'],
   snow: '#f7fbff',
+  roofSnow: '#f4f7fb', // the snow on a cottage's roof: the colour of the winter ground it stands on
   palmTrunk: ['#c9a06a', '#b0874f'],
   fronds: ['#4cb153', '#5cc15b', '#3fa04a'],
   coconut: '#7a4e2d',
@@ -469,8 +471,43 @@ function houseWindow(w, h) {
   };
 }
 
-/** A house facing +Z: walls, a gable roof, a chimney, a door with a step and an awning, and lit windows. */
-function house(variant, rng) {
+/** The roof's slabs are this thick (m). */
+const ROOF_SLAB = 0.16;
+
+/** A chimney's cap: how high above the roof's top its centre is, and how thick it is (m). */
+const CHIMNEY_CAP = Object.freeze({ UP: 0.68, THICK: 0.09 });
+
+/** The snow on a cottage's roof is this thick (m). */
+const ROOF_SNOW = 0.13;
+
+/** Where a house's chimney stands: its x and z, and the height (m) of the roof under it, from the look of the house. */
+function chimneyOf(look) {
+  const { width: W, depth: D, wallHeight: H, rise: R, chimneyX } = look;
+  return { x: chimneyX, z: -D / 4, roofTop: H + R * (1 - Math.abs(chimneyX) / (W / 2)) + ROOF_SLAB };
+}
+
+/**
+ * Where the smoke leaves a prop's chimney, in the prop's own frame: [x, y, z] the middle of the top of its chimney
+ * cap, or null for a prop with no chimney (every type but the houses and the snowy cottages). It agrees with the
+ * geometry from `createPropGeometry`, so a prop placed at a spot with a turn and a scale (dressing.js) has its
+ * chimney top at that same transform of this point.
+ * @param {string} type
+ * @param {number} [variant]
+ * @returns {[number, number, number]|null}
+ */
+export function chimneyTop(type, variant = 0) {
+  if (type !== 'house' && type !== 'cottage_snowy') return null;
+  const look = HOUSES[variant];
+  if (!look) throw new RangeError(`chimneyTop: ${type} has no variant ${String(variant)} (it has ${HOUSES.length})`);
+  const { x, z, roofTop } = chimneyOf(look);
+  return [x, roofTop + CHIMNEY_CAP.UP + CHIMNEY_CAP.THICK / 2, z];
+}
+
+/**
+ * A house facing +Z: walls, a gable roof, a chimney, a door with a step and an awning, and lit windows. With `snowy`,
+ * a white cap of snow lies on both sides of the roof and along its ridge, and the window boxes are bare.
+ */
+function house(variant, rng, snowy = false) {
   const look = HOUSES[variant];
   const { width: W, depth: D, wallHeight: H, rise: R } = look;
   const body = [], glow = [];
@@ -484,7 +521,7 @@ function house(variant, rng) {
   body.push(part(cylinder(1, 1, D, 3), look.walls, { position: [0, H + R / 3, 0], rotation: [-Math.PI / 2, 0, 0], scale: [W / Math.sqrt(3), 1, R / 1.5] }));
 
   // The roof: two slabs from the eaves to the ridge, overhanging all round, and a ridge cap.
-  const SLAB = 0.16, EAVE = 0.28, OVERHANG = 0.3;
+  const SLAB = ROOF_SLAB, EAVE = 0.28, OVERHANG = 0.3;
   const slope = Math.hypot(W / 2, R);
   const angle = Math.atan2(R, W / 2);
   for (const side of [-1, 1]) {
@@ -493,13 +530,22 @@ function house(variant, rng) {
     const x = side * (s * Math.cos(angle) + (SLAB / 2) * Math.sin(angle));
     const y = H + R - s * Math.sin(angle) + (SLAB / 2) * Math.cos(angle);
     body.push(part(box(slope + EAVE + SLAB / 2, SLAB, D + 2 * OVERHANG), jitterColor(look.roof, rng, 0.03), { position: [x, y, 0], rotation: [0, 0, -side * angle] }));
+    if (snowy) {
+      // The same slab again, lying on the roof (up its normal) a little narrower, so a rim of roof shows at the gables.
+      const lift = SLAB / 2 + ROOF_SNOW / 2;
+      body.push(part(box(slope + EAVE + SLAB / 2, ROOF_SNOW, D + 2 * OVERHANG - 0.1), COLOURS.roofSnow, {
+        position: [x + side * Math.sin(angle) * lift, y + Math.cos(angle) * lift, 0],
+        rotation: [0, 0, -side * angle],
+      }));
+    }
   }
   body.push(part(box(0.2, 0.12, D + 2 * OVERHANG + 0.02), look.roof, { position: [0, H + R + SLAB * 0.9, 0] }));
+  if (snowy) body.push(part(box(0.34, 0.17, D + 2 * OVERHANG - 0.06), COLOURS.roofSnow, { position: [0, H + R + SLAB * 0.9 + 0.08, 0] }));
 
   // The chimney stands on the roof towards the back.
-  const roofTop = H + R * (1 - Math.abs(look.chimneyX) / (W / 2)) + SLAB;
-  body.push(part(box(0.42, 1.0, 0.42), look.chimney, { position: [look.chimneyX, roofTop + 0.15, -D / 4] }));
-  body.push(part(box(0.52, 0.09, 0.52), '#8a5a4e', { position: [look.chimneyX, roofTop + 0.68, -D / 4] }));
+  const chimney = chimneyOf(look);
+  body.push(part(box(0.42, 1.0, 0.42), look.chimney, { position: [chimney.x, chimney.roofTop + 0.15, chimney.z] }));
+  body.push(part(box(0.52, CHIMNEY_CAP.THICK, 0.52), '#8a5a4e', { position: [chimney.x, chimney.roofTop + CHIMNEY_CAP.UP, chimney.z] }));
 
   // The door, its knob, a step and a little awning.
   const front = D / 2;
@@ -530,6 +576,8 @@ function house(variant, rng) {
     for (const x of [-frontX, frontX]) {
       const y = low - windowH / 2 - 0.2;
       body.push(part(box(windowW + 0.1, 0.14, 0.16), COLOURS.wood, { position: [x, y, front + 0.1] }));
+      // Nothing blooms under the snow.
+      if (snowy) continue;
       for (let i = 0; i < 3; i++) {
         body.push(part(blob(0.065, 0), ['#ff7aa2', '#ffffff', '#ff5c7a'][i], { position: [x + (i - 1) * 0.2, y + 0.1, front + 0.12] }));
       }
@@ -616,6 +664,7 @@ const BUILDERS = {
   hay_bale: () => hayBale(),
   snowman: () => snowman(),
   house: (v, rng) => house(v, rng),
+  cottage_snowy: (v, rng) => house(v, rng, true),
   lamp_post: () => lampPost(),
   bench: () => bench(),
   fence: () => fence(),
@@ -634,7 +683,7 @@ function seedOf(type, variant) {
  * @param {number} [variant]  0 up to PROP_VARIANTS[type] (1 for types not listed there), exclusive
  * @returns {{ body: import('../three.js').BufferGeometry, glow: import('../three.js').BufferGeometry|null }}
  *   Fresh geometries every call, never shared, so the caller owns them. Both come from geo.js `mergeParts`;
- *   `glow` is non-null for lamp_post and house only.
+ *   `glow` is non-null for lamp_post, house and cottage_snowy only.
  */
 export function createPropGeometry(type, variant = 0) {
   if (!PROP_TYPES.includes(type)) throw new Error(`createPropGeometry: "${type}" is not a prop type`);

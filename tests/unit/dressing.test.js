@@ -9,6 +9,7 @@ import { terrainHeight, TERRAIN } from '../../site/src/world/terrain.js';
 import { ZONES } from '../../site/src/world/zones.js';
 import { MATERIALS } from '../../site/src/render/materials.js';
 import { swayMaterialFor } from '../../site/src/world/wind.js';
+import { chimneyTop } from '../../site/src/world/props.js';
 import { normalizeContent } from '../../site/src/content/normalize.js';
 import { Matrix4, Vector3 } from '../../site/src/three.js';
 import fixture from '../fixtures/content.fixture.js';
@@ -117,4 +118,71 @@ test('the balloon clusters sway on their pegs', () => {
   balloons[0].getMatrixAt(0, matrixAfter);
   assert.ok(!matrixAfter.equals(matrixBefore), 'they move');
   balloons.forEach((m, k) => [...instances(m)].forEach((p, i) => assert.ok(p.distanceTo(before[k][i]) < 1e-6, 'the peg stays put')));
+});
+
+// ---------------------------------------------------------------------------------------------
+// Chimneys (Task 5): where the smoke leaves, and which of them go with their house when the props are thinned.
+// ---------------------------------------------------------------------------------------------
+
+/** The instance matrices are 32-bit, so a chimney read back from one is the same point to about a hundredth of a millimetre. */
+const SAME = 1e-3;
+const houses = bodies.filter((m) => /-(house|cottage_snowy)-\d$/.test(m.name));
+/** The chimney top of the `i`-th instance of a house mesh, in the world. */
+function chimneyOfInstance(mesh, i) {
+  const [, , type, variant] = mesh.name.split('-');
+  const matrix = new Matrix4();
+  mesh.getMatrixAt(i, matrix);
+  return new Vector3(...chimneyTop(type, Number(variant))).applyMatrix4(matrix);
+}
+
+test('winter has snowy cottages, set back at least 25 m from the track, and the evening has houses', () => {
+  const cottages = bodies.filter((m) => m.name.startsWith('props-winter-cottage_snowy-'));
+  assert.ok(cottages.length > 0, 'a cottage or two in the winter hills');
+  assert.ok(bodies.some((m) => m.name.startsWith('props-evening-house-')));
+  for (const mesh of cottages) {
+    for (const p of instances(mesh)) assert.ok(Math.abs(trackFrameOf(p).offset) >= 24.9, `${mesh.name} stands ${trackFrameOf(p).offset.toFixed(1)} m out`);
+  }
+});
+
+test('every house and cottage has a chimney top over its roof, in the world', () => {
+  const { chimneys } = dressing.spots;
+  const total = houses.reduce((sum, m) => sum + m.instanceMatrix.count, 0);
+  assert.ok(total >= 10);
+  assert.equal(chimneys.length, total, 'one for each house');
+  for (const mesh of houses) {
+    for (let i = 0; i < mesh.instanceMatrix.count; i++) {
+      const top = chimneyOfInstance(mesh, i);
+      assert.ok(chimneys.some((c) => c.distanceTo(top) < SAME), `${mesh.name} #${i} has its chimney`);
+    }
+  }
+  for (const c of chimneys) assert.ok(c.toArray().every(Number.isFinite));
+});
+
+test('a chimney top is carried with its house: turned and scaled where the house is', () => {
+  const { chimneys } = dressing.spots;
+  const mesh = houses.find((m) => m.name.includes('-house-'));
+  const matrix = new Matrix4();
+  mesh.getMatrixAt(0, matrix);
+  const position = new Vector3().setFromMatrixPosition(matrix);
+  const scale = new Vector3().setFromMatrixScale(matrix).x;
+  const mine = chimneys.find((c) => c.distanceTo(chimneyOfInstance(mesh, 0)) < SAME);
+  const [, , type, variant] = mesh.name.split('-');
+  const [, up] = chimneyTop(type, Number(variant));
+  assert.ok(Math.abs(mine.y - (position.y + up * scale)) < SAME, 'its height is the house\'s, scaled, over the house\'s own ground');
+  assert.ok(mine.distanceTo(position) > 0.5 * scale && mine.distanceTo(position) < 3 * scale + up, 'and it is over the house');
+});
+
+test('the chimneys follow the density: a chimney is up while its house is drawn', () => {
+  const { chimneys } = dressing.spots;
+  for (const f of [0.45, 0.75, 1]) {
+    dressing.setDensity(f);
+    for (const mesh of houses) {
+      for (let i = 0; i < mesh.instanceMatrix.count; i++) {
+        const top = chimneyOfInstance(mesh, i);
+        const chimney = chimneys.find((c) => c.distanceTo(top) < SAME);
+        assert.equal(chimney.rank < f, i < mesh.count, `${mesh.name} #${i} at ${f}: rank ${chimney.rank}`);
+      }
+    }
+  }
+  assert.ok(chimneys.every((c) => c.rank >= 0 && c.rank < 1));
 });

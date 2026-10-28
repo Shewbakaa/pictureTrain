@@ -277,3 +277,35 @@ test('settled: only once the sound is on, not still coming on, and the master fa
   player.waking = true;
   assert.equal(effects.settled, false, 'the browser is still answering a request to sound');
 });
+
+test('the shimmer of a shooting star is a few soft high bells, and plays once in a while', () => {
+  const t = setup();
+  t.on();
+  assert.equal(t.sfx.play('shimmer'), true);
+  const tones = t.starts.filter((s) => s.type === 'osc');
+  assert.equal(tones.length, 6, 'three notes, each two sines beating against each other');
+  assert.equal(t.noises(), 0);
+  for (const { node, at } of tones) assert.ok(Number.isFinite(node.stopAt) && node.stopAt > at + 1.4, 'each rings for a second and a half');
+  // A second shimmer in the same breath is skipped: one a star.
+  assert.equal(t.sfx.play('shimmer'), false);
+  t.ctx.currentTime = 2.5;
+  assert.equal(t.sfx.play('shimmer'), true);
+});
+
+test('the shimmer is held in the node budget while it rings, and gives its nodes back when it has', () => {
+  const t = setup();
+  t.on();
+  t.sfx.play('shimmer');
+  const live = t.sfx.kit.live;
+  assert.equal(live, 10, 'a mix, and a gain and two sines for each of three notes');
+  const last = Math.max(...t.sources.map((s) => s.stopAt));
+  t.advance(last + 0.1);
+  assert.equal(t.sfx.kit.live, 0);
+  assert.ok(t.made.filter((n) => n.disconnected).length >= 1, 'the mix is disconnected from the bus');
+});
+
+test('the shimmer is skipped, not queued, when the sound is off', () => {
+  const t = setup();
+  assert.equal(t.sfx.play('shimmer'), false);
+  assert.equal(t.starts.length, 0);
+});

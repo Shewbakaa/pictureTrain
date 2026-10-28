@@ -57,6 +57,7 @@ const SCALE = {
   rock_snowy: [0.6, 1.4],
   pumpkin: [0.75, 1.35],
   house: [0.95, 1.1],
+  cottage_snowy: [0.95, 1.1],
   lamp_post: [0.95, 1.05],
   bench: [0.95, 1.05],
   fence: [0.95, 1.05],
@@ -149,6 +150,9 @@ export const ZONES = deepFreeze({
       propRule('rock_snowy', 0.03, 5, 25),
       propRule('snowman', 0.015, 6, 14),
       propRule('fence', 0.02, 4.5, 6),
+      // A few snug cottages, set well back from the track (clear of the signs and the tunnel), each with its curl of
+      // smoke (smoke.js). Last, so that adding them left every other prop of the zone where it was.
+      propRule('cottage_snowy', 0.006, 25, 45),
     ],
   },
 
