@@ -36,7 +36,7 @@ import { createTerrain } from './world/terrain.js';
 import { followWave, SEA_MATERIAL, updateSea } from './world/seaWaves.js';
 import { createTrackMesh } from './world/trackMesh.js';
 import { createDressing } from './world/dressing.js';
-import { SWAY_MATERIAL, updateWind, windStrength } from './world/wind.js';
+import { SWAY_LOW_MATERIAL, SWAY_MATERIAL, updateWind, windStrength } from './world/wind.js';
 import { createStation, START_STATION_DISTANCE } from './world/stations.js';
 import { createSkyDecor } from './world/skyDecor.js';
 import { createAmbientParticles } from './world/particles.js';
@@ -267,6 +267,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     for (const material of Object.values(MATERIALS)) material.needsUpdate = true;
     SEA_MATERIAL.needsUpdate = true;
     SWAY_MATERIAL.needsUpdate = true;
+    SWAY_LOW_MATERIAL.needsUpdate = true;
     for (const fn of onDensity) fn(tier.density);
     for (const fn of onParticles) fn(tier.particles);
     finale.setQuality(governor.tier);

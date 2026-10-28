@@ -11,7 +11,12 @@
 // follows the zone she is in (`windStrength`). Every so often a gust rolls along the track (`gustAt`): the plants
 // it passes sway wider for a while.
 //
-// It needs a material of its own, patched from three.js's Lambert one like the sea's (seaWaves.js), because
+// Trees and palms, five metres tall, sway by centimetres at their tips; a tuft of grass or a flower, half a metre
+// tall, would hardly move at all by the same rule (its height is a tenth of theirs, so its weight a hundredth). So
+// the low plants (bushes, flowers, grass) have a reach and a reference height of their own, LOW_PLANTS, and a
+// second material to carry them: the same shader, made for each by `swayMaterial`.
+//
+// They need materials of their own, patched from three.js's Lambert one like the sea's (seaWaves.js), because
 // materials.js `solid`, which everything else shares, must not move. The shadows stay as they were: the depth
 // pass is not patched, and a shadow that moved by a few centimetres would not be seen anyway.
 //
@@ -25,10 +30,14 @@ import { lerp } from '../util/math.js';
 
 /** @typedef {import('./environment.js').Env} Env */
 
-/** The props that sway, by type (props.js `PROP_TYPES`). The rest stand still: they are not growing things. */
-export const SWAYING_TYPES = new Set([
-  'tree_round', 'tree_autumn', 'pine', 'pine_snowy', 'palm', 'bush', 'bush_autumn', 'flower_patch', 'grass_tuft',
-]);
+/** The tall props that sway, by type (props.js `PROP_TYPES`): the trees and palms, which WIND's BEND and REF_HEIGHT are for. */
+const TALL_TYPES = ['tree_round', 'tree_autumn', 'pine', 'pine_snowy', 'palm'];
+
+/** The low props that sway: the bushes, flowers and grass, which LOW_PLANTS is for. */
+const LOW_TYPES = ['bush', 'bush_autumn', 'flower_patch', 'grass_tuft'];
+
+/** Every prop type that sways. The rest stand still: they are not growing things. */
+export const SWAYING_TYPES = new Set([...TALL_TYPES, ...LOW_TYPES]);
 
 /**
  * STRENGTH: how hard the wind blows in each zone, as a share of summer's. BEND: how far (m) a plant sways at
@@ -43,6 +52,13 @@ export const WIND = Object.freeze({
   RATE: 1.3,
   GUST: Object.freeze({ EVERY: 23, LENGTH: 40, SPEED: 9 }),
 });
+
+/**
+ * The low plants' own BEND (m) and REF_HEIGHT (m), in the sense WIND's are: how far one sways at that height above
+ * its base, at strength 1. A tuft or a flower head, about half a metre up, moves by a few centimetres, and a bush,
+ * a metre up, by a little more.
+ */
+export const LOW_PLANTS = Object.freeze({ BEND: 0.035, REF_HEIGHT: 0.8 });
 
 /**
  * How the sway is shaped. CAP: the most the height's weight may be, so a tall tree's top sways no more than 1.6
@@ -91,11 +107,14 @@ export function gustAt(z, time) {
 
 /**
  * How far (m) a vertex `height` metres above its plant's base is pushed, in the plant's own frame, at `time` (s),
- * for a plant standing at world `x`, `z` in wind of `strength`. The vertex shader's `windSway`.
+ * for a plant standing at world `x`, `z` in wind of `strength`. `plant` is the BEND and REF_HEIGHT it sways by: the
+ * trees' (WIND's, the default) or the low plants' (LOW_PLANTS). The vertex shader's `windSway`.
+ * @param {{ BEND: number, REF_HEIGHT: number }} [plant]
  * @returns {{ x: number, z: number }}
  */
-export function swayAt(height, time, x, z, strength) {
-  const { BEND, REF_HEIGHT, RATE } = WIND;
+export function swayAt(height, time, x, z, strength, plant = WIND) {
+  const { BEND, REF_HEIGHT } = plant;
+  const { RATE } = WIND;
   const { CAP, PHASE_X, PHASE_Z, SIDE, SIDE_RATE, SIDE_PHASE, CALM, GUSTED } = SWAY;
   const up = Math.max(height, 0) / REF_HEIGHT;
   const weight = Math.min(up * up, CAP);
@@ -117,10 +136,11 @@ const f = (x) => {
   return /[.e]/.test(text) ? text : `${text}.0`;
 };
 
-const { BEND, REF_HEIGHT, RATE, GUST } = WIND;
+const { RATE, GUST } = WIND;
 const { CAP, PHASE_X, PHASE_Z, SIDE, SIDE_RATE, SIDE_PHASE, CALM, GUSTED } = SWAY;
 
-const VERTEX_HEAD = /* glsl */ `
+/** What every plant's shader shares: the uniforms and the gusts (the GLSL of gustAt). */
+const GUSTS = /* glsl */ `
 uniform float uWindTime;
 uniform float uWindStrength;
 float windHash(float i) {
@@ -138,6 +158,10 @@ float windGust(float z) {
   }
   return gust;
 }
+`;
+
+/** The sway of a plant that bends `plant.BEND` metres at `plant.REF_HEIGHT` (the GLSL of swayAt). */
+const swayGlsl = ({ BEND, REF_HEIGHT }) => /* glsl */ `
 vec2 windSway(float height, vec3 anchor) {
   float up = max(height, 0.0) / ${f(REF_HEIGHT)};
   float weight = min(up * up, ${f(CAP)});
@@ -166,14 +190,33 @@ function after(source, chunk, text) {
   return source.replace(chunk, `${chunk}\n${text}`);
 }
 
-/** The swaying props' material: lit like materials.js `solid`, from the vertex colours, with the sway. */
-export const SWAY_MATERIAL = new MeshLambertMaterial({ vertexColors: true });
-SWAY_MATERIAL.name = 'sway';
-SWAY_MATERIAL.onBeforeCompile = (shader) => {
-  Object.assign(shader.uniforms, uniforms);
-  shader.vertexShader = after(after(shader.vertexShader, '#include <common>', VERTEX_HEAD), '#include <begin_vertex>', VERTEX_MOVE);
-};
-SWAY_MATERIAL.customProgramCacheKey = () => 'sway';
+/**
+ * A material for plants that bend `plant.BEND` metres at `plant.REF_HEIGHT`: lit like materials.js `solid`, from the
+ * vertex colours, with the sway. Each has a program of its own (`name` is its cache key), as its shader's numbers differ.
+ */
+function swayMaterial(name, plant) {
+  const head = GUSTS + swayGlsl(plant);
+  const material = new MeshLambertMaterial({ vertexColors: true });
+  material.name = name;
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = after(after(shader.vertexShader, '#include <common>', head), '#include <begin_vertex>', VERTEX_MOVE);
+  };
+  material.customProgramCacheKey = () => name;
+  return material;
+}
+
+/** The trees' and palms' material. */
+export const SWAY_MATERIAL = swayMaterial('sway', WIND);
+
+/** The bushes', flowers' and grass's material. */
+export const SWAY_LOW_MATERIAL = swayMaterial('sway-low', LOW_PLANTS);
+
+/** The material a prop of `type` is drawn with so that it sways, or null for a prop that stands still. */
+export function swayMaterialFor(type) {
+  if (TALL_TYPES.includes(type)) return SWAY_MATERIAL;
+  return LOW_TYPES.includes(type) ? SWAY_LOW_MATERIAL : null;
+}
 
 /**
  * Moves the wind to `time` (s, as the scenery's other swaying and bobbing keeps it) and `strength` (`windStrength`).

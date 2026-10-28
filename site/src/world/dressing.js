@@ -27,7 +27,7 @@ import { scatterZone } from './scatter.js';
 import { SIGN } from './signs.js';
 import { START_STATION_DISTANCE } from './stations.js';
 import { terrainHeight, TERRAIN } from './terrain.js';
-import { SWAY_MATERIAL, SWAYING_TYPES } from './wind.js';
+import { swayMaterialFor } from './wind.js';
 import { ZONES } from './zones.js';
 
 /** Distances in metres. */
@@ -128,7 +128,7 @@ export function createDressing({ path, layout, seed = 1 }) {
       const { body, glow } = geometries.get(key);
       const [type, variant] = key.split('#');
       const name = `props-${zone.id}-${type}-${variant}`;
-      const solid = new InstancedMesh(body, SWAYING_TYPES.has(type) ? SWAY_MATERIAL : MATERIALS.solid, list.length);
+      const solid = new InstancedMesh(body, swayMaterialFor(type) ?? MATERIALS.solid, list.length);
       solid.name = name;
       solid.castShadow = !NO_SHADOW.has(type);
       solid.receiveShadow = true;

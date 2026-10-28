@@ -3,7 +3,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  gustAt, SWAY, SWAY_MATERIAL, SWAYING_TYPES, swayAt, updateWind, WIND, windStrength,
+  gustAt, LOW_PLANTS, SWAY, SWAY_LOW_MATERIAL, SWAY_MATERIAL, SWAYING_TYPES, swayAt, swayMaterialFor, updateWind, WIND,
+  windStrength,
 } from '../../site/src/world/wind.js';
 import { PROP_TYPES } from '../../site/src/world/props.js';
 import { ZONE_IDS } from '../../site/src/content/normalize.js';
@@ -106,6 +107,41 @@ test('on average there is a gust every EVERY metres, and the wind is hardly ever
   assert.ok(along.filter((g) => g > 0.2).length > along.length / 2, 'the wind is up more often than not');
 });
 
+test('the low plants have a sway of their own: a tuft\'s top moves by centimetres, its base not at all', () => {
+  // A tuft or flower head, half a metre up, in a breeze of strength 1, over twenty seconds.
+  let top = 0;
+  let bush = 0;
+  let tree = 0;
+  for (let t = 0; t < 20; t += 0.05) {
+    assert.ok(still(swayAt(0, t, 40, -300, 1, LOW_PLANTS)), `the base at ${t} s`);
+    top = Math.max(top, reach(swayAt(0.5, t, 40, -300, 1, LOW_PLANTS)));
+    bush = Math.max(bush, reach(swayAt(1, t, 40, -300, 1, LOW_PLANTS)));
+    tree = Math.max(tree, reach(swayAt(0.5, t, 40, -300, 1)));
+  }
+  assert.ok(top >= 0.015, `a tuft's top sways ${(top * 100).toFixed(1)} cm`);
+  assert.ok(top < 0.06, `and not so far that it smears: ${(top * 100).toFixed(1)} cm`);
+  assert.ok(bush > top && bush < 0.15, `a bush a metre high sways a little more: ${(bush * 100).toFixed(1)} cm`);
+  assert.ok(top > 10 * tree, `where the trees' own sway would barely show it: ${(tree * 1000).toFixed(2)} mm`);
+  assert.deepEqual(swayAt(0.5, 3, 40, -300, 1, WIND), swayAt(0.5, 3, 40, -300, 1), 'the trees\' sway is the default');
+});
+
+test('low plants sway in step with the wind, as the trees do: strength, gusts and the cap', () => {
+  const calm = swayAt(0.5, 3, 40, -300, 0.2, LOW_PLANTS);
+  const strong = swayAt(0.5, 3, 40, -300, 1.2, LOW_PLANTS);
+  assert.ok(Math.abs(strong.x / calm.x - 6) < 1e-9);
+  assert.ok(still(swayAt(0.5, 3, 40, -300, 0, LOW_PLANTS)));
+  const top = swayAt(50, 3, 40, -300, 1, LOW_PLANTS);
+  const ref = swayAt(LOW_PLANTS.REF_HEIGHT, 3, 40, -300, 1, LOW_PLANTS);
+  assert.ok(Math.abs(top.x - SWAY.CAP * ref.x) < 1e-12, 'capped at 1.6 times the sway at REF_HEIGHT');
+});
+
+test('each swaying prop type has its material: the trees\' and palms\', the low plants\', and none for the rest', () => {
+  for (const type of ['tree_round', 'tree_autumn', 'pine', 'pine_snowy', 'palm']) assert.equal(swayMaterialFor(type), SWAY_MATERIAL, type);
+  for (const type of ['bush', 'bush_autumn', 'flower_patch', 'grass_tuft']) assert.equal(swayMaterialFor(type), SWAY_LOW_MATERIAL, type);
+  for (const type of PROP_TYPES) assert.equal(swayMaterialFor(type) !== null, SWAYING_TYPES.has(type), type);
+  assert.notEqual(SWAY_MATERIAL, SWAY_LOW_MATERIAL);
+});
+
 test('only the foliage sways: trees, bushes, flowers and grass; not rocks, houses or balloons', () => {
   assert.deepEqual([...SWAYING_TYPES].sort(), [
     'bush', 'bush_autumn', 'flower_patch', 'grass_tuft', 'palm', 'pine', 'pine_snowy', 'tree_autumn', 'tree_round',
@@ -134,4 +170,34 @@ test('the sway material moves three.js\'s own Lambert vertex shader, compiled on
   updateWind(12.5, 0.6);
   assert.equal(shader.uniforms.uWindTime.value, 12.5);
   assert.equal(shader.uniforms.uWindStrength.value, 0.6);
+});
+
+test('the low plants\' material is the same shader made for their own BEND and REF_HEIGHT, in a program of its own', () => {
+  const patched = (material) => {
+    const shader = {
+      uniforms: UniformsUtils.clone(ShaderLib.lambert.uniforms),
+      vertexShader: ShaderLib.lambert.vertexShader,
+      fragmentShader: ShaderLib.lambert.fragmentShader,
+    };
+    material.onBeforeCompile(shader);
+    return shader;
+  };
+  const low = patched(SWAY_LOW_MATERIAL);
+  const tall = patched(SWAY_MATERIAL);
+  assert.match(low.vertexShader, /#include <begin_vertex>\s+transformed\.xz \+= windSway\(position\.y, instanceMatrix\[3\]\.xyz\);/);
+  assert.match(low.vertexShader, /uniform float uWindTime;/);
+  assert.match(low.vertexShader, new RegExp(`max\\(height, 0\\.0\\) / ${String(LOW_PLANTS.REF_HEIGHT).replace('.', '\\.')};`));
+  assert.match(low.vertexShader, new RegExp(`float reach = ${String(LOW_PLANTS.BEND).replace('.', '\\.')} \\* uWindStrength`));
+  assert.match(tall.vertexShader, new RegExp(`float reach = ${String(WIND.BEND).replace('.', '\\.')} \\* uWindStrength`));
+  assert.notEqual(low.vertexShader, tall.vertexShader);
+  assert.equal(SWAY_LOW_MATERIAL.name, 'sway-low');
+  assert.equal(SWAY_LOW_MATERIAL.vertexColors, true);
+  assert.equal(SWAY_LOW_MATERIAL.customProgramCacheKey(), 'sway-low');
+  assert.notEqual(SWAY_LOW_MATERIAL.customProgramCacheKey(), SWAY_MATERIAL.customProgramCacheKey(), 'compiled apart');
+  // The same wind drives both.
+  updateWind(7.5, 1.2);
+  for (const shader of [low, tall]) {
+    assert.equal(shader.uniforms.uWindTime.value, 7.5);
+    assert.equal(shader.uniforms.uWindStrength.value, 1.2);
+  }
 });
