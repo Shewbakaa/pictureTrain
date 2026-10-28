@@ -24,6 +24,8 @@
 // Her tap on Begin also asks the phone to keep its screen on for the whole ride (ui/wakeLock.js).
 // Her seat moves with the train: a gentle rock, a drop as each bogie strikes a rail joint, a tip as it pulls away or
 // brakes (ride/trainMotion.js), all of it left out if her phone asks for less motion.
+// Some things answer her taps (ride/taps.js): a touch that ends as a tap rather than a drag finds what she tapped, and
+// it answers: the whistle cord in the cabin's roof tugs and the train whistles, the lantern flares.
 //
 // At the Day 365 station the ride ends in the finale (finale/finale.js): under a blush fade her seat gives way to
 // the train seen from outside, the two of them meet on the platform (a little dog or cat trots over with him, and doves
@@ -64,6 +66,7 @@ import { createFinale } from './finale/finale.js';
 import { FINALE_FADE } from './finale/finaleTimes.js';
 import { createRide } from './ride/rideController.js';
 import { attachPointerControls, createLook } from './ride/look.js';
+import { createTapRouter } from './ride/taps.js';
 import { createTrainMotion } from './ride/trainMotion.js';
 import { loadProgress, saveProgress } from './progress.js';
 import { fadeThrough, prefersReducedMotion } from './ui/dom.js';
@@ -273,7 +276,6 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   const look = createLook();
   look.setRest((debug.look * Math.PI) / 180);
   look.update(60);
-  attachPointerControls(renderer.domElement, look);
 
   // The train moving under her. Her phone's wish for less motion is read once, as the ride is built.
   const motion = createTrainMotion();
@@ -439,6 +441,20 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   const musicNear = {};
   /** The hold on the screen, asked for at Begin (ui/wakeLock.js); null before. */
   let wakeLock = null;
+
+  // Her drags turn her head, and her taps reach the world (ride/taps.js). What she taps answers with its own
+  // animation and asks for its sound through `fx`, which plays nothing until the sound is made at Begin. The finale
+  // directs the camera itself, so taps rest while it plays.
+  const fx = { play: (name) => sfx && sfx.play(name), burst: () => {} };
+  const taps = createTapRouter({ camera, element: renderer.domElement, sources: [() => cabin.targets], fx });
+  attachPointerControls(renderer.domElement, look, {
+    onTap: (x, y) => {
+      if (finale.active) return;
+      const name = taps.tap(x, y, elapsed);
+      if (name) appState.lastTap = name;
+    },
+  });
+  if (window.__app) window.__app.debugTargets = () => taps.debugTargets();
 
   /** A shooting star across the upper half of the camera's view. */
   function shootStar() {

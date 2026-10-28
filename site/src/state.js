@@ -23,6 +23,11 @@
 //   the finale (fewer on the lower quality tiers)
 // wakeLock: whether the screen is being kept awake: 'held', 'off' (not at the moment: before Begin, or the browser has
 //   let it go while the page was away), 'refused' (the browser said no) or 'none' (it has no Wake Lock API)
+// lastTap: the name of the last thing in the world her tap hit (ride/taps.js), e.g. 'whistle-cord' or 'lantern', or
+//   null until one is
+//
+// window.__app.debugTargets() (set by app.js once the ride is built) says where each tappable thing in front of her is
+// on the page: [{ name, x, y }] in CSS px. Like the state, it only reads, so it is there in every build.
 export const appState = {
   phase: 'loading',
   mode: null,
@@ -50,6 +55,7 @@ export const appState = {
   finaleDoves: 0,
   view: 'cabin',
   wakeLock: 'off',
+  lastTap: null,
 };
 
 if (typeof window !== 'undefined') {

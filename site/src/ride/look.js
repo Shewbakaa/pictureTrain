@@ -6,10 +6,14 @@
 // RETURN_DELAY seconds, then eases back to a rest direction, which the app moves with `setRest`: towards a
 // photo sign while the train stands at a stop, straight ahead while it rides.
 //
+// A touch that ends as a tap rather than a drag is reported too (taps.js), so the things in the world she taps can
+// answer. Every touch still turns her head while it lasts: a tap nudges the view by a few pixels at most.
+//
 // `createLook` and `fovForAspect` are pure, so the Node unit tests can import this file. Only
 // `attachPointerControls` touches the DOM, and only once it is called.
 
 import { clamp, damp } from '../util/math.js';
+import { isTap } from './taps.js';
 
 /** Tuning constants. Angles are radians except the field of view, which is degrees. */
 export const LOOK = Object.freeze({
@@ -112,14 +116,23 @@ export function fovForAspect(aspect) {
  * Let a finger or mouse drag on `element` (the canvas) drive `look`. Only the primary pointer counts, so a second
  * finger cannot fight the first, and a mouse only drags with its left button. Scrolling and zooming gestures on
  * the canvas are switched off by its CSS (`touch-action: none`), not here.
+ *
+ * A touch released within TAP.SLOP of where it came down at its furthest, and within TAP.TIME (taps.js `isTap`), is
+ * also a tap: `onTap` hears where she let go (clientX, clientY). A drag that wandered off and came back is not one,
+ * and a touch the browser cancels never is.
  * @param {HTMLElement} element
  * @param {Look} look
+ * @param {{ onTap?: (clientX: number, clientY: number) => void }} [options]
  * @returns {() => void} detach: removes the listeners and lets go of a drag in progress
  */
-export function attachPointerControls(element, look) {
+export function attachPointerControls(element, look, { onTap } = {}) {
   let activePointer = null;  // id of the pointer that is dragging, or null
   let lastX = 0;
   let lastY = 0;
+  // Where the touch came down, and the point it has strayed furthest from there to: a tap is judged on both.
+  const down = { x: 0, y: 0, t: 0 };
+  const furthest = { x: 0, y: 0, t: 0 };
+  let reach = 0;
 
   function onDown(event) {
     if (!event.isPrimary || event.button !== 0) return;
@@ -128,6 +141,10 @@ export function attachPointerControls(element, look) {
     activePointer = event.pointerId;
     lastX = event.clientX;
     lastY = event.clientY;
+    down.x = furthest.x = event.clientX;
+    down.y = furthest.y = event.clientY;
+    down.t = furthest.t = event.timeStamp;
+    reach = 0;
     try {
       // Capture keeps the moves and the release coming when the pointer leaves the canvas.
       element.setPointerCapture(event.pointerId);
@@ -142,12 +159,22 @@ export function attachPointerControls(element, look) {
     look.drag(event.clientX - lastX, event.clientY - lastY);
     lastX = event.clientX;
     lastY = event.clientY;
+    const strayed = Math.hypot(event.clientX - down.x, event.clientY - down.y);
+    if (strayed > reach) {
+      reach = strayed;
+      furthest.x = event.clientX;
+      furthest.y = event.clientY;
+      furthest.t = event.timeStamp;
+    }
   }
 
   function onEnd(event) {
     if (event.pointerId !== activePointer) return;
     activePointer = null;
     look.endDrag();
+    if (event.type !== 'pointerup' || !onTap) return;
+    const up = { x: event.clientX, y: event.clientY, t: event.timeStamp };
+    if (isTap([down, furthest, up])) onTap(event.clientX, event.clientY);
   }
 
   const listeners = [

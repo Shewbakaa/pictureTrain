@@ -86,6 +86,11 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
       const tap = createTapSounds(createKit(mixer, { budget: Infinity }));
       for (const at of [0.2, 3, 5.8]) tap.shimmer(at);
     });
+    // The lantern's whoosh as she taps it, three times: noise from a random point of the loop each time.
+    const lantern = await render(6, (ctx, mixer) => {
+      const tap = createTapSounds(createKit(mixer, { budget: Infinity }));
+      for (const at of [0.2, 2.2, 4.2]) tap.lantern(at);
+    });
     const mix = await render(SECONDS, (ctx, mixer) => {
       playTune(ctx, mixer, 0);
       const sounds = train(mixer);
@@ -162,6 +167,8 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
       sighHeardS: sighHeard,
       shimmerPeakDb: db(peak(shimmer)),
       shimmerLoudestDb: loudest(shimmer),
+      lanternPeakDb: db(peak(lantern)),
+      lanternLoudestDb: loudest(lantern),
       mixPeak: peak(mix),
       mixRmsDb: db(rms(mix, afterFade)),
       echoTailDb: after(inTunnel, 0.12, 0.3),
@@ -197,6 +204,9 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
   expect(Math.abs(m.shimmerPeakDb - -30)).toBeLessThanOrEqual(2);
   expect(m.shimmerLoudestDb).toBeLessThan(m.musicNewLoudestDb);
   for (const key of ['puffLoudestDb', 'brakeLoudestDb', 'sighLoudestDb']) expect(m.shimmerLoudestDb, key).toBeLessThan(m[key]);
+  // The lantern she taps: a soft whoosh about −24 dBFS at its peak, like the ambience's passing sounds, under the music.
+  expect(Math.abs(m.lanternPeakDb - -24)).toBeLessThanOrEqual(2);
+  expect(m.lanternLoudestDb).toBeLessThan(m.musicNewLoudestDb);
   expect(m.sighHeardS).toBeGreaterThanOrEqual(1.2);
   expect(m.sighHeardS).toBeLessThanOrEqual(2);
   // The tunnel's echo: a click at 570 m has a tail 120 to 300 ms after it that the same click at 400 m, out in the

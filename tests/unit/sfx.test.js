@@ -310,6 +310,34 @@ test('the shimmer is skipped, not queued, when the sound is off', () => {
   assert.equal(t.starts.length, 0);
 });
 
+test('the lantern is a soft, warm whoosh of noise, and one at a time', () => {
+  const t = setup();
+  t.on();
+  assert.equal(t.sfx.play('lantern'), true);
+  assert.equal(t.noises(), 1, 'one breath of noise');
+  assert.equal(t.starts.filter((s) => s.type === 'osc').length, 0);
+  const filters = t.made.filter((n) => n.type === 'bandpass' || n.type === 'lowpass');
+  const band = filters.find((n) => n.type === 'bandpass');
+  assert.ok(band, 'a bandpass shapes it');
+  const swept = band.frequency.log.filter(([kind]) => kind !== 'cancel').map(([, hz]) => hz);
+  assert.ok(Math.max(...swept) <= 1200, `it stays warm: the band sweeps no higher than ${Math.max(...swept)} Hz`);
+  assert.ok(filters.some((n) => n.type === 'lowpass' && n.frequency.value <= 2000), 'a lowpass takes off the hiss');
+  const [noise] = t.sources;
+  assert.ok(noise.stopAt > 0.6 && noise.stopAt < 2, `it lasts about a second (${noise.stopAt.toFixed(2)} s)`);
+  // A second flare in the same breath is skipped.
+  assert.equal(t.sfx.play('lantern'), false);
+});
+
+test('the lantern is held in the node budget while it plays, and gives its nodes back', () => {
+  const t = setup();
+  t.on();
+  t.sfx.play('lantern');
+  assert.equal(t.sfx.kit.live, 4, 'its noise, two filters and a gain');
+  t.advance(Math.max(...t.sources.map((s) => s.stopAt)) + 0.1);
+  assert.equal(t.sfx.kit.live, 0);
+  assert.ok(t.made.some((n) => n.disconnected), 'it is disconnected from the bus');
+});
+
 // The tunnel's sound: the ambience goes muffled and the train's sounds echo while she is inside it.
 const TUNNEL = { from: 540, to: 600, boundary: 570 };
 

@@ -6,6 +6,7 @@ import { cabinAnchors, createCabin } from '../../site/src/train/cabin.js';
 import { triangleCount } from '../../site/src/util/geo.js';
 import { fovForAspect } from '../../site/src/ride/look.js';
 import { RIDE } from '../../site/src/ride/rideController.js';
+import { pickTarget } from '../../site/src/ride/taps.js';
 
 for (const [fov, aspect] of [[80, 390 / 844], [50, 16 / 9], [78, 1]]) {
   test(`cabin decorations stay on screen at aspect ${aspect.toFixed(2)}`, () => {
@@ -15,6 +16,12 @@ for (const [fov, aspect] of [[80, 390 / 844], [50, 16 / 9], [78, 1]]) {
     assert.ok(a.lantern.x > 0 && a.lantern.x <= halfW(a.lantern.z) * 0.9 && a.lantern.x >= halfW(a.lantern.z) * 0.5);
     const bottom = -Math.tan(THREE.MathUtils.degToRad(fov) / 2) * Math.abs(a.dashboard.z);
     assert.ok(a.dashboard.topY < 0 && a.dashboard.topY > bottom, 'dashboard top is on screen');
+    // The whistle cord hangs at the top left, from above the top of the view to its handle in the upper half.
+    const top = Math.tan(THREE.MathUtils.degToRad(fov) / 2) * Math.abs(a.cord.z);
+    assert.ok(a.cord.x < 0 && -a.cord.x <= halfW(a.cord.z) * 0.9 && -a.cord.x >= halfW(a.cord.z) * 0.5, 'cord at the left');
+    assert.ok(a.cord.top > top, 'the cord comes down from above the view');
+    assert.ok(a.cord.bottom > 0.35 * top && a.cord.bottom < 0.75 * top, `cord's foot at ${(a.cord.bottom / top).toFixed(2)} of the way up`);
+    assert.ok(a.cord.top >= a.roof.y, 'it hangs from the roof');
   });
 }
 
@@ -77,4 +84,117 @@ test('the cabin bobs gently, and only while the train moves', () => {
   assert.ok(most > 0.01 && most <= 0.015 + 1e-9, `bob ${most}`);
   cabin.setVisible(false);
   assert.equal(cabin.group.visible, false);
+});
+
+// --- taps: the whistle cord and the lantern (Task 13) ---
+
+/** Records what a reaction asks for. */
+function fakeFx() {
+  const played = [];
+  return { played, play: (name) => played.push(name), burst() {} };
+}
+
+/** The cabin on a rig that has moved and turned, as it does along the track, fitted to a w × h screen. */
+function cabinOnRig(w = 390, h = 844) {
+  const rig = new THREE.Object3D();
+  rig.position.set(40, 1.7, -120);
+  rig.rotation.y = 0.7;
+  const camera = new THREE.PerspectiveCamera(fovForAspect(w / h), w / h, 0.1, 400);
+  rig.add(camera);
+  const cabin = createCabin();
+  rig.add(cabin.group);
+  cabin.fit(camera);
+  rig.updateMatrixWorld(true);
+  return { rig, camera, cabin };
+}
+
+test('the cabin has two targets, the whistle cord and the lantern, with generous hit shapes', () => {
+  const cabin = createCabin();
+  assert.deepEqual(cabin.targets.map((t) => t.name), ['whistle-cord', 'lantern']);
+  for (const t of cabin.targets) {
+    assert.ok(t.radius >= 0.08 && t.radius <= 0.15, `${t.name} radius ${t.radius}`);
+    assert.equal(typeof t.react, 'function');
+  }
+});
+
+for (const [w, h] of [[390, 844], [844, 390], [1280, 720]]) {
+  test(`at ${w}x${h} the targets sit on the cord's handle and the lantern, in world space, where a tap finds them`, () => {
+    const { camera, cabin } = cabinOnRig(w, h);
+    const [cord, lantern] = cabin.targets;
+    const handle = cabin.group.getObjectByName('cabin-cord-handle').getWorldPosition(new THREE.Vector3());
+    assert.ok(cord.position(new THREE.Vector3()).distanceTo(handle) < 1e-9);
+    const halo = cabin.group.getObjectByName('cabin-lantern-halo').getWorldPosition(new THREE.Vector3());
+    assert.ok(lantern.position(new THREE.Vector3()).distanceTo(halo) < 1e-9);
+    // On screen: the cord's handle up at the left, the lantern down at the right.
+    const c = cord.position(new THREE.Vector3()).project(camera);
+    assert.ok(c.x > -0.95 && c.x < -0.4 && c.y > 0.3 && c.y < 0.9, `cord at ${c.x.toFixed(2)}, ${c.y.toFixed(2)}`);
+    const l = lantern.position(new THREE.Vector3()).project(camera);
+    assert.ok(l.x > 0.4 && l.x < 0.95 && l.y < -0.4 && l.y > -0.95, `lantern at ${l.x.toFixed(2)}, ${l.y.toFixed(2)}`);
+    // A tap a fingertip off the handle still finds the cord.
+    const ray = new THREE.Raycaster();
+    const eye = camera.getWorldPosition(new THREE.Vector3());
+    ray.setFromCamera(new THREE.Vector2(c.x + 0.04, c.y - 0.02), camera);
+    assert.equal(pickTarget(eye, ray.ray.direction, cabin.targets), cord);
+    ray.setFromCamera(new THREE.Vector2(l.x, l.y + 0.03), camera);
+    assert.equal(pickTarget(eye, ray.ray.direction, cabin.targets), lantern);
+  });
+}
+
+test('the targets are not showing while the cabin is hidden (the finale)', () => {
+  const { cabin } = cabinOnRig();
+  cabin.setVisible(false);
+  for (const t of cabin.targets) assert.equal(t.position(new THREE.Vector3()), null, t.name);
+  cabin.setVisible(true);
+  for (const t of cabin.targets) assert.ok(t.position(new THREE.Vector3()) !== null, t.name);
+});
+
+test('the cord tugs down 4 cm and back over half a second, and the train whistles', () => {
+  const { cabin } = cabinOnRig();
+  const pivot = cabin.group.getObjectByName('cabin-cord');
+  cabin.update(1 / 60, 0, 9.9);
+  const rest = pivot.position.y;
+  const fx = fakeFx();
+  cabin.targets[0].react(10, fx);
+  assert.deepEqual(fx.played, ['whistle']);
+  let lowest = rest;
+  for (let t = 10; t <= 10.5; t += 0.005) {
+    cabin.update(0.005, 0, t);
+    lowest = Math.min(lowest, pivot.position.y);
+    assert.ok(pivot.position.y <= rest + 1e-12, 'it only ever moves down');
+  }
+  assert.ok(Math.abs(rest - lowest - 0.04) < 0.001, `tugged ${(rest - lowest).toFixed(4)} m`);
+  cabin.update(0.01, 0, 10.51);
+  assert.equal(pivot.position.y, rest);
+});
+
+test('the lantern flares to 1.8 times its glow for 1.2 s, then settles', () => {
+  const { cabin } = cabinOnRig();
+  const halo = cabin.group.getObjectByName('cabin-lantern-halo');
+  cabin.update(1 / 60, 0, 4.9);
+  const rest = halo.scale.x;
+  const fx = fakeFx();
+  cabin.targets[1].react(5, fx);
+  assert.deepEqual(fx.played, ['lantern']);
+  let most = 0;
+  for (let t = 5; t <= 6.2; t += 0.005) {
+    cabin.update(0.005, 0, t);
+    most = Math.max(most, halo.scale.x / rest);
+    assert.ok(halo.material.opacity > 0 && halo.material.opacity <= 1);
+  }
+  assert.ok(Math.abs(most - 1.8) < 0.01, `flared to ${most.toFixed(3)}x`);
+  cabin.update(0.01, 0, 6.21);
+  assert.equal(halo.scale.x, rest);
+});
+
+test('the cord and the lantern keep to their places when the screen changes shape mid-tug', () => {
+  const { camera, cabin } = cabinOnRig();
+  cabin.targets[0].react(1, fakeFx());
+  cabin.update(0.1, 0, 1.1);
+  camera.aspect = 844 / 390;
+  camera.fov = fovForAspect(camera.aspect);
+  cabin.fit(camera);
+  cabin.update(0.5, 0, 1.6);
+  const pivot = cabin.group.getObjectByName('cabin-cord');
+  const a = cabinAnchors(camera.fov, camera.aspect);
+  assert.ok(Math.abs(pivot.position.x - a.cord.x) < 1e-9 && Math.abs(pivot.position.y - a.cord.top) < 1e-9);
 });

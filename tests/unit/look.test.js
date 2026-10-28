@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createLook, fovForAspect, attachPointerControls, LOOK } from '../../site/src/ride/look.js';
+import { TAP } from '../../site/src/ride/taps.js';
 
 const settle = (l, s) => { for (let t = 0; t < s; t += 1 / 60) l.update(1 / 60); };
 
@@ -201,11 +202,13 @@ function fakeCanvas({ refuseCapture = false } = {}) {
     if (refuseCapture) throw new Error('NotFoundError');
     el.captured.push(id);
   };
-  el.fire = (type, fields = {}) => el.dispatchEvent(Object.assign(
-    new Event(type),
-    { pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0, clientX: 0, clientY: 0 },
-    fields,
-  ));
+  el.fire = (type, fields = {}) => {
+    const event = new Event(type);
+    // Defined rather than assigned: an Event's timeStamp has only a getter.
+    const all = { pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0, clientX: 0, clientY: 0, timeStamp: 0, ...fields };
+    for (const [key, value] of Object.entries(all)) Object.defineProperty(event, key, { value });
+    return el.dispatchEvent(event);
+  };
   return el;
 }
 
@@ -310,4 +313,81 @@ test('detach removes the listeners and lets go of a drag in progress', () => {
   assert.equal(l.dragging, false);
   assert.equal(l.yaw, 0);
   assert.doesNotThrow(detach);
+});
+
+// --- taps (Task 13) ---
+
+/** Pointer controls on a fake canvas, with every tap they report kept in `taps`. */
+function tapping() {
+  const el = fakeCanvas();
+  const look = createLook();
+  const taps = [];
+  attachPointerControls(el, look, { onTap: (x, y) => taps.push([x, y]) });
+  return { el, look, taps };
+}
+
+test('a still touch is a tap, at the point she let go; a drag is not', () => {
+  const t = tapping();
+  t.el.fire('pointerdown', { clientX: 100, clientY: 200, timeStamp: 1000 });
+  t.el.fire('pointermove', { clientX: 103, clientY: 202, timeStamp: 1040 });
+  t.el.fire('pointerup', { clientX: 104, clientY: 203, timeStamp: 1090 });
+  assert.deepEqual(t.taps, [[104, 203]]);
+  assert.equal(t.look.dragging, false);
+
+  const d = tapping();
+  d.el.fire('pointerdown', { clientX: 100, clientY: 200, timeStamp: 0 });
+  d.el.fire('pointermove', { clientX: 160, clientY: 200, timeStamp: 60 });
+  d.el.fire('pointerup', { clientX: 160, clientY: 200, timeStamp: 120 });
+  assert.deepEqual(d.taps, []);
+  assert.ok(d.look.yaw > 0, 'the drag still turns the view');
+});
+
+test('a drag that comes back to where it began is not a tap: the furthest point counts, not the net move', () => {
+  const t = tapping();
+  t.el.fire('pointerdown', { clientX: 100, clientY: 200, timeStamp: 0 });
+  t.el.fire('pointermove', { clientX: 140, clientY: 200, timeStamp: 80 });
+  t.el.fire('pointermove', { clientX: 101, clientY: 200, timeStamp: 160 });
+  t.el.fire('pointerup', { clientX: 100, clientY: 200, timeStamp: 200 });
+  assert.deepEqual(t.taps, []);
+});
+
+test('a long press is not a tap, nor a touch that wanders past SLOP', () => {
+  const t = tapping();
+  t.el.fire('pointerdown', { clientX: 0, clientY: 0, timeStamp: 0 });
+  t.el.fire('pointerup', { clientX: 0, clientY: 0, timeStamp: TAP.TIME + 50 });
+  t.el.fire('pointerdown', { clientX: 0, clientY: 0, timeStamp: 1000 });
+  t.el.fire('pointermove', { clientX: TAP.SLOP + 2, clientY: 0, timeStamp: 1020 });
+  t.el.fire('pointerup', { clientX: TAP.SLOP + 2, clientY: 0, timeStamp: 1040 });
+  assert.deepEqual(t.taps, []);
+  // A touch within SLOP and TIME after them is a tap all the same: nothing carries over from the last.
+  t.el.fire('pointerdown', { clientX: 50, clientY: 50, timeStamp: 2000 });
+  t.el.fire('pointerup', { clientX: 50, clientY: 50, timeStamp: 2100 });
+  assert.deepEqual(t.taps, [[50, 50]]);
+});
+
+test('a cancelled touch or lost capture is never a tap', () => {
+  for (const type of ['pointercancel', 'lostpointercapture']) {
+    const t = tapping();
+    t.el.fire('pointerdown', { timeStamp: 0 });
+    t.el.fire(type, { timeStamp: 10 });
+    t.el.fire('pointerup', { timeStamp: 20 });
+    assert.deepEqual(t.taps, [], type);
+  }
+});
+
+test('only the primary pointer taps, and the controls work as before without onTap', () => {
+  const t = tapping();
+  t.el.fire('pointerdown', { pointerId: 1, timeStamp: 0 });
+  t.el.fire('pointerdown', { pointerId: 2, isPrimary: false, clientX: 300, timeStamp: 10 });
+  t.el.fire('pointerup', { pointerId: 2, isPrimary: false, clientX: 300, timeStamp: 20 });
+  assert.deepEqual(t.taps, []);
+  t.el.fire('pointerup', { pointerId: 1, timeStamp: 30 });
+  assert.deepEqual(t.taps, [[0, 0]]);
+
+  const el = fakeCanvas();
+  const l = createLook();
+  attachPointerControls(el, l);
+  el.fire('pointerdown', { timeStamp: 0 });
+  assert.doesNotThrow(() => el.fire('pointerup', { timeStamp: 10 }));
+  assert.equal(l.dragging, false);
 });

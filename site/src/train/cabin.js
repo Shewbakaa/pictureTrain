@@ -2,20 +2,26 @@
 //
 // A wooden dashboard runs along the bottom of the view, with two gold-rimmed gauges on its sloping face and a red
 // panel below them. A pot of pink flowers stands on its left, a glowing lantern on its right. Two pillars at the
-// edges of the view hold up a roof whose front edge runs along the top, and a string of bunting sways under it.
+// edges of the view hold up a roof whose front edge runs along the top, and a string of bunting sways under it. A
+// red whistle cord with a wooden handle hangs from the roof at the top left.
+//
+// Two of them answer her taps (ride/taps.js): the whistle cord tugs down and the train whistles, and the lantern
+// flares up warmly and settles. They are the cabin's `targets`; each animates itself in `update` and asks for its
+// sound through the effects the tap hands it.
 //
 // The cabin hangs on the camera's rig (render/stage.js), so it rides along with her but stays put while she looks
 // around. A tall phone sees a narrow, tall slice of the world and a landscape screen a wide, short one, so the
 // cabin is laid out for the screen (`cabinAnchors`): every piece sits at a fixed share of the view's height and
 // width, and the dashboard fills the same share of the screen either way. `fit` rebuilds it whenever the screen
-// changes shape; it costs four draw calls (the wood, what glows, the bunting and the lantern's halo).
+// changes shape; it costs five draw calls (the wood, what glows, the bunting, the whistle cord and the lantern's
+// halo).
 //
 // Everything is built in code from the shared materials, with no textures, and nothing touches the DOM, so the
 // Node unit tests can build it.
 
 import {
   AdditiveBlending, ConeGeometry, CylinderGeometry, ExtrudeGeometry, Group, IcosahedronGeometry, InstancedMesh,
-  MathUtils, Matrix4, Mesh, Quaternion, Shape, Sprite, SpriteMaterial, TorusGeometry, Vector3, BoxGeometry,
+  MathUtils, Matrix4, Mesh, Object3D, Quaternion, Shape, Sprite, SpriteMaterial, TorusGeometry, Vector3, BoxGeometry,
   CircleGeometry, Color,
 } from '../three.js';
 import { MATERIALS } from '../render/materials.js';
@@ -23,8 +29,14 @@ import { clamp } from '../util/math.js';
 import { mergeParts, moveParts, part, triangleSoup } from '../util/geo.js';
 import { RIDE } from '../ride/rideController.js';
 
-/** Distances ahead of her eye (m, along -Z): the dashboard's far top edge, the pillars, the roof's front edge, the bunting. */
-const DEPTH = Object.freeze({ DASHBOARD: 0.9, PILLARS: 1.4, ROOF: 1.46, BUNTING: 1.36 });
+/**
+ * Distances ahead of her eye (m, along -Z): the dashboard's far top edge, the pillars, the roof's front edge, the
+ * bunting, and the whistle cord (in front of the bunting, so no flag hides it).
+ */
+const DEPTH = Object.freeze({ DASHBOARD: 0.9, PILLARS: 1.4, ROOF: 1.46, BUNTING: 1.36, CORD: 1.2 });
+
+/** How deep the beam along the roof's front edge is (m, before scaling): the ceiling is this far above its foot. */
+const ROOF_BEAM = 0.075;
 
 /** The cabin floor, below her eye (m). Only seen when she looks down. */
 const FLOOR = -1.25;
@@ -52,6 +64,26 @@ const BUNTING = Object.freeze({ FLAG_W: 0.08, FLAG_H: 0.1, GAP: 0.3, SWAG: 1.3, 
 /** The bob of the train on its rails, at full speed (m), and how often (Hz). */
 const BOB = Object.freeze({ HEIGHT: 0.015, RATE: 1.6 });
 
+/**
+ * The whistle cord (m, before scaling): the rope's thickness, how far it runs on up into the ceiling (so a tug never
+ * pulls its end into view), and its wooden handle's length and thickness.
+ */
+const CORD = Object.freeze({ ROPE: 0.006, ABOVE: 0.06, HANDLE: 0.085, GRIP: 0.016 });
+
+/**
+ * Her tug on the cord: it comes DROP down (m, before scaling) over the first PULL of TIME (s), then eases back up.
+ */
+const TUG = Object.freeze({ DROP: 0.04, TIME: 0.5, PULL: 0.25 });
+
+/** The lantern's flare: its halo swells to GROW times its size over RISE (s), and settles back by TIME (s). */
+const FLARE = Object.freeze({ GROW: 1.8, TIME: 1.2, RISE: 0.15 });
+
+/**
+ * The hit spheres of the cord's handle and the lantern (m). About a fingertip either side of each, a metre or so
+ * from her eye, whatever the screen's shape.
+ */
+const REACH = Object.freeze({ CORD: 0.12, LANTERN: 0.1 });
+
 /** Colours (sRGB hex). Task 14's train outside is painted in the same ones. */
 export const CABIN_COLOURS = Object.freeze({
   wood: '#c98b52',
@@ -74,6 +106,7 @@ export const CABIN_COLOURS = Object.freeze({
   lanternRoof: '#c9584b',
   bulb: '#ffd98a',
   halo: '#ffc46e',
+  cord: '#c94f3f',
   flags: ['#f28b82', '#fbd25b', '#8fd3c1', '#7fb8f0', '#c9a0f0', '#ffa8c5'],
 });
 
@@ -86,8 +119,10 @@ export const CABIN_COLOURS = Object.freeze({
  * its bottom; it is `halfWidth` either side of the middle, just past the view's edges. The flower pot stands at
  * 75% of the way to the left edge and the lantern 78% of the way to the right, both on the dashboard's ledge. The
  * pillars stand just outside the edges (102%), so only a sliver of each shows, and the roof's front edge (`roof.y`)
- * is 90% of the way to the top. The bunting hangs across between the pillars. `scale` is how big the pieces are
- * against their size on a tall phone.
+ * is 90% of the way to the top. The bunting hangs across between the pillars. The whistle cord hangs 70% of the way
+ * to the left edge, DEPTH.CORD ahead, from the ceiling (`top`, above the top of the view) to the foot of its handle
+ * (`bottom`), 52% of the way from the middle of the view to its top. `scale` is how big the pieces are against
+ * their size on a tall phone.
  * @param {number} vfovDeg
  * @param {number} aspect
  */
@@ -108,6 +143,7 @@ export function cabinAnchors(vfovDeg, aspect) {
     pillars: { x: pillarX, z: -DEPTH.PILLARS, radius: pillarRadius },
     roof: { y: roofY, z: -DEPTH.ROOF },
     bunting: { y: roofY - 0.02 * scale, z: -DEPTH.BUNTING, halfWidth: pillarX - pillarRadius, sag: 0.07 * t * DEPTH.BUNTING },
+    cord: { x: -0.7 * halfW(DEPTH.CORD), z: -DEPTH.CORD, top: roofY + ROOF_BEAM * scale, bottom: 0.52 * t * DEPTH.CORD },
   };
 }
 
@@ -254,13 +290,38 @@ function lantern() {
   return { solid, glow: [part(new IcosahedronGeometry(0.03, 1), CABIN_COLOURS.bulb, { position: [0, 0.066, 0] })], bulb: [0, 0.066, 0] };
 }
 
+/**
+ * The whistle cord hanging from its pivot at the origin (the ceiling), `length` down to the foot of its handle (its
+ * size on a tall phone times `s`): the red rope, running on up into the ceiling, a knot, and a turned wooden handle
+ * with gold caps. `grip` is how far below the pivot the handle's middle is.
+ */
+function whistleCord(length, s) {
+  const handle = CORD.HANDLE * s;
+  const ropeFoot = -(length - handle);
+  const ropeTop = CORD.ABOVE * s;
+  const parts = [
+    part(new CylinderGeometry(CORD.ROPE * s, CORD.ROPE * s, ropeTop - ropeFoot, 5), CABIN_COLOURS.cord, {
+      position: [0, (ropeTop + ropeFoot) / 2, 0],
+    }),
+    part(new IcosahedronGeometry(0.009 * s, 0), CABIN_COLOURS.cord, { position: [0, ropeFoot, 0] }),
+    part(new CylinderGeometry(0.75 * CORD.GRIP * s, CORD.GRIP * s, handle, 8), CABIN_COLOURS.wood, {
+      position: [0, ropeFoot - handle / 2, 0],
+    }),
+  ];
+  for (const y of [ropeFoot - 0.004 * s, ropeFoot - handle + 0.004 * s]) {
+    parts.push(part(new CylinderGeometry(1.1 * CORD.GRIP * s, 1.1 * CORD.GRIP * s, 0.008 * s, 8), CABIN_COLOURS.gold, { position: [0, y, 0] }));
+  }
+  parts.push(part(new IcosahedronGeometry(0.007 * s, 0), CABIN_COLOURS.gold, { position: [0, -length, 0] }));
+  return { parts, grip: length - handle / 2 };
+}
+
 /** The pillars, the low front wall between them, the floor, and the roof. */
 function frame(a) {
   const s = a.scale;
   const { x: pillarX, z: pillarZ, radius } = a.pillars;
   const roofY = a.roof.y;
   const wide = pillarX + radius;
-  const beam = 0.075 * s;
+  const beam = ROOF_BEAM * s;
   const parts = [];
   for (const x of [-pillarX, pillarX]) {
     parts.push(part(new CylinderGeometry(radius, radius, roofY - FLOOR, 8), CABIN_COLOURS.trim, {
@@ -329,13 +390,32 @@ function flagGeometry() {
   return triangleSoup([...front, ...back], new Array(18).fill(1));
 }
 
+/** How far the cord is pulled down `t` seconds into her tug: 0 at rest, 1 at its lowest. */
+function tugAt(t) {
+  if (!(t >= 0 && t < TUG.TIME)) return 0;
+  const u = t / TUG.TIME;
+  if (u < TUG.PULL) return Math.sin((Math.PI / 2) * (u / TUG.PULL));
+  return 0.5 + 0.5 * Math.cos((Math.PI * (u - TUG.PULL)) / (1 - TUG.PULL));
+}
+
+/** How far the lantern has flared `t` seconds after her tap: 0 at rest, 1 at its brightest. */
+function flareAt(t) {
+  if (!(t >= 0 && t < FLARE.TIME)) return 0;
+  if (t < FLARE.RISE) return Math.sin((Math.PI / 2) * (t / FLARE.RISE));
+  return 0.5 + 0.5 * Math.cos((Math.PI * (t - FLARE.RISE)) / (FLARE.TIME - FLARE.RISE));
+}
+
 /**
  * The cabin.
  * @returns {{ group: Group, fit: (camera: import('../three.js').PerspectiveCamera) => void,
- *             update: (dt: number, speed: number, time: number) => void, setVisible: (visible: boolean) => void }}
+ *             update: (dt: number, speed: number, time: number) => void, setVisible: (visible: boolean) => void,
+ *             pullCord: (now: number) => void, flareLantern: (now: number) => void,
+ *             targets: import('../ride/taps.js').Tappable[] }}
  *   Add `group` to the camera's rig. `fit` lays it out for the camera's field of view and shape (call it whenever
- *   the screen changes; it does nothing if they have not). `update` bobs it with the train's speed (m/s) and sways
- *   the bunting; `time` is the seconds since the start.
+ *   the screen changes; it does nothing if they have not). `update` bobs it with the train's speed (m/s), sways
+ *   the bunting and plays the cord's tug and the lantern's flare; `time` is the seconds since the start, the clock
+ *   `pullCord` and `flareLantern` start them on. `targets` are the cord's handle ('whistle-cord') and the lantern
+ *   ('lantern'), which answer a tap with those and a sound; they are not showing while the cabin is hidden.
  */
 export function createCabin() {
   const group = new Group();
@@ -353,11 +433,24 @@ export function createCabin() {
     depthWrite: false, blending: AdditiveBlending, fog: false,
   }));
   halo.name = 'cabin-lantern-halo';
-  group.add(body, lit, flags, halo);
+  // The whistle cord hangs from its pivot in the ceiling, with a marker at its handle for taps to aim at.
+  const cordPivot = new Group();
+  cordPivot.name = 'cabin-cord';
+  const cord = new Mesh(undefined, MATERIALS.solid);
+  cord.name = 'cabin-cord-rope';
+  const handle = new Object3D();
+  handle.name = 'cabin-cord-handle';
+  cordPivot.add(cord, handle);
+  group.add(body, lit, flags, halo, cordPivot);
 
   let laidOut = '';
   let hanging = [];
   let flagSize = 0;
+  let haloSize = 0;
+  let cordTop = 0;
+  let cordDrop = 0;
+  let pulledAt = -Infinity;
+  let flaredAt = -Infinity;
 
   function layOut(vfov, aspect) {
     const a = cabinAnchors(vfov, aspect);
@@ -374,13 +467,24 @@ export function createCabin() {
     ];
     for (let i = 0; i + 1 < string.length; i++) solid.push(rod(string[i], string[i + 1], 0.0035 * s, CABIN_COLOURS.ink));
     for (const hook of hooks) solid.push(part(new IcosahedronGeometry(0.012 * s, 0), CABIN_COLOURS.gold, { position: hook }));
+    // A brass plate in the ceiling, where the whistle cord comes through.
+    solid.push(part(new CylinderGeometry(0.016 * s, 0.016 * s, 0.006, 8), CABIN_COLOURS.gold, { position: [a.cord.x, a.cord.top - 0.003, a.cord.z] }));
 
     body.geometry.dispose();
     body.geometry = mergeParts(solid);
     lit.geometry.dispose();
     lit.geometry = mergeParts([...dash.glow, ...moveParts(light.glow, atLantern)]);
     halo.position.set(a.lantern.x + light.bulb[0] * s, a.lantern.y + light.bulb[1] * s, a.lantern.z + light.bulb[2] * s);
-    halo.scale.setScalar(0.24 * s);
+    haloSize = 0.24 * s;
+    halo.scale.setScalar(haloSize);
+
+    const rope = whistleCord(a.cord.top - a.cord.bottom, s);
+    cord.geometry.dispose();
+    cord.geometry = mergeParts(rope.parts);
+    handle.position.set(0, -rope.grip, 0);
+    cordPivot.position.set(a.cord.x, a.cord.top, a.cord.z);
+    cordTop = a.cord.top;
+    cordDrop = TUG.DROP * s;
 
     hanging = spots;
     flagSize = s;
@@ -418,8 +522,48 @@ export function createCabin() {
     const pace = clamp(speed / RIDE.CRUISE, 0, 1) || 0;
     group.position.y = BOB.HEIGHT * pace * Math.sin(2 * Math.PI * BOB.RATE * time);
     swayFlags(time, pace);
-    halo.material.opacity = 0.8 * (0.92 + 0.05 * Math.sin(time * 11) + 0.03 * Math.sin(time * 17.3));
+    cordPivot.position.y = cordTop - cordDrop * tugAt(time - pulledAt);
+    // The lantern's flame flickers; flaring, its halo swells, brightens and flickers harder before it settles.
+    const flare = flareAt(time - flaredAt);
+    halo.scale.setScalar(haloSize * (1 + (FLARE.GROW - 1) * flare));
+    const flicker = 0.92 + 0.05 * Math.sin(time * 11) + 0.03 * Math.sin(time * 17.3);
+    halo.material.opacity = Math.min(1, 0.8 * flicker * (1 + flare * (0.3 + 0.15 * Math.sin(time * 31))));
   }
+
+  /** Starts her tug on the whistle cord at `now` (s, update's clock). */
+  function pullCord(now) {
+    pulledAt = now;
+  }
+
+  /** Starts the lantern's flare at `now` (s, update's clock). */
+  function flareLantern(now) {
+    flaredAt = now;
+  }
+
+  /** Where `object` is in the world, while the cabin is showing. */
+  const showing = (object) => (out) => (group.visible ? object.getWorldPosition(out) : null);
+
+  /** @type {import('../ride/taps.js').Tappable[]} */
+  const targets = [
+    {
+      name: 'whistle-cord',
+      radius: REACH.CORD,
+      position: showing(handle),
+      react(now, fx) {
+        pullCord(now);
+        fx.play('whistle');
+      },
+    },
+    {
+      name: 'lantern',
+      radius: REACH.LANTERN,
+      position: showing(halo),
+      react(now, fx) {
+        flareLantern(now);
+        fx.play('lantern');
+      },
+    },
+  ];
 
   // Laid out for a tall phone until the app fits it to the real screen.
   layOut(80, 390 / 844);
@@ -428,6 +572,9 @@ export function createCabin() {
     group,
     fit,
     update,
+    pullCord,
+    flareLantern,
+    targets,
     setVisible(visible) {
       group.visible = visible;
     },

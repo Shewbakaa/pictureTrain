@@ -2,7 +2,7 @@
 // own are the train's sounds (trainSounds.js): a "choo-choo" and a puff of steam as it sets off, chugs and the
 // clickety-clack of the rail joints following its speed, a brake hiss as it slows for a stop, a long steam sigh once
 // it stands there, and a longer, happy whistle at the Day 365 station; and, from tapSounds.js, the soft shimmer of a
-// shooting star.
+// shooting star and the lantern's warm whoosh as she taps it.
 //
 // They play on the music's AudioContext, into the effects bus of its master chain (mixer.js; the train's by a bus of
 // its own, which the tunnel's echo takes them from), so the Sound button, a video's sound and the page going into
@@ -366,7 +366,9 @@ export function createSfx(music, { now = () => performance.now() } = {}) {
   sfx.define('puff', { gap: 1, play: (k, at) => train.steam('puff', at) });
   sfx.define('brake', { gap: 1, play: (k, at) => train.steam('brake', at) });
   sfx.define('sigh', { gap: 1.5, play: (k, at) => train.steam('sigh', at) });
-  // The scenery's small sounds (tapSounds.js): the shimmer of a shooting star.
+  // The scenery's small sounds (tapSounds.js): the shimmer of a shooting star, and the lantern flaring as she taps it
+  // (the whistle cord she taps blows the train's own whistle).
   sfx.define('shimmer', { gap: 2, play: (k, at, level) => tap.shimmer(at, level) });
+  sfx.define('lantern', { gap: 1, play: (k, at, level) => tap.lantern(at, level) });
   return sfx;
 }
