@@ -14,6 +14,7 @@
 // A card rustles as it comes up. At the Day 365 station a bell rings as the train pulls in, and the finale has its own
 // little sounds (her hop down, his door and footsteps, heartbeats, the bouquet's paper, doves), its hearts' sparkle
 // and its fireworks, all hushed again as she rides again or jumps back. One Sound button turns it all on and off.
+// Her tap on Begin also asks the phone to keep its screen on for the whole ride (ui/wakeLock.js).
 //
 // At the Day 365 station the ride ends in the finale (finale/finale.js): under a blush fade her seat gives way to
 // the train seen from outside, the two of them meet on the platform, and his message comes up on a card with the
@@ -47,6 +48,7 @@ import { attachPointerControls, createLook } from './ride/look.js';
 import { loadProgress, saveProgress } from './progress.js';
 import { fadeThrough } from './ui/dom.js';
 import { hideIntro, showIntro } from './ui/intro.js';
+import { keepAwake } from './ui/wakeLock.js';
 import { hideStopCard, showStopCard } from './ui/stopCard.js';
 import { hideFinaleCard, showFinaleCard } from './ui/finaleCard.js';
 import { renderTimeline, timelineItems } from './ui/timeline.js';
@@ -350,6 +352,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       appState.finaleCues = cues.heard;
     }
     appState.finaleTime = finale.active ? finale.time : null;
+    if (wakeLock) appState.wakeLock = wakeLock.state;
     appState.quality = governor.tier;
     const { drawCalls, triangles } = stage.info();
     appState.drawCalls = drawCalls;
@@ -378,6 +381,8 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   let cues = null;
   /** The zones whose music should be loading, worked out every frame (zoneMusic.js zonesToLoad). */
   const musicNear = {};
+  /** The hold on the screen, asked for at Begin (ui/wakeLock.js); null before. */
+  let wakeLock = null;
 
   /** Metres from `d` to where the moving train stops next (a stop or the finale); Infinity when it is not moving. */
   function toStop(d) {
@@ -594,6 +599,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     begin() {
       if (appState.phase !== 'intro') return;
       music.start(); // first, while her tap is still being handled: phones only let sound start from a tap
+      wakeLock = keepAwake(); // the screen stays on for the ride, and the hold is asked for again whenever the page returns
       hideIntro();
       ride.start();
       sfx.depart(); // the whistle waits the moment it takes the browser to let the sound run

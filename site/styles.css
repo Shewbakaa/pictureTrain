@@ -249,6 +249,29 @@ body {
   margin-top: 24px;
 }
 
+.intro-hint {
+  margin: 14px 0 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--soft-ink);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* Inline, so the icon stays with the first words when the line wraps on a narrow phone. */
+.intro-hint-icon {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  margin-right: 7px;
+  vertical-align: -4px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 @keyframes intro-in {
   from { opacity: 0; visibility: hidden; transform: translateY(calc(-50% + 18px)); }
   to { opacity: 1; visibility: visible; transform: translateY(-50%); }
