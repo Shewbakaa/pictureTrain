@@ -89,13 +89,14 @@ const add3 = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 /**
  * Their pet ([along, right, up], like HER and HIM). It waits just inside the station house door (`door`), and comes
  * out over OUT seconds as he sets off, to BESIDE metres to his right and BEHIND metres behind him (his right as he
- * walks), where it keeps all the way over. Once he has stopped it runs on round behind him by way of `round` for RUN
- * seconds, and sits down over SIT seconds as it arrives at their feet (`feet`: in front of them, between them, on the
- * camera's side). At FULL m/s or faster it trots in full; slower, its legs swing less.
+ * walks), where it keeps all the way over. Once he has stopped it turns where it stands over TURN seconds, then runs on
+ * round behind him by way of `round` for RUN seconds, and sits down over SIT seconds as it arrives at their feet
+ * (`feet`: in front of them, between them, on the camera's side), turning to the camera as it does. At FULL m/s or
+ * faster it trots in full; slower, its legs swing less.
  */
 const PET = Object.freeze({
   door: [7.75, 7.05, 0.6], OUT: 0.5, BESIDE: 0.5, BEHIND: 0.3,
-  round: [1.9, 4.05, 0.6], feet: [0.5, 4.0, 0.6], RUN: 1.4, SIT: 0.5, FULL: 0.5,
+  round: [1.9, 4.05, 0.6], feet: [0.5, 4.0, 0.6], TURN: 0.3, RUN: 1.4, SIT: 0.5, FULL: 0.5,
 });
 
 /** Where their pet keeps as he walks over, from him ([along, right, up]): PET.BESIDE to his right, PET.BEHIND behind. */
@@ -121,8 +122,9 @@ const PET_SLOT = (() => {
  * - him: at the station house door, then over to her (himWalkStart to himWalkEnd).
  * - bouquet: in his hand (his keys and eases, offset by HAND) until handoffStart, then into her hands by handoffEnd.
  * - pet: beside him as he walks over (his keys and ease, offset by PET_SLOT). `petOut` (0 to 1) brings it out of the
- *   doorway to there as he sets off, `petRound` (0 to 1) takes it on from there round to their feet once he has
- *   stopped (how far along the curve through PET.round that createFinale lays), and `petSit` (0 to 1) sits it down.
+ *   doorway to there as he sets off, `petTurn` (0 to 1) turns it where it stands once he has stopped, from the way
+ *   he walked to the way it runs on, `petRound` (0 to 1) then takes it on from there round to their feet (how far along
+ *   the curve through PET.round that createFinale lays), and `petSit` (0 to 1) sits it down.
  * @param {import('../world/trackPath.js').TrackPath} path
  * @param {number} finaleDistance
  * @returns {import('./timeline.js').Track[]}
@@ -181,8 +183,12 @@ export function finaleTracks(path, finaleDistance) {
     },
     { key: 'pet', keys: [key(T.himWalkStart, add3(HIM.door, PET_SLOT)), key(T.himWalkEnd, add3(HIM.end, PET_SLOT), WALK_EASE)] },
     { key: 'petOut', keys: [num(T.himWalkStart, 0), num(T.himWalkStart + PET.OUT, 1, 'out')] },
-    { key: 'petRound', keys: [num(T.himWalkEnd, 0), num(T.himWalkEnd + PET.RUN, 1, 'inOut')] },
-    { key: 'petSit', keys: [num(T.himWalkEnd + PET.RUN - PET.SIT / 2, 0), num(T.himWalkEnd + PET.RUN + PET.SIT / 2, 1, 'inOut')] },
+    { key: 'petTurn', keys: [num(T.himWalkEnd, 0), num(T.himWalkEnd + PET.TURN, 1, 'inOut')] },
+    { key: 'petRound', keys: [num(T.himWalkEnd + PET.TURN, 0), num(T.himWalkEnd + PET.TURN + PET.RUN, 1, 'inOut')] },
+    {
+      key: 'petSit',
+      keys: [num(T.himWalkEnd + PET.TURN + PET.RUN - PET.SIT / 2, 0), num(T.himWalkEnd + PET.TURN + PET.RUN + PET.SIT / 2, 1, 'inOut')],
+    },
   ];
 }
 
@@ -598,6 +604,7 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
   const petRound = new CatmullRomCurve3([petEnd, ...[PET.round, PET.feet].map(([a, r, u]) => path.frameAt(fd + a, r, u))], false, 'centripetal');
   const petOutTo = headingOf(petStart.clone().sub(petDoor));
   const petWalks = headingOf(petEnd.clone().sub(petStart));
+  const petRuns = headingOf(petRound.getTangentAt(0, new Vector3())); // the way it sets off round him
   const petLength = { out: petDoor.distanceTo(petStart), round: petRound.getLength() };
   const petAt = new Vector3();
   const petBefore = new Vector3();
@@ -776,8 +783,9 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
   }
 
   /**
-   * Their pet: out of the doorway and over beside him, trotting, then on round him to their feet, where it sits facing
-   * the camera. It looks the way it goes, and while it sits it wags its tail and looks round (world/pets.js).
+   * Their pet: out of the doorway and over beside him, trotting, then, once he has stopped, it turns where it stands and
+   * runs on round him to their feet, where it sits facing the camera. It looks the way it goes, turning to the camera
+   * only as it sits, and while it sits it wags its tail and looks round (world/pets.js).
    */
   function posePet(t) {
     if (!pet) return;
@@ -785,9 +793,9 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
     if (!pet.group.visible) return;
     petSpot(s, petAt);
     pet.group.position.copy(petAt);
-    let heading = lerpAngle(petOutTo, petWalks, s.petOut);
-    if (s.petRound > 0) heading = lerpAngle(heading, headingOf(petRound.getTangentAt(s.petRound, petWay)), smoothstep(0, 0.15, s.petRound));
-    heading = lerpAngle(heading, headingOf(petWay.subVectors(camera.position, petAt)), smoothstep(0.7, 1, s.petRound));
+    let heading = lerpAngle(lerpAngle(petOutTo, petWalks, s.petOut), petRuns, s.petTurn);
+    if (s.petRound > 0) heading = headingOf(petRound.getTangentAt(s.petRound, petWay));
+    heading = lerpAngle(heading, headingOf(petWay.subVectors(camera.position, petAt)), smoothstep(0, 1, s.petSit));
     pet.group.rotation.y = heading;
     // Its pace, from where it is a moment either side, and how far it has come, for its stride.
     timeline.sample(t - PACE_SPAN, before);

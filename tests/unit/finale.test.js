@@ -263,6 +263,31 @@ test('their pet trots out of the station house with him, 0.5 m to his right and 
   assert.equal(finale.pets, 0);
 });
 
+test('their pet turns before it runs on round him, and to the camera only as it sits: it never slides backwards or sideways', () => {
+  const { scene, finale } = finaleOnStage();
+  const pet = scene.children.find((o) => o.name.startsWith('pet-'));
+  finale.begin();
+  const at = (t) => {
+    finale.skipTo(t);
+    finale.update(0);
+    return { x: pet.position.x, z: pet.position.z, heading: pet.rotation.y };
+  };
+  const SPAN = 0.01; // its motion at t, from where it is this long either side
+  let moving = 0;
+  for (let t = 6.9; t <= 9.0 + 1e-9; t += 0.02) {
+    const before = at(t - SPAN), after = at(t + SPAN);
+    const { heading } = at(t);
+    const dx = after.x - before.x, dz = after.z - before.z;
+    const speed = Math.hypot(dx, dz) / (2 * SPAN);
+    if (!(speed > 0.3)) continue;
+    moving++;
+    const cos = (Math.sin(heading) * dx + Math.cos(heading) * dz) / Math.hypot(dx, dz);
+    const angle = (Math.acos(Math.min(1, Math.max(-1, cos))) * 180) / Math.PI;
+    assert.ok(angle < 60, `at ${t.toFixed(2)} s, going ${speed.toFixed(2)} m/s, it faces ${angle.toFixed(0)}° from the way it goes`);
+  }
+  assert.ok(moving > 20, `it runs round him in that time (${moving} moving samples)`);
+});
+
 test('a pet in the finale is drawn in two calls, and with pets: \'none\' there is none', () => {
   const { scene, finale } = finaleOnStage(FINALE_PATH, { pets: 'cat' });
   const pet = scene.getObjectByName('pet-cat');
