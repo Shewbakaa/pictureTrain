@@ -1,8 +1,24 @@
-// The intro card: the first thing she reads, over the train waiting at the Day 1 station. An eyebrow, the title
-// ("For <her name>"), a little squiggle, the author's note, the button that starts the ride and, under it, a small
-// line suggesting headphones (unless the author has turned it off).
+// The intro card: the first thing she reads, over the train waiting at the Day 1 station. It is a boarding ticket: an
+// eyebrow, the title ("For <her name>"), a little squiggle, the author's note, the route and her seat, the button that
+// starts the ride and, under it, a small line suggesting headphones (unless the author has turned it off); and the
+// ticket's stub, ADMIT ONE, along a perforated edge. When she taps Begin a punch clips a little heart out of the stub,
+// the stub tears off and the ticket slides away, while the ride starts underneath at once.
 
-import { el, reveal, setChildren, svgEl } from './dom.js';
+import { el, prefersReducedMotion, reveal, setChildren, svgEl } from './dom.js';
+
+/** Where the ride goes, printed on the ticket: from the first station to the last. */
+const ROUTE = 'From Day 1 · To Day 365';
+
+/** And where she sits. */
+const SEAT = 'Seat: by the window';
+
+/**
+ * How long the ticket takes to leave once punched (ms), counted from the call: the punch, the stub tearing off and the
+ * slide away, the last of which (`.ticket.punched` in styles.css) ends 640 ms after the first frame. The rest is for
+ * the tap's other work (starting the ride), which can hold that first frame back: a ticket is never still up a
+ * second after her tap.
+ */
+export const PUNCH_MS = 680;
 
 /** A hand-drawn wave under the title (the 2D story, fallback.js, draws it under its title too). */
 export function squiggle() {
@@ -21,6 +37,37 @@ function headphonesIcon() {
 }
 
 /**
+ * The route and the seat, printed under the note (the 2D story's ticket, fallback.js, prints them too).
+ * @returns {HTMLElement[]}
+ */
+export function ticketLines() {
+  return [el('p', { class: 'ticket-route' }, [ROUTE]), el('p', { class: 'ticket-seat' }, [SEAT])];
+}
+
+/**
+ * The ticket's two pieces of paper: the main part, with `body` (which scrolls if a phone is too small for it) and
+ * under it `actions` (the button and its hint, which stay where she can reach them), and the stub, which says ADMIT ONE
+ * with the punch's heart between the words. The stub is decoration, so it is hidden from screen readers.
+ * @param {unknown[]} body
+ * @param {unknown[]} [actions]
+ * @returns {HTMLElement[]}
+ */
+export function ticketParts(body, actions = []) {
+  return [
+    el('div', { class: 'ticket-main' }, [
+      el('div', { class: 'ticket-body' }, body),
+      actions.length ? el('div', { class: 'ticket-actions' }, actions) : null,
+    ]),
+    el('div', { class: 'ticket-stub', 'aria-hidden': 'true' }, [
+      el('span', { class: 'ticket-admit' }, ['ADMIT ', el('span', { class: 'ticket-hole' }), 'ONE']),
+    ]),
+  ];
+}
+
+/** The promise for the ticket on its way out (`null` while it is not leaving). */
+let leaving = null;
+
+/**
  * Shows the intro card. The button disables itself on its first tap, so a double tap starts the ride once.
  * @param {import('../content/normalize.js').Content} content
  * @param {{ onBegin: () => void }} handlers
@@ -34,23 +81,46 @@ export function showIntro(content, { onBegin }) {
     begin.disabled = true;
     onBegin();
   });
-  setChildren(card, [
+  card.classList.add('ticket');
+  setChildren(card, ticketParts([
     el('p', { class: 'eyebrow' }, [eyebrow]),
     el('h1', { class: 'intro-title', id: 'intro-title' }, [title]),
     squiggle(),
     note ? el('p', { class: 'intro-note' }, [note]) : null,
+    ...ticketLines(),
+  ], [
     begin,
     hint ? el('p', { class: 'intro-hint' }, [headphonesIcon(), hint]) : null,
-  ]);
+  ]));
   card.setAttribute('role', 'dialog');
   card.setAttribute('aria-labelledby', 'intro-title');
   reveal(card);
 }
 
 /**
- * Hides the intro card. At once, with no fade: the train sets off the moment she taps, so the card is gone the
- * moment the ride has begun.
+ * Takes the ticket away. A punch clips the heart out of its stub, the stub tears off and the ticket slides away (the
+ * `punched` class, which styles.css animates), PUNCH_MS in all; the returned promise resolves once it is gone. The
+ * ride does not wait for it: the train sets off the moment she taps, and until the ticket has gone it lets her taps
+ * through to the view behind it. With reduced motion there is no punch, and the card is gone at once, the promise
+ * already resolved.
+ * @returns {Promise<void>}
  */
 export function hideIntro() {
-  document.getElementById('intro').hidden = true;
+  const card = document.getElementById('intro');
+  if (leaving) return leaving;
+  if (card.hidden) return Promise.resolve();
+  if (prefersReducedMotion()) {
+    card.hidden = true;
+    return Promise.resolve();
+  }
+  card.classList.add('punched', 'is-leaving');
+  leaving = new Promise((resolve) => {
+    setTimeout(() => {
+      leaving = null;
+      card.hidden = true;
+      card.classList.remove('is-leaving');
+      resolve();
+    }, PUNCH_MS);
+  });
+  return leaving;
 }

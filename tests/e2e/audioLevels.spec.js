@@ -112,6 +112,7 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
     const burnerTap = await stereo(11, (voices) => { for (const at of [0.2, 3.7, 7.2]) voices.burner(at, 1); });
     const louder = (channels, measure) => Math.max(...channels.map(measure));
     const pop = await tapSound('pop');
+    const punch = await tapSound('punch'); // the ticket punch as she taps Begin (Task 16): the same shots, a crisp paper click
     const jingle = await tapSound('jingle');
     const rustle = await tapSound('rustle');
     // Every sound a tap can make, all at once, on a kit with the ride's own node budget: the cord's whistle, the
@@ -207,6 +208,8 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
       shimmerLoudestDb: loudest(shimmer),
       lanternPeakDb: db(peak(lantern)),
       lanternLoudestDb: loudest(lantern),
+      punchPeakDb: db(peak(punch)),
+      punchLoudestDb: loudest(punch),
       popPeakDb: db(peak(pop)),
       popLoudestDb: loudest(pop),
       jinglePeakDb: db(peak(jingle)),
@@ -270,6 +273,9 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
   expect(m.burnerTapPeakDb).toBeLessThanOrEqual(-24);
   expect(m.burnerTapPeakDb).toBeGreaterThanOrEqual(-32);
   for (const key of ['gullTapLoudestDb', 'burnerTapLoudestDb']) expect(m[key], key).toBeLessThan(m.musicNewLoudestDb);
+  // The ticket punch as she taps Begin: a crisp click, about −24 dBFS at its peak, under the music.
+  expect(Math.abs(m.punchPeakDb - -24)).toBeLessThanOrEqual(3);
+  expect(m.punchLoudestDb).toBeLessThan(m.musicNewLoudestDb);
   expect(m.tapsAllPlayed).toBe(1);
   expect(m.tapsPeakNodes).toBeLessThanOrEqual(40);
   expect(m.sighHeardS).toBeGreaterThanOrEqual(1.2);

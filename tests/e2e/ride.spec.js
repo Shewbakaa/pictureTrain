@@ -15,8 +15,9 @@ test('intro → begin → riding', async ({ page }) => {
   await expect(page.locator('#intro')).toContainText('For Maya');
   await expect(page).toHaveTitle('For Maya');
   await page.getByRole('button', { name: 'Begin the ride' }).click();
-  await expect(page.locator('#intro')).toBeHidden();
+  // The ride starts in the tap itself; the ticket takes a moment more to be punched and slide away.
   await waitForPhase(page, 'riding');
+  await expect(page.locator('#intro')).toBeHidden();
   await expect(page.locator('#bottombar')).toBeVisible();
   expect(errors).toEqual([]);
 });

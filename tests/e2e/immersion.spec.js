@@ -343,3 +343,108 @@ test('the phone button stays away in the finale, which directs her view, and com
   await expect(page.locator('#tilt-toggle')).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+// --- The boarding ticket (Task 16) ---
+
+/**
+ * Before she taps: starts noting, in window.__ticket, what the intro card and the ride are like by the time her tap has
+ * been handled in full (a listener on the document hears the click last), and when the card first has the class
+ * `punched` and when it is hidden. Times are performance.now() ms, -1 until they happen.
+ */
+async function watchTicket(page) {
+  await page.evaluate(() => {
+    const card = document.getElementById('intro');
+    const seen = (window.__ticket = {
+      tapped: -1, handled: -1, punchedInTap: null, hiddenInTap: null, phaseInTap: '',
+      punched: -1, hidden: -1, everPunched: false,
+    });
+    document.addEventListener('click', () => { if (seen.tapped < 0) seen.tapped = performance.now(); }, true);
+    document.addEventListener('click', () => {
+      if (seen.handled >= 0) return;
+      seen.handled = performance.now();
+      seen.punchedInTap = card.classList.contains('punched');
+      seen.hiddenInTap = card.hidden;
+      seen.phaseInTap = window.__app.state.phase;
+    });
+    new MutationObserver(() => {
+      const now = performance.now();
+      if (card.classList.contains('punched')) {
+        seen.everPunched = true;
+        if (seen.punched < 0) seen.punched = now;
+      }
+      if (card.hidden && seen.hidden < 0) seen.hidden = now;
+    }).observe(card, { attributes: true });
+  });
+}
+
+test('the intro is a boarding ticket: a route, a seat and a stub that says ADMIT ONE, still a dialog named by its title', async ({ page }) => {
+  const errors = collectConsoleErrors(page);
+  await useFixture(page);
+  await page.goto('index.html');
+  await waitForPhase(page, 'intro');
+  const card = page.locator('#intro');
+  await expect(card).toBeVisible();
+  await expect(card).toHaveAttribute('role', 'dialog');
+  await expect(card).toHaveAttribute('aria-labelledby', 'intro-title');
+  await expect(page.locator('#intro-title')).toHaveText('For Maya');
+  await expect(page.locator('.ticket-route')).toHaveText('From Day 1 · To Day 365');
+  await expect(page.locator('.ticket-seat')).toHaveText('Seat: by the window');
+  await expect(page.locator('.ticket-stub')).toContainText('ADMIT ONE');
+  await expect(page.locator('.ticket-stub .ticket-hole')).toHaveCount(1);
+  await expect(card).not.toHaveClass(/punched/);
+  // The same button as before, and the hint under it.
+  await expect(page.getByRole('button', { name: 'Begin the ride' })).toHaveClass(/intro-begin/);
+  await expect(page.locator('.intro-hint')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('tapping Begin punches the ticket at once, the ride starts under it and the ticket is gone inside a second', async ({ page }) => {
+  const errors = collectConsoleErrors(page);
+  await useFixture(page);
+  await page.goto('index.html?speed=25');
+  await waitForPhase(page, 'intro');
+  await watchTicket(page);
+  await page.locator('.intro-begin').click();
+  await expect.poll(() => page.evaluate(() => window.__ticket.hidden), { timeout: 5000 }).toBeGreaterThan(0);
+  const seen = await page.evaluate(() => window.__ticket);
+  // The punch and the ride are both in the tap itself: neither waits for the ticket to leave, which takes a moment more.
+  expect(seen.punchedInTap).toBe(true);
+  expect(seen.hiddenInTap).toBe(false);
+  expect(seen.phaseInTap).toBe('riding');
+  expect(seen.hidden - seen.tapped).toBeLessThan(1000);
+  expect(seen.hidden).toBeGreaterThan(seen.punched + 300); // the punch, the tear and the slide take a moment
+  await expect(page.locator('#intro')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('with reduced motion the ticket is gone at once and is never punched', async ({ page }) => {
+  const errors = collectConsoleErrors(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await useFixture(page);
+  await page.goto('index.html?speed=25');
+  await waitForPhase(page, 'intro');
+  await watchTicket(page);
+  await page.locator('.intro-begin').click();
+  await expect.poll(() => page.evaluate(() => window.__ticket.hidden), { timeout: 5000 }).toBeGreaterThan(0);
+  const seen = await page.evaluate(() => window.__ticket);
+  expect(seen.hiddenInTap).toBe(true); // gone by the end of the tap itself, with the ride started
+  expect(seen.phaseInTap).toBe('riding');
+  expect(seen.hidden - seen.handled).toBeLessThan(100);
+  expect(seen.everPunched).toBe(false);
+  expect(errors).toEqual([]);
+});
+
+test('the 2D story opens with the same ticket, stub and all, but nothing to tap', async ({ page }) => {
+  const errors = collectConsoleErrors(page);
+  await useFixture(page);
+  await page.goto('index.html?fallback=1');
+  const ticket = page.locator('.fallback-intro');
+  await expect(ticket).toBeVisible();
+  await expect(ticket.locator('h1')).toHaveText('For Maya');
+  await expect(ticket.locator('.ticket-route')).toHaveText('From Day 1 · To Day 365');
+  await expect(ticket.locator('.ticket-seat')).toHaveText('Seat: by the window');
+  await expect(ticket.locator('.ticket-stub')).toContainText('ADMIT ONE');
+  await expect(ticket.locator('button')).toHaveCount(0);
+  await expect(ticket.locator('.intro-hint')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

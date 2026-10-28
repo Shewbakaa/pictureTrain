@@ -3,7 +3,7 @@
 // clickety-clack of the rail joints following its speed, a brake hiss as it slows for a stop, a long steam sigh once
 // it stands there, and a longer, happy whistle at the Day 365 station; and, from tapSounds.js, the soft shimmer of a
 // shooting star and the small sounds of her taps: the lantern's warm whoosh, a balloon's pop, a snowman's jingle and a
-// deer's rustle.
+// deer's rustle; and the click of the ticket punch as she taps Begin.
 //
 // They play on the music's AudioContext, into the effects bus of its master chain (mixer.js; the train's by a bus of
 // its own, which the tunnel's echo takes them from), so the Sound button, a video's sound and the page going into
@@ -369,11 +369,12 @@ export function createSfx(music, { now = () => performance.now() } = {}) {
   sfx.define('sigh', { gap: 1.5, play: (k, at) => train.steam('sigh', at) });
   // The scenery's small sounds (tapSounds.js): the shimmer of a shooting star, the lantern flaring as she taps it (the
   // whistle cord she taps blows the train's own whistle), a balloon cluster's pop, a snowman's jingle and a deer's
-  // rustle as it bounds off.
+  // rustle as it bounds off. And the ticket punch's click as she taps Begin (ui/intro.js).
   sfx.define('shimmer', { gap: 2, play: (k, at, level) => tap.shimmer(at, level) });
   sfx.define('lantern', { gap: 1, play: (k, at, level) => tap.lantern(at, level) });
   sfx.define('pop', { gap: 1, play: (k, at, level) => tap.pop(at, level) });
   sfx.define('jingle', { gap: 1, play: (k, at, level) => tap.jingle(at, level) });
   sfx.define('rustle', { gap: 1, play: (k, at, level) => tap.rustle(at, level) });
+  sfx.define('punch', { gap: 1, play: (k, at, level) => tap.punch(at, level) });
   return sfx;
 }

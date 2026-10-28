@@ -1,7 +1,8 @@
 // The small sounds that answer the scenery and her taps: the shimmer that goes with a shooting star
 // (world/nightSky.js), the soft, warm whoosh of the cabin's lantern flaring up when she taps it (train/cabin.js), the
 // soft pop of a balloon cluster (world/dressing.js), a snowman's jingle of little bells and the rustle of leaves as a
-// deer bounds off (world/deer.js). sfx.js defines each as a one-shot, so it keeps to the Sound button, a video's
+// deer bounds off (world/deer.js), and the click of the ticket punch as she taps Begin (ui/intro.js). sfx.js defines
+// each as a one-shot, so it keeps to the Sound button, a video's
 // sound and the page going into the background like every other sound. (A gull she taps calls with the ambience's own
 // gull voice, and a hot-air balloon roars with its burner, natureSounds.js, on one-shots of their own that ambience.js
 // defines: 'gull-tap' and 'burner-tap'.)
@@ -11,8 +12,8 @@
 // the kit's node budget has no room for it, and counts its nodes in the budget (NODES) until it ends.
 //
 // The levels are set for the mix after the master chain and measured there offline (tests/e2e/audioLevels.spec.js):
-// the shimmer peaks about −30 dBFS, very soft, far under the music; the lantern, the pop, the jingle and the rustle
-// about −24 dBFS, like the ambience's passing sounds.
+// the shimmer peaks about −30 dBFS, very soft, far under the music; the lantern, the pop, the jingle, the rustle and the
+// punch about −24 dBFS, like the ambience's passing sounds.
 
 import { TAIL, strike, toSilence, voiceParts } from './voiceParts.js';
 
@@ -51,11 +52,20 @@ const JINGLE = { LEVEL: 0.00716, BELLS: [2637, 3520, 4699], SHAKES: [0, 0.14, 0.
 const RUSTLE = { LEVEL: 0.0235, BAND: 2600, Q: 0.8, ATTACK: 0.08, HOLD: 0.45, RELEASE: 0.5, FLUTTER: 7, STEP: 0.4 };
 
 /**
+ * The punch: a ticket punch closing on a ticket, as one short click. A snap of paper, noise through a bandpass at BAND
+ * Hz that rises over ATTACK and dies over SNAP (to −60 dB), and under it the punch's own small "tock", a sine that
+ * drops from FROM to TO Hz over DROP and dies over BODY, at BODY_MIX of the snap's level. Short and dry, so it reads as
+ * a click and never a thud.
+ */
+const PUNCH = { LEVEL: 0.0153, BAND: 3200, Q: 1.1, ATTACK: 0.001, SNAP: 0.035, FROM: 520, TO: 190, DROP: 0.03, BODY: 0.07, BODY_MIX: 0.75 };
+
+/**
  * How many audio nodes each sound holds while it plays, counted against the kit's budget. The shimmer: a mix, and a
  * gain and two sines a note. The lantern: its noise, two filters and a gain. The pop: its noise, a filter and a gain.
- * The jingle: three sines and a gain. The rustle: its noise, a filter and a gain.
+ * The jingle: three sines and a gain. The rustle: its noise, a filter and a gain. The punch: a mix, the snap's noise, a
+ * filter and a gain, and the tock's sine and gain.
  */
-const NODES = Object.freeze({ shimmer: 1 + 3 * SHIMMER.NOTES.length, lantern: 4, pop: 3, jingle: JINGLE.BELLS.length + 1, rustle: 3 });
+const NODES = Object.freeze({ shimmer: 1 + 3 * SHIMMER.NOTES.length, lantern: 4, pop: 3, jingle: JINGLE.BELLS.length + 1, rustle: 3, punch: 6 });
 
 const midiToHz = (midi) => 440 * 2 ** ((midi - 69) / 12);
 
@@ -127,6 +137,36 @@ export function createTapSounds(kit, out = kit.buses.effects) {
       const src = parts.source(kit.noise, at, end);
       src.connect(band);
       kit.track(src, NODES.pop, env);
+      return true;
+    },
+
+    punch(at, level = 1) {
+      if (!(level > 0) || !kit.room(NODES.punch)) return false;
+      const P = PUNCH;
+      const top = at + P.ATTACK;
+      const mix = parts.gain(P.LEVEL * level, out);
+      // The snap of paper: noise through the band, in at once and gone over SNAP.
+      const snapEnd = top + P.SNAP + TAIL;
+      const snap = parts.gain(0, mix);
+      snap.gain.setValueAtTime(0, at);
+      snap.gain.linearRampToValueAtTime(1, top);
+      snap.gain.setTargetAtTime(0, top, toSilence(P.SNAP));
+      snap.gain.setValueAtTime(0.001, top + P.SNAP);
+      snap.gain.linearRampToValueAtTime(0, snapEnd);
+      const src = parts.source(kit.noise, at, snapEnd);
+      src.connect(parts.filter('bandpass', P.BAND, P.Q, snap));
+      // The punch's own tock under it, dropping in pitch as it lands.
+      const bodyEnd = top + P.BODY + TAIL;
+      const body = parts.gain(0, mix);
+      body.gain.setValueAtTime(0, at);
+      body.gain.linearRampToValueAtTime(P.BODY_MIX, top);
+      body.gain.setTargetAtTime(0, top, toSilence(P.BODY));
+      body.gain.setValueAtTime(P.BODY_MIX * 0.001, top + P.BODY);
+      body.gain.linearRampToValueAtTime(0, bodyEnd);
+      const tock = parts.tone('sine', P.FROM, body, at, bodyEnd);
+      tock.frequency.setValueAtTime(P.FROM, top);
+      tock.frequency.exponentialRampToValueAtTime(P.TO, top + P.DROP);
+      kit.track(tock, NODES.punch, mix);
       return true;
     },
 
