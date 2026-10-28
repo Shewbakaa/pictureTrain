@@ -29,7 +29,8 @@
 // burner roars and it rises, a balloon cluster hops with a pop and a burst of hearts, a snowman waves and its hat hops
 // with a jingle, a gull squawks and flaps off, a deer looks up and bounds away with a rustle, and the two of them at a
 // stop wave (their pet hops). In the evening a tap on the air scatters the fireflies. The cabin's body hides the world
-// behind it from her taps.
+// behind it from her taps. A phone button beside the Sound button lets her look around by moving her phone
+// (ride/tilt.js), and once she has closed her first card a toast tells her about the taps and the button.
 //
 // At the Day 365 station the ride ends in the finale (finale/finale.js): under a blush fade her seat gives way to
 // the train seen from outside, the two of them meet on the platform (a little dog or cat trots over with him, and doves
@@ -70,7 +71,8 @@ import { createTrainExterior } from './train/exterior.js';
 import { createFinale } from './finale/finale.js';
 import { FINALE_FADE } from './finale/finaleTimes.js';
 import { createRide } from './ride/rideController.js';
-import { attachPointerControls, createLook } from './ride/look.js';
+import { attachPointerControls, createLook, LOOK } from './ride/look.js';
+import { createTilt } from './ride/tilt.js';
 import { createTapRouter } from './ride/taps.js';
 import { createTrainMotion } from './ride/trainMotion.js';
 import { loadProgress, saveProgress } from './progress.js';
@@ -130,6 +132,21 @@ const STATS_EVERY = 0.5;
  * has more than EVENING of the scenery.
  */
 const FIREFLY_TAP = Object.freeze({ REACH: 6, EVENING: 0.5 });
+
+/** The tips once she has closed her first card: the things she can tap, and the tilt button where there is one. */
+const TIPS = Object.freeze({
+  TAPS: 'Psst… some things like being tapped ✨',
+  TILT: 'Psst… some things like being tapped ✨ and tap 📱 to look around by moving your phone',
+});
+
+/** Why tilt could not turn on, by its answer (ride/tilt.js `enable`). */
+const TILT_NOTES = Object.freeze({
+  denied: 'Moving the phone to look needs motion access. You can still drag to look around.',
+  silent: "This phone isn't sharing its motion, so drag to look around.",
+});
+
+/** How long those notes stay up before they leave by themselves (ms): time to read them twice. */
+const NOTE_MS = 7000;
 
 /** How long the blush takes to cover the screen for a jump along the timeline, and again to lift (ms). */
 const JUMP_FADE_MS = 350;
@@ -292,6 +309,12 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   const look = createLook();
   look.setRest((debug.look * Math.PI) / 180);
   look.update(60);
+  // Looking by moving the phone, off until she taps its button. Where she looks is her drag and her phone's turn
+  // together, within the drag's own limits: only the drag part eases back to its rest (towards the sign at a stop),
+  // so "straight ahead" for the phone is that rest.
+  const tilt = createTilt();
+  const viewYaw = () => clamp(look.yaw + tilt.yaw, -LOOK.YAW_LIMIT, LOOK.YAW_LIMIT);
+  const viewPitch = () => clamp(look.pitch + tilt.pitch, LOOK.PITCH_MIN, LOOK.PITCH_MAX);
 
   // The train moving under her. Her phone's wish for less motion is read once, as the ride is built.
   const motion = createTrainMotion();
@@ -415,7 +438,8 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     appState.nextStopIndex = ride.nextStopIndex;
     appState.reachedMax = ride.reachedMax;
     appState.paused = ride.paused;
-    appState.yaw = look.yaw;
+    appState.yaw = viewYaw();
+    appState.tilt = tilt.available ? tilt.state : 'unavailable';
     appState.tunnel = tunnelInside(span, ride.distance);
     if (ambience) {
       appState.ambience = ambience.beds;
@@ -517,16 +541,17 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     elapsed += dt;
     ride.update(dt);
     look.update(dt);
+    tilt.update(dt);
     if (governor.sample(dt)) applyTier();
 
     const d = ride.distance;
     placeRig(d);
     if (finale.active) {
-      // The finale moves the camera itself.
+      // The finale moves the camera itself, so her drags and her phone's turns rest while it plays.
       for (const name of finale.update(dt)) onFinaleEvent(name);
       if (cues) cues.finale(finale.time, finale.bursts); // its own sounds, the sparkle and the fireworks, on its clock
     } else {
-      camera.rotation.set(look.pitch, look.yaw, 0, 'YXZ');
+      camera.rotation.set(viewPitch(), viewYaw(), 0, 'YXZ');
       // The shooting star comes where the train first reaches its place, 40 m before the Day 365 station.
       if (shootingStarDue(prevD, d, layout.finaleDistance)) {
         shootStar();
@@ -570,7 +595,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     }
     if (sfx) {
       sfx.update(ride.speed, d, dt, toStop(d), inside);
-      ambience.update(env, look.yaw, dt, d);
+      ambience.update(env, viewYaw(), dt, d);
       music.setZones(ambience.weights, zonesToLoad(layout.zones, d, musicNear)); // each scene's own music
     }
     for (const spot of roadside) {
@@ -625,7 +650,26 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   const controls = initControls({
     onPauseToggle: () => app.togglePause(),
     onMusicToggle: () => music.toggle(),
+    onTiltToggle: () => toggleTilt(),
   });
+  controls.setTilt(tilt.available ? 'off' : 'unavailable');
+
+  // Her tap on the phone button turns tilt on or off; it stays as she left it for the rest of her visit. Turning it on
+  // asks iOS inside that tap (tilt.enable asks before anything else). If the phone says no, or sends no readings, a
+  // note says why and the button turns itself off again.
+  function toggleTilt() {
+    if (tilt.state === 'on') {
+      tilt.disable();
+      controls.setTilt('off');
+      return;
+    }
+    controls.setTilt('on');
+    tilt.enable().then((answer) => {
+      if (answer === 'on') return;
+      controls.setTilt('off');
+      if (TILT_NOTES[answer]) showToast(TILT_NOTES[answer], { hideAfter: NOTE_MS });
+    });
+  }
   // Her song if content.js names one, each scene's own music otherwise, and the train's sounds beside it. All of it
   // is held while the page is in the background, and fades out while a video or Live Photo plays with its sound.
   const music = createMusic({
@@ -648,6 +692,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     music.setDucked(director.sound);
   };
   let jumping = false; // a timeline jump (or "Ride again") is under way: further ones wait until it has finished
+  let tipsShown = false; // the tips come once a visit, as she closes her first card
 
   function progressText() {
     if (ride.state === 'stopped') return `${ride.stopIndex + 1} of ${total}`;
@@ -770,6 +815,10 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       controls.setPaused(false);
       look.setRest(0);
       ride.continue();
+      if (!tipsShown) {
+        tipsShown = true;
+        showToast(tilt.available ? TIPS.TILT : TIPS.TAPS, { hideAfter: NOTE_MS });
+      }
     },
     jumpTo(index) {
       if (jumping || appState.phase === 'finale') return;

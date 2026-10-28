@@ -608,6 +608,7 @@ body {
    every frame, and blurring it again for four bars each frame costs a phone's GPU for a difference too faint to
    see through 88% cream. */
 #progress-pill,
+#tilt-toggle,
 #music-toggle,
 #pause-toggle,
 #timeline {
@@ -638,6 +639,7 @@ body {
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23e0607e' d='M12 21s-7.4-4.5-9.5-9.1C1 8.6 3 5 6.5 5c2.1 0 3.6 1.2 4.6 2.6.4.5.6.5.9 0C13 6.2 14.4 5 16.5 5 20 5 22 8.6 20.5 11.9 18.4 16.5 12 21 12 21z'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
+#tilt-toggle,
 #music-toggle,
 #pause-toggle {
   flex: none;
@@ -652,11 +654,18 @@ body {
   color: var(--rose-ink);
 }
 
-/* On the right, also when it is alone in the top bar (under the finale's card). */
+/* On the right, also when it is alone in the top bar (under the finale's card), with the tilt button just before it
+   when that shows. */
+#tilt-toggle,
 #music-toggle {
   margin-left: auto;
 }
 
+#tilt-toggle:not([hidden]) + #music-toggle {
+  margin-left: 0;
+}
+
+#tilt-toggle svg,
 #music-toggle svg,
 #pause-toggle svg {
   width: 22px;

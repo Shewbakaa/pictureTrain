@@ -25,6 +25,9 @@
 //   let it go while the page was away), 'refused' (the browser said no) or 'none' (it has no Wake Lock API)
 // lastTap: the name of the last thing in the world her tap hit (ride/taps.js), e.g. 'whistle-cord', 'lantern',
 //   'sky-balloon', 'balloons', 'snowman', 'gull', 'deer', 'couple' or 'pet', or null until one is
+// tilt: looking around by moving the phone (ride/tilt.js): 'off', 'on' (from its first reading after her tap on the
+//   button) or 'unavailable' (the browser has no DeviceOrientationEvent, so there is no button)
+// yaw: where she is looking, + = left (rad): her drag and her phone's turn together, within the look's limits
 //
 // window.__app.debugTargets() (set by app.js once the ride is built) says where each tappable thing in front of her is
 // on the page, and whether the cabin hides it there: [{ name, x, y, hidden }] in CSS px. Like the state, it only reads,
@@ -57,6 +60,7 @@ export const appState = {
   view: 'cabin',
   wakeLock: 'off',
   lastTap: null,
+  tilt: 'off',
 };
 
 if (typeof window !== 'undefined') {

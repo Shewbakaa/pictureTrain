@@ -1,10 +1,15 @@
-// The ride's controls: the progress pill and the Sound button along the top, the pause button beside the
-// timeline along the bottom. The app tells them what to show; they tell the app when they are tapped. Once the
+// The ride's controls: the progress pill, the tilt button and the Sound button along the top, the pause button beside
+// the timeline along the bottom. The app tells them what to show; they tell the app when they are tapped. Once the
 // ride is over, the timeline comes back under the finale's card, and the Sound button with it, since the music
-// plays on; the pill and the pause button stay away, with no stop left to count down to and nothing to pause.
+// plays on; the pill, the tilt button and the pause button stay away, with no stop left to count down to, the finale
+// directing her view, and nothing to pause.
 //
 // The Sound button (#music-toggle) turns all the ride's sound on and off together: the music, the train and the
 // ambience. It is a toggle button named "Sound", pressed while the sound is on, and shows a speaker.
+//
+// The tilt button (#tilt-toggle) turns looking around by moving the phone on and off (ride/tilt.js). It is a toggle
+// button too, pressed while tilt is on, and shows a phone. A browser that cannot tell the page how the phone is held
+// never shows it.
 
 import { dismiss, reveal, setChildren, svgEl } from './dom.js';
 
@@ -32,33 +37,55 @@ const soundIcon = (on) => {
   ]);
 };
 
+/** A phone: with a little sway either side while moving it turns the view, dimmed while it does not. */
+const tiltIcon = (on) => {
+  const line = (d) => svgEl('path', { d, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round' });
+  return icon([
+    svgEl('g', { opacity: on ? 1 : 0.55 }, [
+      svgEl('rect', { x: 8, y: 3.5, width: 8, height: 17, rx: 2, fill: 'none', stroke: 'currentColor', 'stroke-width': 2 }),
+      svgEl('circle', { cx: 12, cy: 17, r: 1.1 }),
+      on ? line('M4.8 8.5a5 5 0 0 0 0 7') : null,
+      on ? line('M19.2 8.5a5 5 0 0 1 0 7') : null,
+    ]),
+  ]);
+};
+
 /**
  * @typedef {{
  *   setPaused: (paused: boolean) => void, setMusic: (state: 'off'|'playing'|'blocked') => void,
+ *   setTilt: (state: 'off'|'on'|'unavailable') => void,
  *   setProgress: (text: string) => void, show: () => void, showTimeline: () => void, hide: () => void,
  * }} Controls
  */
 
 /**
  * Wires the buttons in #topbar and #bottombar. They start hidden; `show` brings both bars in, `showTimeline` only
- * the timeline and the music button (the bars without the progress pill and the pause button).
- * @param {{ onPauseToggle: () => void, onMusicToggle: () => void }} handlers
+ * the timeline and the music button (the bars without the progress pill, the tilt button and the pause button).
+ * `setTilt('unavailable')` hides the tilt button for good.
+ * @param {{ onPauseToggle: () => void, onMusicToggle: () => void, onTiltToggle: () => void }} handlers
  * @returns {Controls}
  */
-export function initControls({ onPauseToggle, onMusicToggle }) {
+export function initControls({ onPauseToggle, onMusicToggle, onTiltToggle }) {
   const topbar = document.getElementById('topbar');
   const bottombar = document.getElementById('bottombar');
   const pill = document.getElementById('progress-pill');
   const pause = document.getElementById('pause-toggle');
+  const tilt = document.getElementById('tilt-toggle');
   const music = document.getElementById('music-toggle');
 
   pill.setAttribute('role', 'status'); // read out as it changes: "Next stop · 3 of 10"
   music.setAttribute('aria-label', 'Sound'); // a toggle: its name stays, aria-pressed says whether it is on
+  tilt.setAttribute('aria-label', 'Look by moving the phone'); // a toggle in the same way
   pause.addEventListener('click', () => onPauseToggle());
   music.addEventListener('click', () => onMusicToggle());
+  tilt.addEventListener('click', () => onTiltToggle());
 
   let shownPaused = null;
   let shownMusic = null;
+  let shownTilt = null;
+  let tiltAvailable = true;
+  let riding = false; // the ride's bars are up (not the finale's), so the tilt button belongs in them
+  const showTilt = () => { tilt.hidden = !(tiltAvailable && riding); };
   const controls = {
     setPaused(paused) {
       if (paused === shownPaused) return;
@@ -73,18 +100,31 @@ export function initControls({ onPauseToggle, onMusicToggle }) {
       setChildren(music, soundIcon(on));
       music.setAttribute('aria-pressed', String(on));
     },
+    setTilt(state) {
+      tiltAvailable = state !== 'unavailable';
+      showTilt();
+      const on = state === 'on';
+      if (on === shownTilt) return;
+      shownTilt = on;
+      setChildren(tilt, tiltIcon(on));
+      tilt.setAttribute('aria-pressed', String(on));
+    },
     setProgress(text) {
       if (pill.textContent !== text) pill.textContent = text;
     },
     show() {
       pill.hidden = false;
       pause.hidden = false;
+      riding = true;
+      showTilt();
       reveal(topbar);
       reveal(bottombar);
     },
     showTimeline() {
       pill.hidden = true;  // no next stop once the ride is over
       pause.hidden = true; // and nothing to pause
+      riding = false;      // and the finale directs her view
+      showTilt();
       reveal(topbar);      // but the music plays on, so the Sound button comes back
       reveal(bottombar);
     },
@@ -94,5 +134,6 @@ export function initControls({ onPauseToggle, onMusicToggle }) {
   };
   controls.setPaused(false);
   controls.setMusic('off');
+  controls.setTilt('off');
   return controls;
 }

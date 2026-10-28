@@ -1,5 +1,5 @@
-// The immersion features: the screen staying awake, the sound hint and her taps on the world; later tasks add to
-// this file.
+// The immersion features: the screen staying awake, the sound hint, her taps on the world and looking around by moving
+// the phone; later tasks add to this file.
 import { test, expect } from '@playwright/test';
 import { useFixture, appState, collectConsoleErrors, waitForPhase } from './helpers.js';
 import { LOOK } from '../../site/src/ride/look.js';
@@ -213,5 +213,133 @@ test('a tap on the two of them at a stop reaches them', async ({ page }) => {
   await page.mouse.up();
   await expect.poll(async () => (await appState(page)).yaw).toBeLessThan(-1);
   await tapTarget(page, 'couple', 1);
+  expect(errors).toEqual([]);
+});
+
+// --- Looking around by moving the phone (Task 15) ---
+
+/**
+ * Before page.goto: a phone that tells the page how it is held. DeviceOrientationEvent is there (Playwright's Chromium
+ * has none, so a bare one stands in), and with a `permission` it has iOS's requestPermission, answering
+ * window.__permission (`permission` to start with). window.__hold(alpha, beta, gamma) says how the phone is held; from
+ * then on it sends that reading every 50 ms, as a phone's sensor keeps doing. WebKit will not make a
+ * DeviceOrientationEvent for a page, so a plain Event carries the angles.
+ */
+async function stubOrientation(page, { permission } = {}) {
+  await page.addInitScript((answer) => {
+    if (!('DeviceOrientationEvent' in window)) window.DeviceOrientationEvent = class DeviceOrientationEvent extends Event {};
+    if (answer !== null) {
+      window.__permission = answer;
+      window.DeviceOrientationEvent.requestPermission = async () => window.__permission;
+    }
+    let held = null;
+    window.__hold = (alpha, beta, gamma) => { held = { alpha, beta, gamma }; };
+    setInterval(() => {
+      if (held) window.dispatchEvent(Object.assign(new Event('deviceorientation'), held));
+    }, 50);
+  }, permission ?? null);
+}
+
+const TIPS = 'Psst… some things like being tapped ✨';
+const TIPS_WITH_TILT = `${TIPS} and tap 📱 to look around by moving your phone`;
+
+test('the phone button turns tilt on, and turning the phone turns her view', async ({ page }, testInfo) => {
+  const errors = collectConsoleErrors(page);
+  await useFixture(page);
+  // iOS asks her first; Android just sends readings.
+  await stubOrientation(page, { permission: testInfo.project.name === 'iphone' ? 'granted' : undefined });
+  await page.goto('index.html?at=60');
+  await expect.poll(async () => (await appState(page)).mode).toBe('3d');
+  const button = page.getByRole('button', { name: 'Look by moving the phone' });
+  await expect(button).toHaveAttribute('aria-pressed', 'false');
+  expect((await appState(page)).tilt).toBe('off');
+  await page.evaluate(() => window.__hold(0, 90, 0)); // upright in portrait: straight ahead once tilt is on
+  await button.click();
+  await expect(button).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => (await appState(page)).tilt).toBe('on');
+  const before = (await appState(page)).yaw;
+  expect(Math.abs(before)).toBeLessThan(0.01);
+
+  await page.evaluate(() => window.__hold(30, 90, 0)); // she turns 30 degrees to her left
+  await expect.poll(async () => (await appState(page)).yaw - before, { timeout: 1000 }).toBeCloseTo(0.5236, 1);
+  await expect.poll(async () => (await appState(page)).yaw - before).toBeCloseTo(0.5236, 2);
+
+  // Off again: the view eases back to straight ahead.
+  await button.click();
+  await expect(button).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(async () => (await appState(page)).tilt).toBe('off');
+  await expect.poll(async () => Math.abs((await appState(page)).yaw - before)).toBeLessThan(0.01);
+  expect(errors).toEqual([]);
+});
+
+test('when the phone says no, or sends nothing, a note says why and the button turns itself off', async ({ page }) => {
+  const errors = collectConsoleErrors(page);
+  await useFixture(page);
+  await stubOrientation(page, { permission: 'denied' });
+  await page.goto('index.html?at=60');
+  await expect.poll(async () => (await appState(page)).mode).toBe('3d');
+  const button = page.getByRole('button', { name: 'Look by moving the phone' });
+  const toast = page.locator('#toast');
+  await button.click();
+  await expect(toast).toHaveText('Moving the phone to look needs motion access. You can still drag to look around.');
+  await expect(button).toHaveAttribute('aria-pressed', 'false');
+  expect((await appState(page)).tilt).toBe('off');
+
+  // Allowed this time, but no reading ever comes: a second later it gives up.
+  await page.evaluate(() => { window.__permission = 'granted'; });
+  await button.click();
+  await expect(button).toHaveAttribute('aria-pressed', 'true');
+  await expect(toast).toHaveText("This phone isn't sharing its motion, so drag to look around.");
+  await expect(button).toHaveAttribute('aria-pressed', 'false');
+  expect((await appState(page)).tilt).toBe('off');
+  expect(errors).toEqual([]);
+});
+
+test('the tips come once she has closed her first card, and leave by themselves', async ({ page }) => {
+  const errors = collectConsoleErrors(page);
+  await useFixture(page);
+  await stubOrientation(page);
+  await page.goto('index.html?speed=25');
+  await page.getByRole('button', { name: 'Begin the ride' }).click();
+  await expect(page.locator('#stop-card')).toContainText('First coffee');
+  const toast = page.locator('#toast');
+  await expect(toast).toBeHidden();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(toast).toHaveText(TIPS_WITH_TILT);
+  await expect(toast).toBeHidden({ timeout: 10000 });
+  // Once a visit: the next card's Continue brings no tips.
+  await expect(page.locator('#stop-card')).toContainText('Rainy walk');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.waitForTimeout(500);
+  await expect(toast).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('without DeviceOrientationEvent there is no phone button, and the tips leave it out', async ({ page }) => {
+  const errors = collectConsoleErrors(page);
+  await useFixture(page);
+  await page.addInitScript(() => { delete window.DeviceOrientationEvent; });
+  await page.goto('index.html?speed=25');
+  await page.getByRole('button', { name: 'Begin the ride' }).click();
+  await expect(page.locator('#stop-card')).toContainText('First coffee');
+  await expect(page.locator('#music-toggle')).toBeVisible();
+  await expect(page.locator('#tilt-toggle')).toBeHidden();
+  expect((await appState(page)).tilt).toBe('unavailable');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.locator('#toast')).toHaveText(TIPS);
+  expect(errors).toEqual([]);
+});
+
+test('the phone button stays away in the finale, which directs her view, and comes back for Ride again', async ({ page }) => {
+  const errors = collectConsoleErrors(page);
+  await useFixture(page);
+  await stubOrientation(page);
+  await page.goto('index.html?finale=1');
+  await waitForPhase(page, 'done');
+  await expect(page.locator('#music-toggle')).toBeVisible();
+  await expect(page.locator('#tilt-toggle')).toBeHidden();
+  await page.getByRole('button', { name: 'Ride again' }).click();
+  await waitForPhase(page, 'riding');
+  await expect(page.locator('#tilt-toggle')).toBeVisible();
   expect(errors).toEqual([]);
 });
