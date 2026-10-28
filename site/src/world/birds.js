@@ -128,7 +128,7 @@ const Z_AXIS = new Vector3(0, 0, 1);
  * A flat plate on the corners of a convex polygon (each [x, y, z], in order round its edge), `thick` metres thick
  * and closed all round: a panel of a wing, or a tail.
  */
-function plate(corners, thick) {
+export function plate(corners, thick) {
   const c = corners.map((p) => new Vector3(...p));
   const n = c.length;
   // Newell's normal: square to the plate, whichever way round its corners go.
@@ -250,15 +250,15 @@ const MODELS = {
 };
 
 /**
- * The geometry of one kind of bird, life size: non-indexed, with `position`, flat `normal` and linear `color` (as
- * geo.js `mergeParts` gives) and `wing`, a float for each vertex: 0 on the body, and on a wing how far out from the
- * shoulder towards the tip it is (0 to 1), negative on the left wing (−X). A fresh geometry every call.
- * @param {BirdKind} kind
+ * The geometry of a winged creature from its model, life size: non-indexed, with `position`, flat `normal` and linear
+ * `color` (as geo.js `mergeParts` gives) and `wing`, a float for each vertex: 0 on the body, and on a wing how far out
+ * from the shoulder towards the tip it is (0 to 1), negative on the left wing (−X). A fresh geometry every call. The
+ * model is the body's parts, the right wing's parts (the left is its mirror) and the wing's shoulder, [x, y], where
+ * it meets the body, as `MODELS` has them; the butterflies (butterflies.js) have a model of their own.
+ * @param {{ body: import('../util/geo.js').Part[], wing: import('../util/geo.js').Part[], shoulder: [number, number] }} model
  * @returns {BufferGeometry}
  */
-export function birdGeometry(kind) {
-  if (!BIRD_KINDS.includes(kind)) throw new Error(`birdGeometry: "${kind}" is not a kind of bird`);
-  const { body, wing, shoulder: [sx, sy] } = MODELS[kind]();
+export function wingedGeometry({ body, wing, shoulder: [sx, sy] }) {
   const pieces = [
     { geometry: mergeParts(body), side: 0 },
     { geometry: mergeParts(wing), side: 1 },
@@ -279,6 +279,16 @@ export function birdGeometry(kind) {
   const geometry = triangleSoup(positions, colours);
   geometry.setAttribute('wing', new Float32BufferAttribute(wings, 1));
   return geometry;
+}
+
+/**
+ * The geometry of one kind of bird, life size (`wingedGeometry` of its model). A fresh geometry every call.
+ * @param {BirdKind} kind
+ * @returns {BufferGeometry}
+ */
+export function birdGeometry(kind) {
+  if (!BIRD_KINDS.includes(kind)) throw new Error(`birdGeometry: "${kind}" is not a kind of bird`);
+  return wingedGeometry(MODELS[kind]());
 }
 
 // ---------------------------------------------------------------------------------------------------------------

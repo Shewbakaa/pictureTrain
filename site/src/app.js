@@ -8,7 +8,8 @@
 // curls from the chimneys of the houses and of the station house. The track runs through a hill into winter, and the
 // world's light dims while she is in the tunnel, the world's sounds go muffled and the train's sounds echo. Birds go
 // with the sounds: a flock of songbirds crosses the spring sky, gulls loop over the summer sea (one flaps and banks as
-// a gull calls) and robins on the winter fences flutter off as the train comes.
+// a gull calls) and robins on the winter fences flutter off as the train comes. Butterflies flutter low over the spring
+// meadow, and two deer stand at the autumn forest's edge and lift their heads as the train comes by.
 //
 // On top of it sits the ride UI: the intro card, a card at every stop, the timeline, the controls and the progress
 // pill, with the furthest moment she has reached remembered across reloads. If the phone takes the GPU away
@@ -49,6 +50,8 @@ import { SWAY_LOW_MATERIAL, SWAY_MATERIAL, updateWind, windStrength } from './wo
 import { createStation, START_STATION_DISTANCE } from './world/stations.js';
 import { createSkyDecor } from './world/skyDecor.js';
 import { BIRD_MATERIAL, createBirds } from './world/birds.js';
+import { createButterflies } from './world/butterflies.js';
+import { createDeer } from './world/deer.js';
 import { createAmbientParticles } from './world/particles.js';
 import { createPhotoSign, placeCouple, placeSign, SIGN, signLookYaw, signTurn, turnSign } from './world/signs.js';
 import { createCouple } from './world/figures.js';
@@ -186,7 +189,10 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   const smoke = createSmoke([...dressing.spots.chimneys, finaleStation.userData.chimney]);
   // Songbirds, gulls and robins, the robins on the fences and snowmen.
   const birds = createBirds({ path, perches: dressing.spots.perches });
-  scene.add(dressing.group, skyDecor.group, nightSky.group, particles.points, smoke.points, birds.group);
+  // Butterflies over the spring meadow (keeping clear of the photo signs), and the deer at the autumn forest's edge.
+  const butterflies = createButterflies({ path, layout });
+  const deer = createDeer({ layout, path });
+  scene.add(dressing.group, skyDecor.group, nightSky.group, particles.points, smoke.points, birds.group, butterflies.mesh, deer.group);
 
   // A photo sign at every stop, and the two of them beside every other one.
   const signs = new Group();
@@ -281,7 +287,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   /** @type {Array<(particles: number) => void>} */
   const onParticles = [];
   onDensity.push(dressing.setDensity, smoke.setDensity, birds.setDensity); // the smoke and the robins go with their prop
-  onParticles.push(particles.setQuality, smoke.setQuality, birds.setQuality);
+  onParticles.push(particles.setQuality, smoke.setQuality, birds.setQuality, butterflies.setQuality);
   function applyTier() {
     const tier = governor.settings();
     stage.setPixelRatio(effectivePixelRatio(tier, window.devicePixelRatio));
@@ -487,6 +493,8 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     particles.update(dt, env, eye, inside); // nothing falls in the tunnel
     smoke.update(dt, eye);
     birds.update(dt, env, eye, d, camera.getWorldDirection(view)); // a gull call is answered where she is looking
+    butterflies.update(dt, env, eye, d); // their wings flap on the birds' clock, which birds.update keeps
+    deer.update(dt, d, elapsed);
     dressing.update(dt, elapsed);
     updateWind(elapsed, windStrength(env));
     cabin.update(dt, ride.speed, elapsed);
