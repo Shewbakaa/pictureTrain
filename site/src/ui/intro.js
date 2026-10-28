@@ -13,12 +13,13 @@ const ROUTE = 'From Day 1 · To Day 365';
 const SEAT = 'Seat: by the window';
 
 /**
- * How long the ticket takes to leave once punched (ms), counted from the call: the punch, the stub tearing off and the
- * slide away, the last of which (`.ticket.punched` in styles.css) ends 640 ms after the first frame. The rest is for
- * the tap's other work (starting the ride), which can hold that first frame back: a ticket is never still up a
- * second after her tap.
+ * The most the ticket may take to leave once punched (ms), counted from the call: it is cleared away at the latest by
+ * then, even if its slide never ends (a page in the background, an animation the browser skipped).
  */
-export const PUNCH_MS = 680;
+export const LEAVE_CAP_MS = 900;
+
+/** The animation (styles.css) that ends the leaving: the main part sliding up and out, after the stub has torn off. */
+const SLIDE = 'ticket-away';
 
 /** A hand-drawn wave under the title (the 2D story, fallback.js, draws it under its title too). */
 export function squiggle() {
@@ -99,10 +100,11 @@ export function showIntro(content, { onBegin }) {
 
 /**
  * Takes the ticket away. A punch clips the heart out of its stub, the stub tears off and the ticket slides away (the
- * `punched` class, which styles.css animates), PUNCH_MS in all; the returned promise resolves once it is gone. The
- * ride does not wait for it: the train sets off the moment she taps, and until the ticket has gone it lets her taps
- * through to the view behind it. With reduced motion there is no punch, and the card is gone at once, the promise
- * already resolved.
+ * `punched` class, which styles.css animates); the returned promise resolves once it is gone. It is gone the moment its
+ * slide ends, so it never pops out part of the way up (the slide starts with the next frame, which the rest of her tap,
+ * starting the ride, can hold back a little), and in any case within LEAVE_CAP_MS. The ride does not wait for it: the
+ * train sets off the moment she taps, and until the ticket has gone it lets her taps through to the view behind it.
+ * With reduced motion there is no punch, and the card is gone at once, the promise already resolved.
  * @returns {Promise<void>}
  */
 export function hideIntro() {
@@ -115,12 +117,22 @@ export function hideIntro() {
   }
   card.classList.add('punched', 'is-leaving');
   leaving = new Promise((resolve) => {
-    setTimeout(() => {
+    let cap = 0;
+    const gone = () => {
+      clearTimeout(cap);
+      card.removeEventListener('animationend', slid);
+      card.removeEventListener('animationcancel', slid);
       leaving = null;
       card.hidden = true;
       card.classList.remove('is-leaving');
       resolve();
-    }, PUNCH_MS);
+    };
+    const slid = (event) => {
+      if (event.animationName === SLIDE) gone();
+    };
+    card.addEventListener('animationend', slid);
+    card.addEventListener('animationcancel', slid);
+    cap = setTimeout(gone, LEAVE_CAP_MS);
   });
   return leaving;
 }

@@ -802,7 +802,11 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       if (appState.phase !== 'intro') return;
       music.start(); // first, while her tap is still being handled: phones only let sound start from a tap
       wakeLock = keepAwake(); // the screen stays on for the ride, and the hold is asked for again whenever the page returns
-      sfx.play('punch'); // the click of the ticket punch, as the sound comes on
+      try {
+        sfx.play('punch'); // the click of the ticket punch, as the sound comes on
+      } catch (error) {
+        console.warn('[app] The ticket punch could not sound.', error); // nothing about the ticket may stop the ride
+      }
       hideIntro(); // the ticket's own leaving takes a moment, but the ride does not wait for it
       ride.start();
       sfx.depart(); // the whistle waits the moment it takes the browser to let the sound run

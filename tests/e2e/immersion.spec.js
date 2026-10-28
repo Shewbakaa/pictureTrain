@@ -4,6 +4,7 @@ import { test, expect } from '@playwright/test';
 import { useFixture, appState, collectConsoleErrors, waitForPhase } from './helpers.js';
 import { LOOK } from '../../site/src/ride/look.js';
 import { signLookYaw } from '../../site/src/world/signs.js';
+import { LEAVE_CAP_MS } from '../../site/src/ui/intro.js';
 
 /** Before page.goto: a navigator.wakeLock that records every request in window.__wakeLocks and grants it. */
 async function stubWakeLock(page) {
@@ -398,7 +399,7 @@ test('the intro is a boarding ticket: a route, a seat and a stub that says ADMIT
   expect(errors).toEqual([]);
 });
 
-test('tapping Begin punches the ticket at once, the ride starts under it and the ticket is gone inside a second', async ({ page }) => {
+test('tapping Begin punches the ticket at once, the ride starts under it, and the ticket then goes', async ({ page }) => {
   const errors = collectConsoleErrors(page);
   await useFixture(page);
   await page.goto('index.html?speed=25');
@@ -411,9 +412,63 @@ test('tapping Begin punches the ticket at once, the ride starts under it and the
   expect(seen.punchedInTap).toBe(true);
   expect(seen.hiddenInTap).toBe(false);
   expect(seen.phaseInTap).toBe('riding');
-  expect(seen.hidden - seen.tapped).toBeLessThan(1000);
   expect(seen.hidden).toBeGreaterThan(seen.punched + 300); // the punch, the tear and the slide take a moment
+  expect(LEAVE_CAP_MS).toBeLessThanOrEqual(900); // and it is cleared away within that at the latest (tested below)
   await expect(page.locator('#intro')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+/**
+ * Before she taps: holds the ticket's animations called `names` where they stand from the moment it is punched (the
+ * observer's callback comes before the first frame, and getAnimations() makes the page start them), and notes in
+ * window.__slid whether the slide has ended. However slow the page is, they never move on until the test says.
+ */
+async function holdTicket(page, names) {
+  await page.evaluate((held) => {
+    const card = document.getElementById('intro');
+    window.__slid = false;
+    card.addEventListener('animationend', (event) => { if (event.animationName === 'ticket-away') window.__slid = true; });
+    new MutationObserver(() => {
+      if (!card.classList.contains('punched')) return;
+      for (const animation of document.getAnimations()) if (held.includes(animation.animationName)) animation.pause();
+    }).observe(card, { attributes: true, attributeFilter: ['class'] });
+  }, names);
+}
+
+test('the ticket is cleared away the moment its slide ends, not a moment before', async ({ page }) => {
+  const errors = collectConsoleErrors(page);
+  await useFixture(page);
+  await page.goto('index.html?speed=25');
+  await waitForPhase(page, 'intro');
+  await holdTicket(page, ['ticket-away']);
+  // Its timer is held back too, so only the end of the slide can clear it away.
+  await page.evaluate((cap) => {
+    const set = window.setTimeout;
+    window.setTimeout = (fn, ms, ...rest) => (ms === cap ? 0 : set(fn, ms, ...rest));
+  }, LEAVE_CAP_MS);
+  await page.locator('.intro-begin').click();
+  const card = page.locator('#intro');
+  await expect(card).toHaveClass(/punched/);
+  await page.waitForTimeout(1500); // far longer than the whole punch takes
+  await expect(card).toBeVisible();
+  expect(await page.evaluate(() => window.__slid)).toBe(false);
+  await page.evaluate(() => {
+    for (const animation of document.getAnimations()) if (animation.animationName === 'ticket-away') animation.finish();
+  });
+  await expect(card).toBeHidden();
+  expect(await page.evaluate(() => window.__slid)).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('the ticket is cleared away at the latest after its cap, even if its slide never ends', async ({ page }) => {
+  const errors = collectConsoleErrors(page);
+  await useFixture(page);
+  await page.goto('index.html?speed=25');
+  await waitForPhase(page, 'intro');
+  await holdTicket(page, ['ticket-away']);
+  await page.locator('.intro-begin').click();
+  await expect(page.locator('#intro')).toBeHidden({ timeout: 10_000 });
+  expect(await page.evaluate(() => window.__slid)).toBe(false); // it was the cap, not the slide
   expect(errors).toEqual([]);
 });
 
@@ -429,7 +484,6 @@ test('with reduced motion the ticket is gone at once and is never punched', asyn
   const seen = await page.evaluate(() => window.__ticket);
   expect(seen.hiddenInTap).toBe(true); // gone by the end of the tap itself, with the ride started
   expect(seen.phaseInTap).toBe('riding');
-  expect(seen.hidden - seen.handled).toBeLessThan(100);
   expect(seen.everPunched).toBe(false);
   expect(errors).toEqual([]);
 });

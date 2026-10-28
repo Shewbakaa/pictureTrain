@@ -471,7 +471,7 @@ body {
 }
 
 /* Punched: the heart is cut out at once, the stub gives a little with the punch and then tears off and falls away, and
-   the ticket slides up and out. It is all over within PUNCH_MS (ui/intro.js), which the last of these ends inside. */
+   the ticket slides up and out. The ticket is cleared away when its slide (the last of these) ends (ui/intro.js). */
 .ticket.punched .ticket-hole::before {
   animation: punch-hole 0.12s ease-out both;
 }
