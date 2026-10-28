@@ -12,11 +12,12 @@
 // A deer answers her tap (`targets`, ride/taps.js): it looks up at her, flicks its ears, and bounds off out into the
 // trees, gone until the train is well past (BOUND).
 //
-// They stand where the autumn's scenery is, DEER.SPOTS of the way through the autumn zone and OFFSET metres from the
-// track, on the ground there (terrain.js `terrainHeight`, with the sea and the tunnel's hill where there are any). The
-// hooves reach HOOF metres below the ground they stand on, which the coarse ground mesh and a slope under the four of
-// them need, so no deer floats. A ride with no autumn has none. They are drawn only while the train is within RANGE
-// metres of them, which is more than the fog lets her see.
+// They stand where the autumn's scenery is, between its stops and clear of them and of the tunnel (`deerSpots`), so
+// that no deer is hidden behind a photo sign when the train stops and her view turns to it, OFFSET metres from the
+// track, on the ground there (terrain.js `terrainHeight`, with the sea where there is any). The hooves reach HOOF
+// metres below the ground they stand on, which the coarse ground mesh and a slope under the four of them need, so no
+// deer floats. A ride with no autumn has none, and an autumn with no room clear of its stops has fewer. They are drawn
+// only while the train is within RANGE metres of them, which is more than the fog lets her see.
 //
 // DOM-free at import, so the Node unit tests can import it.
 
@@ -30,18 +31,26 @@ import { smoothstep } from '../util/math.js';
 import { createRng, rngRange } from '../util/rng.js';
 
 /**
- * SPOTS: where each deer stands, as a share of the autumn zone's length from its start. The sides alternate, the first
- * on the right (the track's right when the train faces ahead). OFFSET: how far out from the track (m), each deer
- * somewhere between these. HEAD_UP: how far (rad) the head and neck lift, turning about the withers.
+ * SPOTS: where the deer may stand too, as a share of the autumn zone's length from its start, when the autumn has
+ * fewer than two places between its stops (`deerSpots`); there are as many deer as SPOTS at most. The sides alternate,
+ * the first on the right (the track's right when the train faces ahead). OFFSET: how far out from the track (m), each
+ * deer somewhere between these. HEAD_UP: how far (rad) the head and neck lift, turning about the withers. STOP_CLEAR
+ * and TUNNEL_CLEAR: how far (m, along the track) a deer stands at least from every stop, where it would be behind the
+ * photo sign, and from the tunnel.
  */
 export const DEER = Object.freeze({
   SPOTS: Object.freeze([0.3, 0.7]),
   OFFSET: Object.freeze([14, 18]),
   HEAD_UP: 0.55,
+  STOP_CLEAR: 25,
+  TUNNEL_CLEAR: 20,
 });
 
-/** The head starts to come up when the train is this far from the deer (m, along the track), and is fully up at NEAR. */
-const LIFT = Object.freeze({ FAR: 35, NEAR: 12 });
+/**
+ * The head starts to come up when the train is this far from the deer (m, along the track), and is fully up at NEAR:
+ * far enough ahead that a deer OFFSET out is still in a portrait phone's view (about ±21°) as she looks ahead.
+ */
+const LIFT = Object.freeze({ FAR: 70, NEAR: 40 });
 
 /**
  * How the deer stand. TURN: how far (rad) round from facing back along the track, at the train coming, to facing the
@@ -76,7 +85,7 @@ const TAU = Math.PI * 2;
 
 /**
  * How far the train is from a deer (m, `along` positive when the deer is ahead): how far its head is up, from 0, down,
- * when the train is further than 35 m off, to 1, up, within 12 m. It stays up as the train passes, and after it.
+ * when the train is further than 70 m off, to 1, up, within 40 m. It stays up as the train passes, and after it.
  * @param {number} along
  * @returns {number}  0 to 1
  */
@@ -175,6 +184,26 @@ function earFlick(since) {
 // ---------------------------------------------------------------------------------------------------------------
 
 /**
+ * Where the deer stand (m along the track, in order), in the `autumn` of `layout`: halfway between one and the next of
+ * the autumn's start, its stops and its end, the first two of those that are at least STOP_CLEAR from every stop and
+ * TUNNEL_CLEAR from the tunnel (`tunnel`, or null). Only if fewer than two are clear are SPOTS of the way through the
+ * autumn tried too, held to the same: a deer is left out rather than stood behind a photo sign.
+ * @param {import('./layout.js').Layout} layout
+ * @param {import('./layout.js').ZoneSeg} autumn
+ * @param {import('./tunnel.js').TunnelSpan|null} tunnel
+ * @returns {number[]}
+ */
+function deerSpots(layout, autumn, tunnel) {
+  const { STOP_CLEAR, TUNNEL_CLEAR, SPOTS } = DEER;
+  const edges = [autumn.start, ...layout.stops.filter((stop) => stop.zone === autumn.id).map((stop) => stop.distance), autumn.end];
+  const halfway = edges.slice(1).map((edge, i) => (edges[i] + edge) / 2);
+  const shares = SPOTS.map((share) => autumn.start + share * (autumn.end - autumn.start));
+  const clear = (d) => layout.stops.every((stop) => Math.abs(stop.distance - d) >= STOP_CLEAR)
+    && !(tunnel && d > tunnel.from - TUNNEL_CLEAR && d < tunnel.to + TUNNEL_CLEAR);
+  return [...halfway, ...shares].filter(clear).slice(0, SPOTS.length).sort((a, b) => a - b);
+}
+
+/**
  * The deer of the ride.
  * @param {{ layout: import('./layout.js').Layout, path: import('./trackPath.js').TrackPath }} options
  * @returns {{
@@ -209,8 +238,7 @@ export function createDeer({ layout, path }) {
    */
   const standing = [];
   if (autumn) {
-    DEER.SPOTS.forEach((share, k) => {
-      const distance = autumn.start + share * (autumn.end - autumn.start);
+    deerSpots(layout, autumn, tunnel).forEach((distance, k) => {
       const side = k % 2 === 0 ? 1 : -1;
       const offset = side * rngRange(rng, ...DEER.OFFSET);
       const lie = { water: envAt(layout, distance, env).water, tunnel };

@@ -16,6 +16,11 @@ const layoutOf = (zones, quiet = []) => buildLayout(normalizeContent({
   zones,
   moments: zones.flatMap((zone) => (quiet.includes(zone) ? [] : [{ zone }, { zone }])),
 }).content);
+/** The ride through `zones`, with `counts[zone]` moments in a zone and two in every other. */
+const layoutWith = (zones, counts) => buildLayout(normalizeContent({
+  zones,
+  moments: zones.flatMap((zone) => Array.from({ length: zone in counts ? counts[zone] : 2 }, () => ({ zone }))),
+}).content);
 const pathOf = (layout) => createTrackPath(layout.total, TRACK.SEED, { straightRanges: [[0, 120], [layout.finaleDistance - 90, layout.total + 60]] });
 const DEFAULT_ZONES = ['spring', 'summer', 'autumn', 'winter', 'evening'];
 const L = layoutOf(DEFAULT_ZONES);
@@ -30,18 +35,20 @@ test('the numbers the deer are made of', () => {
   assert.deepEqual([...DEER.SPOTS], [0.3, 0.7]);
   assert.deepEqual([...DEER.OFFSET], [14, 18]);
   assert.equal(DEER.HEAD_UP, 0.55);
+  assert.equal(DEER.STOP_CLEAR, 25);
+  assert.equal(DEER.TUNNEL_CLEAR, 20);
 });
 
-test('the head is down far off, comes up from 35 m and is fully up by 12 m', () => {
-  assert.equal(deerHeadLift(80), 0);
-  assert.equal(deerHeadLift(35), 0);
-  assert.equal(deerHeadLift(12), 1);
+test('the head is down far off, comes up from 70 m and is fully up by 40 m, while a deer 14 to 18 m out is still ahead in a portrait view', () => {
+  assert.equal(deerHeadLift(100), 0);
+  assert.equal(deerHeadLift(70), 0);
+  assert.equal(deerHeadLift(40), 1);
   assert.equal(deerHeadLift(0), 1, 'it stays up as the train passes it');
   assert.equal(deerHeadLift(-40), 1, 'and as the train leaves it behind');
   assert.equal(deerHeadLift(NaN), 0);
-  assert.ok(deerHeadLift(24) > 0 && deerHeadLift(24) < 1, 'part-way in between');
+  assert.ok(deerHeadLift(55) > 0 && deerHeadLift(55) < 1, 'part-way in between');
   let last = 0;
-  for (let along = 80; along >= -20; along -= 0.5) {
+  for (let along = 100; along >= -20; along -= 0.5) {
     const lift = deerHeadLift(along);
     assert.ok(lift >= 0 && lift <= 1, `${along}: ${lift}`);
     assert.ok(lift >= last, `${along}: the head only comes up as the train comes on (${lift} after ${last})`);
@@ -49,15 +56,19 @@ test('the head is down far off, comes up from 35 m and is fully up by 12 m', () 
   }
 });
 
-test('the default ride has a deer 30% and 70% of the way through the autumn, on alternate sides, out in the trees', () => {
+test('the default ride has a deer halfway between the autumn\'s start and its first stop, and between its two stops, on alternate sides, out in the trees', () => {
   const { group, targets } = createDeer({ layout: L, path: PATH });
   assert.ok(group.isGroup);
   assert.equal(group.children.length, 2);
   assert.equal(targets.length, 2, 'one to tap for each');
   const autumn = autumnOf(L);
+  const stops = L.stops.filter((stop) => stop.zone === 'autumn').map((stop) => stop.distance);
+  assert.deepEqual([autumn.start, ...stops], [390, 445, 515], 'her ride\'s autumn, and the fixture\'s');
+  const spots = [(autumn.start + stops[0]) / 2, (stops[0] + stops[1]) / 2];
+  assert.deepEqual(spots, [417.5, 480]);
   group.children.forEach((deer, k) => {
     const { distance, offset } = deer.userData;
-    assert.ok(Math.abs(distance - (autumn.start + DEER.SPOTS[k] * (autumn.end - autumn.start))) < 1e-9, `deer ${k} is ${distance} m along`);
+    assert.ok(Math.abs(distance - spots[k]) < 1e-9, `deer ${k} is ${distance} m along`);
     assert.ok(distance > autumn.start && distance < autumn.end, 'inside the autumn');
     assert.equal(Math.sign(offset), k % 2 === 0 ? 1 : -1, 'the first is on the right, the next on the left');
     assert.ok(Math.abs(offset) >= DEER.OFFSET[0] && Math.abs(offset) <= DEER.OFFSET[1], `${Math.abs(offset)} m out`);
@@ -98,17 +109,47 @@ test('each deer stands on the ground where it is', () => {
   }
 });
 
-test('a deer by the tunnel stands on its hill', () => {
-  // An autumn with no moments is 40 m long, so its second deer is 12 m short of the winter's tunnel, whose hill rises there.
-  const layout = layoutOf(['spring', 'autumn', 'winter', 'evening'], ['autumn']);
-  const path = pathOf(layout);
+/** Each deer of `layout`: how far along it stands, and how far that is from the nearest stop and from the tunnel. */
+function clearOf(layout) {
   const span = tunnelSpan(layout);
-  const { group } = createDeer({ layout, path });
-  assert.equal(group.children.length, 2);
-  const high = group.children.find((deer) => deer.userData.distance > span.from);
-  const ground = terrainHeight(high.userData.distance, high.userData.offset, { water: 0, tunnel: span });
-  assert.ok(ground > 3, `the hill is ${ground} m up there`);
-  assert.ok(Math.abs(high.position.y - ground) <= 0.05, `${high.position.y} on ground ${ground}`);
+  const { group } = createDeer({ layout, path: pathOf(layout) });
+  return group.children.map((deer) => {
+    const { distance } = deer.userData;
+    return {
+      distance,
+      stop: Math.min(...layout.stops.map((stop) => Math.abs(stop.distance - distance))),
+      tunnel: span ? Math.max(0, span.from - distance, distance - span.to) : Infinity,
+    };
+  });
+}
+
+test('no deer stands within 25 m of a stop, where it would be behind the photo sign, nor within 20 m of the tunnel', () => {
+  const rides = [
+    ['the default ride', L, 2],
+    ['an autumn of one moment, before the tunnel', layoutWith(DEFAULT_ZONES, { autumn: 1 }), 1],
+    ['an autumn of three moments', layoutWith(DEFAULT_ZONES, { autumn: 3 }), 2],
+    ['an autumn of one moment, first', layoutWith(['autumn', 'spring', 'winter', 'evening'], { autumn: 1 }), 2],
+    ['an autumn of three moments, after the tunnel', layoutWith(['spring', 'winter', 'autumn', 'evening'], { autumn: 3 }), 2],
+    ['an autumn with no moments, between two zones', layoutWith(['spring', 'autumn', 'summer', 'winter', 'evening'], { autumn: 0 }), 2],
+  ];
+  for (const [ride, layout, count] of rides) {
+    const autumn = autumnOf(layout);
+    const herd = clearOf(layout);
+    assert.equal(herd.length, count, `${ride}: ${herd.length} deer`);
+    for (const { distance, stop, tunnel } of herd) {
+      assert.ok(distance > autumn.start && distance < autumn.end, `${ride}: ${distance} m is in the autumn`);
+      assert.ok(stop >= DEER.STOP_CLEAR, `${ride}: the deer at ${distance} m is ${stop} m from a stop`);
+      assert.ok(tunnel >= DEER.TUNNEL_CLEAR, `${ride}: the deer at ${distance} m is ${tunnel} m from the tunnel`);
+    }
+  }
+});
+
+test('an autumn too short to keep a deer clear of the stops and the tunnel has none, rather than one by a sign', () => {
+  // An autumn with no moments is 40 m long, and right before the winter's tunnel every spot in it is within 20 m of it.
+  const layout = layoutOf(['spring', 'autumn', 'winter', 'evening'], ['autumn']);
+  const { group, targets } = createDeer({ layout, path: pathOf(layout) });
+  assert.equal(group.children.length, 0);
+  assert.deepEqual(targets, []);
 });
 
 test('a ride with no autumn has no deer', () => {
@@ -131,7 +172,7 @@ test('a deer lifts its head by HEAD_UP as the train comes near, and not before',
   assert.ok(Math.abs(head.rotation.x + DEER.HEAD_UP) < 1e-9, 'up by HEAD_UP (the nose swings up, which is a turn the other way about X)');
   // On the way in, the head comes up steadily.
   let last = Infinity;
-  for (let along = 35; along >= 12; along -= 1) {
+  for (let along = 70; along >= 40; along -= 1) {
     update(1 / 30, at - along, 5);
     assert.ok(head.rotation.x <= last + 1e-9, `${along} m: ${head.rotation.x}`);
     last = head.rotation.x;
@@ -183,7 +224,7 @@ test('a deer she taps looks up, flicks its ears, bounds off 20 m in 1.5 s and hi
   const [deer] = herd.group.children;
   const { head, ears } = partsOf(deer);
   const at = deer.userData.distance;
-  const d = at - 60; // far enough that its head is down, grazing
+  const d = at - 90; // far enough that its head is down, grazing
   herd.update(1 / 30, d, 3);
   const home = deer.position.clone();
   const fx = effects();
