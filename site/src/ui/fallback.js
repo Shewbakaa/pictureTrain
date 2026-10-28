@@ -4,10 +4,13 @@
 // whole, its date, title and caption, and at the end the wish, the message and the signoff. Same cards, fonts and
 // photos as the ride, so it never reads as an error page. A video moment's clip plays here with the browser's own
 // controls. The message and the signoff write themselves in ink as they scroll into view, as they do on the ride's
-// last card.
+// last card. His voice note, when content.js has one, has the ride's round button under the signoff: here it plays
+// only on her tap, and nothing fades under it (there is no other sound here).
 
 import { appState } from '../state.js';
+import { createVoiceNote } from '../audio/voiceNote.js';
 import { el, prefersReducedMotion, setChildren, svgEl } from './dom.js';
+import { voiceNoteButton } from './finaleCard.js';
 import { finishOnTap, writeLetter } from './handwriting.js';
 import { squiggle, ticketLines, ticketParts } from './intro.js';
 import { momentPhoto } from './stopCard.js';
@@ -61,12 +64,20 @@ export function showFallback(content, assets) {
   const page = document.getElementById('fallback');
   const messageEl = finale.message ? el('p', { class: 'fallback-message' }, [finale.message]) : null;
   const signoffEl = finale.signoff ? el('p', { class: 'fallback-signoff' }, [finale.signoff]) : null;
+  // His voice note's file is fetched now, so a missing one takes its button away before she scrolls down to it.
+  const voice = finale.voice ? createVoiceNote(finale.voice) : null;
+  if (voice) {
+    appState.voice = voice.state;
+    voice.onChange(() => { appState.voice = voice.state; });
+    voice.load();
+  }
   const finaleCard = el('footer', { class: 'fallback-card fallback-finale' }, [
     heart(),
     el('p', { class: 'eyebrow' }, [finale.eyebrow]),
     el('h2', { class: 'fallback-wish' }, [finale.wish]),
     messageEl,
     signoffEl,
+    voice ? el('div', { class: 'fallback-voice' }, [voiceNoteButton(voice).button]) : null,
   ]);
   setChildren(page, el('div', { class: 'fallback-page' }, [
     // The same boarding ticket as the ride opens with, already punched, with nothing to tap.

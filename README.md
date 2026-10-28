@@ -229,6 +229,23 @@ voice: 'voice/message.m4a',
 `.m4a`, `.mp3`, `.aac` and `.wav` files all work. Keep it short, a minute or less. Leave `voice` out, or as
 `''`, and the ride has no voice note. A file with any other ending is ignored, and the console says so.
 
+How it plays:
+
+- It starts by itself as your message appears on the last card and begins to write itself.
+- While it plays, everything else fades out under it: the music, the train, the fireworks and the doves. The
+  fireworks keep going on screen. When it ends, the sound fades back in.
+- A small round button beside **Ride again** shows a ring that fills as it plays. She can tap it to pause your
+  voice and tap it again to carry on. Once it has finished, a tap plays it again from the start.
+- If she has turned the sound off with the Sound button, it does not play by itself. The button shows a ▶, and
+  it plays when she taps it.
+- If she switches to another app or locks the phone, it pauses. It waits for her tap when she comes back.
+- **Ride again**, or tapping a moment on the timeline, stops it and brings the rest of the sound back.
+- The 2D version of the story has the same button under your signoff. There it only plays when she taps it.
+
+If the file is missing or will not play, the console says which file, and the card has no button. To check it,
+preview the site (section 5), tap Begin, and ride to the end. You can add `?speed=10` to the address to get
+there sooner. Then listen on a real iPhone too (section 6).
+
 ## 5. Preview it on your computer
 
 ```sh

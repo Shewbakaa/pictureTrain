@@ -925,12 +925,68 @@ body {
 
 .finale-card-footer {
   flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   padding: 10px 20px 18px;
 }
 
 .finale-again {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: 52px;
+}
+
+/* His voice note's button (ui/finaleCard.js voiceNoteButton): a small round button with a ▶, or a ❚❚ while it plays,
+   and a ring round its edge that fills in rose as the note plays. It sits beside "Ride again" on the ride's last card,
+   and under the signoff on the 2D story's. */
+.voice-note {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--rose-ink);
+  background: rgba(240, 141, 165, 0.14);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.voice-note[aria-pressed='true'] {
+  background: rgba(240, 141, 165, 0.24);
+}
+
+.voice-note svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.voice-note-icon {
+  fill: currentColor;
+}
+
+.voice-note-track,
+.voice-note-ring {
+  fill: none;
+  stroke-width: 2.5;
+}
+
+.voice-note-track {
+  stroke: rgba(176, 68, 98, 0.18);
+}
+
+.voice-note-ring {
+  stroke: var(--rose-ink);
+  stroke-linecap: round;
+}
+
+.voice-note:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
 }
 
 /* A wide, short screen (a phone on its side) has the card on the right, and the camera puts the two of them on the
@@ -1361,6 +1417,12 @@ body {
   overflow-wrap: anywhere;
 }
 
+.fallback-voice {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+}
+
 /* --- His message, written in ink ----------------------------------------------------------------------------- */
 
 /* ui/handwriting.js turns the message and the signoff into one .ink-word per word, each with the second it starts at
@@ -1439,6 +1501,7 @@ body {
   }
 
   .btn-primary,
+  .voice-note,
   .timeline-dot::before {
     transition: none;
   }

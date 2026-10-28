@@ -36,7 +36,9 @@
 // the train seen from outside, the two of them meet on the platform (a little dog or cat trots over with him, and doves
 // fly off the station house's roof as the fireworks start), and his message comes up on a card with the timeline below
 // it. "Ride again" takes her back to the start; a moment on the timeline takes her back there. The music plays on
-// throughout.
+// throughout, except while his voice note plays (content.js finale.voice, audio/voiceNote.js): it starts by itself as
+// his message writes itself, if her sound is on, and all the ride's sound fades out under it and comes back after. A
+// round button on the card plays it again; Ride again or a jump stops it. Her tap on Begin unlocks it, as phones ask.
 
 import { DirectionalLight, Fog, Group, HemisphereLight, Matrix4, Vector3 } from './three.js';
 import { appState } from './state.js';
@@ -89,7 +91,8 @@ import { zonesToLoad } from './audio/zoneMusic.js';
 import { createSfx } from './audio/sfx.js';
 import { zoneWeights } from './audio/ambienceTiming.js';
 import { createAmbience } from './audio/ambience.js';
-import { createCues } from './audio/cueSounds.js';
+import { CARD_RISES_AFTER, createCues } from './audio/cueSounds.js';
+import { createVoiceNote } from './audio/voiceNote.js';
 import { createVideoDirector, videoToPlay } from './photos/videos.js';
 
 /**
@@ -691,6 +694,25 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     appState.videoSound = director.sound;
     music.setDucked(director.sound);
   };
+  // His voice note, an audio element of its own beside the ride's sound: while it plays, all of that fades out for it,
+  // as for a video's sound, and comes back when it ends, is paused (by her, or the page going away) or is stopped.
+  const voice = content.finale.voice ? createVoiceNote(content.finale.voice) : null;
+  let voiceTimer = 0; // the wait for the card to settle before it plays by itself
+  if (voice) {
+    appState.voice = voice.state;
+    voice.onChange(() => {
+      appState.voice = voice.state;
+      music.setDucked(voice.state === 'playing');
+    });
+  }
+  /** Ride again or a jump from the finale: his voice stops, back at its start, and the ride's sound comes back. */
+  function stopVoice() {
+    if (!voice) return;
+    clearTimeout(voiceTimer);
+    voiceTimer = 0;
+    voice.stop();
+    music.setDucked(false);
+  }
   let jumping = false; // a timeline jump (or "Ride again") is under way: further ones wait until it has finished
   let tipsShown = false; // the tips come once a visit, as she closes her first card
 
@@ -736,7 +758,16 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     shootStar();
     cues.wish();
     appState.phase = 'done';
-    showFinaleCard(content, { onRideAgain: () => app.rideAgain() });
+    showFinaleCard(content, { onRideAgain: () => app.rideAgain(), voice });
+    // His voice note plays by itself once the card has risen, as his message starts to write itself, but only if her
+    // sound is on (and the page in view): otherwise it waits for her tap on its button.
+    if (voice) {
+      clearTimeout(voiceTimer);
+      voiceTimer = setTimeout(() => {
+        voiceTimer = 0;
+        if (appState.phase === 'done' && music.state === 'playing' && !music.suspended) voice.play();
+      }, CARD_RISES_AFTER * 1000);
+    }
     const items = timelineItems(content.moments, { reachedMax: ride.reachedMax, currentIndex: -1 });
     renderTimeline(timeline, items, { onJump: (index) => app.jumpTo(index) });
     controls.showTimeline();
@@ -780,6 +811,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     // The train has pulled in at the Day 365 station: under a blush, her seat gives way to the scene outside.
     sfx.finale();
     cues.arrival(); // the station bell rings, and the finale's own sounds are ready
+    if (voice) voice.load(); // his voice note is fetched now, ready for the card
     appState.phase = 'finale';
     appState.view = 'finale';
     director.play(-1);
@@ -802,6 +834,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       if (appState.phase !== 'intro') return;
       music.start(); // first, while her tap is still being handled: phones only let sound start from a tap
       wakeLock = keepAwake(); // the screen stays on for the ride, and the hold is asked for again whenever the page returns
+      if (voice) voice.unlock(); // so his voice note can play by itself at the finale, minutes from this tap
       try {
         sfx.play('punch'); // the click of the ticket punch, as the sound comes on
       } catch (error) {
@@ -830,7 +863,10 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       if (!(Number.isInteger(index) && index >= 0 && index <= ride.reachedMax)) return;
       jumping = true;
       const fromFinale = appState.phase === 'done';
-      if (fromFinale) cues.silence(); // the fireworks and the rest of the finale hush as the blush comes over
+      if (fromFinale) {
+        cues.silence(); // the fireworks and the rest of the finale hush as the blush comes over
+        stopVoice();
+      }
       fadeThrough(JUMP_FADE_MS, () => {
         // The train reached the end while the screen was covered: the finale goes on instead.
         if (appState.phase === 'finale') return;
@@ -854,6 +890,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       if (jumping || appState.phase !== 'done') return;
       jumping = true;
       cues.silence(); // the fireworks and the rest of the finale hush as the blush comes over
+      stopVoice();
       fadeThrough(RIDE_AGAIN_FADE_MS, () => {
         // Back to the Day 1 station under the cover, in her seat, looking ahead, and off again (R31).
         leaveFinale();

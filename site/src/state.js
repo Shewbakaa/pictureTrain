@@ -28,6 +28,11 @@
 // tilt: looking around by moving the phone (ride/tilt.js): 'off', 'on' (from its first reading after her tap on the
 //   button) or 'unavailable' (the browser has no DeviceOrientationEvent, so there is no button)
 // yaw: where she is looking, + = left (rad): her drag and her phone's turn together, within the look's limits
+// voice: his voice note at the finale (audio/voiceNote.js), in the 3D ride and the 2D story alike: 'none' (content.js
+//   has no finale.voice), 'idle' (at its start: not played yet, or stopped by Ride again or a jump from the finale),
+//   'playing', 'paused' (by her tap on its button, or the page going into the background), 'ended' (played through),
+//   'blocked' (the browser would not let it play without a tap; its button plays it) or 'failed' (the file could not be
+//   played, so there is no button)
 //
 // window.__app.debugTargets() (set by app.js once the ride is built) says where each tappable thing in front of her is
 // on the page, and whether the cabin hides it there: [{ name, x, y, hidden }] in CSS px. Like the state, it only reads,
@@ -61,6 +66,7 @@ export const appState = {
   wakeLock: 'off',
   lastTap: null,
   tilt: 'off',
+  voice: 'none',
 };
 
 if (typeof window !== 'undefined') {
