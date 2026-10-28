@@ -472,19 +472,42 @@ test('the ticket is cleared away at the latest after its cap, even if its slide 
   expect(errors).toEqual([]);
 });
 
-test('with reduced motion the ticket is gone at once and is never punched', async ({ page }) => {
+test('with reduced motion the ticket is never punched and never moves: it fades out where it is, gone within a second', async ({ page }) => {
   const errors = collectConsoleErrors(page);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await useFixture(page);
   await page.goto('index.html?speed=25');
   await waitForPhase(page, 'intro');
   await watchTicket(page);
+  // Every animation the ticket or its paper starts, and, every frame until it is gone, its opacity and whether it has
+  // moved from where it stood.
+  await page.evaluate(() => {
+    const card = document.getElementById('intro');
+    const seen = window.__ticket;
+    Object.assign(seen, { animations: [], opacities: [], moved: false, leavingInTap: null });
+    const stood = card.getBoundingClientRect();
+    card.addEventListener('animationstart', (event) => seen.animations.push(event.animationName));
+    document.addEventListener('click', () => { if (seen.leavingInTap === null) seen.leavingInTap = card.classList.contains('is-leaving'); });
+    const frame = () => {
+      if (card.hidden) return;
+      seen.opacities.push(Number(getComputedStyle(card).opacity));
+      const now = card.getBoundingClientRect();
+      if (Math.abs(now.top - stood.top) > 0.5 || Math.abs(now.left - stood.left) > 0.5) seen.moved = true;
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  });
   await page.locator('.intro-begin').click();
   await expect.poll(() => page.evaluate(() => window.__ticket.hidden), { timeout: 5000 }).toBeGreaterThan(0);
   const seen = await page.evaluate(() => window.__ticket);
-  expect(seen.hiddenInTap).toBe(true); // gone by the end of the tap itself, with the ride started
-  expect(seen.phaseInTap).toBe('riding');
+  expect(seen.phaseInTap).toBe('riding'); // the ride starts in the tap itself, the ticket fading over it
+  expect(seen.hiddenInTap).toBe(false);
+  expect(seen.leavingInTap).toBe(true); // her taps go through to the ride while it fades
   expect(seen.everPunched).toBe(false);
+  expect(seen.animations.filter((name) => /punch|stub-tear|ticket-away/.test(name))).toEqual([]);
+  expect(seen.moved).toBe(false);
+  expect(seen.opacities.some((opacity) => opacity > 0 && opacity < 1), `opacities ${seen.opacities.join(', ')}`).toBe(true);
+  expect(seen.hidden - seen.tapped).toBeLessThan(1000);
   expect(errors).toEqual([]);
 });
 

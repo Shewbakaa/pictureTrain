@@ -527,6 +527,16 @@ body {
   to { opacity: 0; transform: translateY(-135%) rotate(-3deg); }
 }
 
+/* With reduced motion there is no punch and nothing moves: the ticket only fades out where it is, and is cleared away
+   when the fade ends (ui/intro.js). Its id puts it ahead of the reduced-motion rule at the end of this file. */
+#intro.fading {
+  animation: ticket-fade 0.3s ease-out both;
+}
+
+@keyframes ticket-fade {
+  to { opacity: 0; }
+}
+
 /* A wide, short screen (a phone on its side) has no height for a stub under the ticket: it turns the ticket on its side,
    the stub on the right with ADMIT ONE reading down it, and tightens what is on it, so it all fits above the bottom of
    the screen. (The 2D story scrolls, and keeps its ticket as it is.) */

@@ -2,7 +2,8 @@
 // eyebrow, the title ("For <her name>"), a little squiggle, the author's note, the route and her seat, the button that
 // starts the ride and, under it, a small line suggesting headphones (unless the author has turned it off); and the
 // ticket's stub, ADMIT ONE, along a perforated edge. When she taps Begin a punch clips a little heart out of the stub,
-// the stub tears off and the ticket slides away, while the ride starts underneath at once.
+// the stub tears off and the ticket slides away (with reduced motion it only fades), while the ride starts underneath
+// at once.
 
 import { el, prefersReducedMotion, reveal, setChildren, svgEl } from './dom.js';
 
@@ -20,6 +21,9 @@ export const LEAVE_CAP_MS = 900;
 
 /** The animation (styles.css) that ends the leaving: the main part sliding up and out, after the stub has torn off. */
 const SLIDE = 'ticket-away';
+
+/** With reduced motion, the whole of the leaving (styles.css): the ticket fading out where it is, over 0.3 s. */
+const FADE = 'ticket-fade';
 
 /** A hand-drawn wave under the title (the 2D story, fallback.js, draws it under its title too). */
 export function squiggle() {
@@ -104,34 +108,33 @@ export function showIntro(content, { onBegin }) {
  * slide ends, so it never pops out part of the way up (the slide starts with the next frame, which the rest of her tap,
  * starting the ride, can hold back a little), and in any case within LEAVE_CAP_MS. The ride does not wait for it: the
  * train sets off the moment she taps, and until the ticket has gone it lets her taps through to the view behind it.
- * With reduced motion there is no punch, and the card is gone at once, the promise already resolved.
+ * With reduced motion there is no punch and nothing moves: the ticket only fades out where it is (the `fading` class),
+ * and is gone the moment its fade ends, again within LEAVE_CAP_MS in any case.
  * @returns {Promise<void>}
  */
 export function hideIntro() {
   const card = document.getElementById('intro');
   if (leaving) return leaving;
   if (card.hidden) return Promise.resolve();
-  if (prefersReducedMotion()) {
-    card.hidden = true;
-    return Promise.resolve();
-  }
-  card.classList.add('punched', 'is-leaving');
+  const still = prefersReducedMotion();
+  const last = still ? FADE : SLIDE;
+  card.classList.add(still ? 'fading' : 'punched', 'is-leaving');
   leaving = new Promise((resolve) => {
     let cap = 0;
     const gone = () => {
       clearTimeout(cap);
-      card.removeEventListener('animationend', slid);
-      card.removeEventListener('animationcancel', slid);
+      card.removeEventListener('animationend', ended);
+      card.removeEventListener('animationcancel', ended);
       leaving = null;
       card.hidden = true;
       card.classList.remove('is-leaving');
       resolve();
     };
-    const slid = (event) => {
-      if (event.animationName === SLIDE) gone();
+    const ended = (event) => {
+      if (event.animationName === last) gone();
     };
-    card.addEventListener('animationend', slid);
-    card.addEventListener('animationcancel', slid);
+    card.addEventListener('animationend', ended);
+    card.addEventListener('animationcancel', ended);
     cap = setTimeout(gone, LEAVE_CAP_MS);
   });
   return leaving;
