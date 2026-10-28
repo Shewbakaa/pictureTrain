@@ -46,9 +46,23 @@ export const SMOKE = Object.freeze({
 /**
  * How a puff looks. ALPHA: how opaque it is at its densest. FADE_IN: it comes in over this long (s). FADE_OUT: it
  * starts to thin this far into its life (a share of it), and has gone at the end. CURL: how far (m) it has swung from
- * side to side by the end of its life, along X and Z, at CURL_RATE rad/s. COLOUR: a soft grey with a little warmth.
+ * side to side by the end of its life, along X and Z, at CURL_RATE rad/s.
+ *
+ * COLOUR: a puff's colour as it leaves the chimney (YOUNG) and as it goes out (OLD), denser and darker at first and
+ * thinning towards the haze. Smoke has to show against whatever is behind it, and the sky behind it is very different:
+ * the pale winter sky is bright, so the smoke is a grey-blue darker than it (DARK); the dusk sky is mauve and peach,
+ * not so bright, so the smoke is a pale lilac-grey lighter than it (LIGHT). Which it is follows how bright the zone's
+ * fog (its horizon colour) is, from DUSK_BELOW (the dusk's) to DAY_ABOVE (winter's), so it eases across a boundary.
+ * Neither is ever white.
  */
-const LOOK = Object.freeze({ ALPHA: 0.7, FADE_IN: 0.5, FADE_OUT: 0.12, CURL: [0.25, 0.2], CURL_RATE: 1.1, COLOUR: '#d7d3da' });
+const LOOK = Object.freeze({
+  ALPHA: 0.95, FADE_IN: 0.5, FADE_OUT: 0.3, CURL: [0.25, 0.2], CURL_RATE: 1.1,
+  COLOUR: Object.freeze({
+    DARK: Object.freeze({ YOUNG: '#7f89a3', OLD: '#aab2c6' }),
+    LIGHT: Object.freeze({ YOUNG: '#e0d4df', OLD: '#efe9f1' }),
+    DUSK_BELOW: 0.35, DAY_ABOVE: 0.85,
+  }),
+});
 
 /** The same smoke every run. */
 const SEED = 3141;
@@ -65,11 +79,13 @@ const MAX_POINT_SIZE = 140;
 const vertexShader = /* glsl */ `
 attribute float aSize;
 attribute float aAlpha;
+attribute float aLife;
 
 uniform float uHalfHeight;
 uniform float uMaxSize;
 
 varying float vAlpha;
+varying float vLife;
 
 #include <fog_pars_vertex>
 
@@ -78,6 +94,7 @@ void main() {
   float depth = max(-mvPosition.z, 0.01);
   // Gone right by her eye, so no puff smears across the screen.
   vAlpha = aAlpha * smoothstep(1.5, 3.5, length(mvPosition.xyz));
+  vLife = aLife;
   gl_PointSize = min(aSize * projectionMatrix[1][1] * uHalfHeight / depth, uMaxSize);
   gl_Position = projectionMatrix * mvPosition;
   #include <fog_vertex>
@@ -85,21 +102,33 @@ void main() {
 `;
 
 const fragmentShader = /* glsl */ `
-uniform vec3 uColor;
+uniform vec3 uYoungDark;
+uniform vec3 uOldDark;
+uniform vec3 uYoungLight;
+uniform vec3 uOldLight;
+uniform vec2 uBrightRange;
 
 varying float vAlpha;
+varying float vLife;
 
 #include <fog_pars_fragment>
 
 void main() {
-  // A soft round puff: solid at the middle, fading out all the way to the edge of the sprite.
+  // A soft round puff: solid at the middle, fading out over the outer part of the sprite to nothing at its edge.
   float r = length(gl_PointCoord - 0.5) * 2.0;
-  float alpha = (1.0 - smoothstep(0.1, 1.0, r)) * vAlpha;
+  float alpha = (1.0 - smoothstep(0.3, 1.0, r)) * vAlpha;
   #ifdef USE_FOG
     alpha *= 1.0 - smoothstep(fogNear, fogFar, vFogDepth);
   #endif
   if (alpha < 0.005) discard;
-  gl_FragColor = vec4(uColor, alpha);
+  // Darker than a bright sky, lighter than a dim one: the brightness of the fog is the brightness of the horizon.
+  float day = 1.0;
+  #ifdef USE_FOG
+    day = smoothstep(uBrightRange.x, uBrightRange.y, dot(fogColor, vec3(0.2126, 0.7152, 0.0722)));
+  #endif
+  vec3 young = mix(uYoungLight, uYoungDark, day);
+  vec3 old = mix(uOldLight, uOldDark, day);
+  gl_FragColor = vec4(mix(young, old, vLife), alpha);
   #include <colorspace_fragment>
 }
 `;
@@ -142,17 +171,24 @@ export function createSmoke(chimneys, { maxPuffs = 160 } = {}) {
   const positions = new Float32Array(count * 3);
   const sizes = new Float32Array(count);
   const alphas = new Float32Array(count);
+  const lives = new Float32Array(count);
   const geometry = new BufferGeometry();
   const attribute = (name, array, size) => {
     const a = new BufferAttribute(array, size).setUsage(DynamicDrawUsage);
     geometry.setAttribute(name, a);
     return a;
   };
-  const moving = [attribute('position', positions, 3), attribute('aSize', sizes, 1), attribute('aAlpha', alphas, 1)];
+  const moving = [
+    attribute('position', positions, 3), attribute('aSize', sizes, 1), attribute('aAlpha', alphas, 1), attribute('aLife', lives, 1),
+  ];
 
   const material = new ShaderMaterial({
     uniforms: UniformsUtils.merge([UniformsLib.fog, {
-      uColor: { value: new Color(LOOK.COLOUR) },
+      uYoungDark: { value: new Color(LOOK.COLOUR.DARK.YOUNG) },
+      uOldDark: { value: new Color(LOOK.COLOUR.DARK.OLD) },
+      uYoungLight: { value: new Color(LOOK.COLOUR.LIGHT.YOUNG) },
+      uOldLight: { value: new Color(LOOK.COLOUR.LIGHT.OLD) },
+      uBrightRange: { value: new Vector2(LOOK.COLOUR.DUSK_BELOW, LOOK.COLOUR.DAY_ABOVE) },
       uHalfHeight: { value: 400 },
       uMaxSize: { value: MAX_POINT_SIZE },
     }]),
@@ -248,6 +284,7 @@ export function createSmoke(chimneys, { maxPuffs = 160 } = {}) {
       positions[j * 3 + 1] = origin[j * 3 + 1] + SMOKE.RISE * a;
       positions[j * 3 + 2] = origin[j * 3 + 2] + LOOK.CURL[1] * life * Math.cos(turn * 0.8);
       sizes[j] = from + (to - from) * life;
+      lives[j] = life;
       alphas[j] = LOOK.ALPHA * smoothstep(0, LOOK.FADE_IN, a) * (1 - smoothstep(LOOK.FADE_OUT, 1, life));
     }
     points.visible = live > 0;

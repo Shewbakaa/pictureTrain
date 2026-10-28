@@ -6,6 +6,11 @@ import { Vector3 } from '../../site/src/three.js';
 
 const camera = new Vector3(37.5, 2.05, -812.25);
 
+/** Runs `sky` on by `seconds`, in frames of 1/30 s. */
+function run(sky, seconds, at = camera, evening = 1) {
+  for (let t = 0; t < seconds - 1e-9; t += 1 / 30) sky.update(1 / 30, at, evening);
+}
+
 /** The bearing (rad from -Z, + towards +X) and elevation (rad) of `point` seen from `from`. */
 function seen(point, from = camera) {
   const d = point.clone().sub(from);
@@ -96,8 +101,22 @@ test('a shooting star crosses the upper half of the view ahead of her in 0.9 s, 
   assert.ok(elevations[elevations.length - 1] < elevations[0], 'and falls');
   assert.ok(frames >= 50);
 
-  sky.update(0.2, camera, 1);
+  run(sky, 0.2);
   assert.equal(streak.visible, false, 'gone after 0.9 s');
+});
+
+test('a long frame cannot swallow a shooting star: it moves on a tenth of a second at most', () => {
+  const sky = createNightSky();
+  const streak = sky.group.getObjectByName('night-streak');
+  sky.update(0, camera, 1);
+  sky.shoot();
+  sky.update(0.9, camera, 1); // a hitch as it starts
+  assert.equal(streak.visible, true, 'still going');
+  const hitch = streak.position.clone();
+  sky.update(0.05, camera, 1);
+  assert.ok(streak.position.distanceTo(hitch) < 30, 'and it carries on from where it was');
+  run(sky, 1);
+  assert.equal(streak.visible, false, 'and ends in its own time');
 });
 
 test('a shooting star is shot where she is looking, and keeps its place in the sky as the camera moves', () => {
@@ -105,7 +124,7 @@ test('a shooting star is shot where she is looking, and keeps its place in the s
   const streak = sky.group.getObjectByName('night-streak');
   sky.update(0, camera, 1);
   sky.shoot({ bearing: -Math.PI / 2 }); // looking out over the left of the track
-  sky.update(0.4, camera, 1);
+  run(sky, 0.4);
   const first = seen(streak.position);
   assert.ok(Math.abs(first.bearing - -Math.PI / 2) < 0.8, `bearing ${first.bearing.toFixed(2)}`);
   const moved = camera.clone().add(new Vector3(0, 0, -30));
@@ -119,28 +138,28 @@ test('a shooting star fades with the evening, and a second one starts the streak
   const streak = sky.group.getObjectByName('night-streak');
   sky.update(0, camera, 0);
   sky.shoot();
-  sky.update(0.3, camera, 0);
+  run(sky, 0.3, camera, 0);
   assert.equal(streak.visible, false, 'no shooting star by day');
-  sky.update(0.3, camera, 1);
+  run(sky, 0.3);
   assert.equal(streak.visible, true);
   assert.ok(streak.material.uniforms.uAlpha.value > 0);
 
-  sky.update(0.2, camera, 1);
+  run(sky, 0.2);
   const head = streak.position.clone();
   sky.shoot();
   sky.update(0.05, camera, 1);
   assert.ok(streak.position.distanceTo(head) > 5, 'a new streak starts from its beginning');
-  sky.update(NIGHT_SKY.STREAK_SECONDS + 0.1, camera, 1);
+  run(sky, NIGHT_SKY.STREAK_SECONDS + 0.1);
   assert.equal(streak.visible, false);
 });
 
-test('a shooting star keeps to the upper half of whatever view it is shot into, a close one with a strip of sky included', () => {
+test('a shooting star keeps to the upper half of whatever view it is shot into, a close one tipped down at the pair included', () => {
   const deg = (r) => (r * 180) / Math.PI;
   const rad = (d) => (d * Math.PI) / 180;
   const views = [
     { bearing: 0, elevation: 0, up: rad(40), across: 0.37 },                          // her seat, portrait
     { bearing: rad(30), elevation: rad(10), up: rad(40), across: 0.37 },             // her head turned and up
-    { bearing: -Math.PI / 2, elevation: rad(-6), up: rad(22), across: 0.2 },         // the finale: a long lens, tipped down
+    { bearing: -0.76, elevation: rad(-23.2), up: rad(34.7), across: 0.31 },          // the finale's, on a phone (measured)
   ];
   for (const view of views) {
     const sky = createNightSky();
@@ -151,12 +170,29 @@ test('a shooting star keeps to the upper half of whatever view it is shot into, 
       for (let t = 0; t < NIGHT_SKY.STREAK_SECONDS - 0.05; t += 1 / 30) {
         sky.update(1 / 30, camera, 1);
         const { bearing, elevation } = seen(streak.position);
-        const top = Math.max(view.elevation + view.up, rad(4));
+        const low = Math.max(view.elevation, rad(3)); // the middle of the view, or above the haze and the hills
+        const top = Math.max(view.elevation + view.up, low);
         assert.ok(elevation <= top + 1e-6, `${deg(elevation).toFixed(1)} degrees: over the top of the view (${deg(top).toFixed(1)})`);
-        assert.ok(elevation >= Math.min(view.elevation, top) - 1e-6 && elevation >= rad(4) - 1e-6, `${deg(elevation).toFixed(1)} degrees: under the middle of the view, or in the haze`);
+        assert.ok(elevation >= low - 1e-6, `${deg(elevation).toFixed(1)} degrees: under the middle of the view, or in the haze`);
         const off = Math.atan2(Math.sin(bearing - view.bearing), Math.cos(bearing - view.bearing));
         assert.ok(Math.abs(off) <= view.across + 1e-6, `${off.toFixed(2)} rad off the middle of a view ${view.across} wide`);
       }
     }
   }
+});
+
+test('in the finale\'s view the streak is above the hills and falls across the strip of sky that shows', () => {
+  // Measured on a 375 x 812 phone at the card: looking 23 degrees down, 69 degrees of view, so the sky shows from the
+  // hills (a few degrees up) to 11.5 degrees.
+  const sky = createNightSky();
+  const streak = sky.group.getObjectByName('night-streak');
+  sky.update(0, camera, 1);
+  sky.shoot({ bearing: -0.76, elevation: (-23.2 * Math.PI) / 180, up: (34.7 * Math.PI) / 180, across: 0.31 });
+  const elevations = [];
+  for (let t = 0; t < 0.8; t += 1 / 30) {
+    sky.update(1 / 30, camera, 1);
+    elevations.push((seen(streak.position).elevation * 180) / Math.PI);
+  }
+  for (const e of elevations) assert.ok(e >= 3 - 1e-6 && e <= 11.6, `${e.toFixed(1)} degrees`);
+  assert.ok(elevations.some((e) => e > 7.5), 'high in the strip of sky, near the top of the view');
 });

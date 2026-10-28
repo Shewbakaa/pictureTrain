@@ -39,24 +39,27 @@ const MOON_TILT = 0.5;
 const MOON_COLOUR = '#fff1c9';
 
 /**
- * A shooting star: it runs, `OUT` m from the camera, across the upper half of the view and falling as it goes. It
- * starts a share within START of the way from the middle of the view up to its top edge and ends within END of it, and
- * it crosses ACROSS of the way from the middle out to either side. (Each is a range it picks from.) It keeps at least
- * MIN_ELEVATION (rad) above the horizon, where the haze is. The tail is `TAIL` of the way it has gone behind the head;
- * the streak is `WIDTH` m wide. Each comes the other way round from the last.
+ * A shooting star: it runs, `OUT` m from the camera, across the upper half of the view and falling as it goes. The
+ * band it flies in is from the middle of the view (or MIN_ELEVATION, rad, above the horizon, where the haze and the
+ * hills are, if the view is tipped down so far that its middle is lower) up to the view's top edge. It starts a share
+ * within START of the way up that band and ends within END of it, and it crosses ACROSS of the way from the middle out
+ * to either side. (Each is a range it picks from.) The tail is `TAIL` of the way it has gone behind the head; the
+ * streak is `WIDTH` m wide. Each comes the other way round from the last.
  */
 const STREAK = Object.freeze({
   OUT: 280,
-  START: [0.78, 0.92],
-  END: [0.42, 0.58],
+  START: [0.65, 0.8],
+  END: [0.25, 0.4],
   ACROSS: [0.6, 0.9],
-  MIN_ELEVATION: (4 * Math.PI) / 180,
-  TAIL: 0.32,
-  WIDTH: 2.4,
+  MIN_ELEVATION: (3 * Math.PI) / 180,
+  TAIL: 0.5,
+  WIDTH: 3.6,
   FADE_IN: 0.08,   // s
   FADE_OUT: 0.65,  // the share of its life when it starts to fade away
 });
 const STREAK_COLOUR = '#f4f7ff';
+/** A frame longer than this (s) moves the streak on by this much: a hitch must not swallow the whole shooting star. */
+const LONGEST_STEP = 0.1;
 const SEED = 77;
 
 /**
@@ -132,14 +135,20 @@ uniform float uAlpha;
 uniform float uLength;
 varying vec2 vUv;
 
+const float WIDTH = ${STREAK.WIDTH.toFixed(2)};
+
 void main() {
-  float along = vUv.x;                       // 0 at the tail, 1 at the head
-  float across = abs(vUv.y - 0.5) * 2.0;     // 0 along the middle, 1 at the edges
+  float behind = (1.0 - vUv.x) * uLength;     // metres behind the end of the quad, which the head is a little inside of
+  float across = abs(vUv.y - 0.5) * 2.0;      // 0 along the middle, 1 at the edges
   float thin = pow(1.0 - across, 1.5);
-  // A tail that thickens to the head, and a bright point at the head itself.
-  float tail = pow(along, 1.8) * thin;
-  float tip = exp(-pow((1.0 - along) * uLength / 3.0, 2.0)) * (1.0 - across * across);
-  float alpha = clamp(tail + tip, 0.0, 1.0) * uAlpha;
+  // A bright core that thickens towards the head, a soft glow round it, and a round bright head, all rounded off
+  // before the end of the quad so that the streak does not end in a straight edge.
+  float rounded = smoothstep(0.0, 1.5, behind);
+  float core = pow(vUv.x, 1.4) * thin * rounded;
+  float glow = pow(vUv.x, 2.5) * pow(1.0 - across, 0.7) * 0.4 * rounded;
+  float side = across * WIDTH * 0.5;
+  float head = exp(-(pow(behind - 2.0, 2.0) + side * side) / 1.7);
+  float alpha = clamp(core + glow + head, 0.0, 1.0) * uAlpha;
   if (alpha < 0.004) discard;
   gl_FragColor = vec4(uColour, alpha);
   #include <colorspace_fragment>
@@ -246,7 +255,7 @@ export function createNightSky() {
     moonMaterial.uniforms.uOpacity.value = evening;
     moon.position.copy(cameraPosition).addScaledVector(moonWay, MOON.DISTANCE);
 
-    if (going) age += dt;
+    if (going) age += Math.min(Math.max(dt, 0), LONGEST_STEP);
     if (age >= NIGHT_SKY.STREAK_SECONDS) going = false;
     const share = Math.min(age / NIGHT_SKY.STREAK_SECONDS, 1);
     const alpha = going
@@ -280,8 +289,11 @@ export function createNightSky() {
     const reach = across * rngRange(rng, ...STREAK.ACROSS);
     from.bearing = bearing + side * reach;
     to.bearing = bearing - side * reach;
-    from.elevation = Math.max(elevation + up * rngRange(rng, ...STREAK.START), STREAK.MIN_ELEVATION);
-    to.elevation = Math.max(elevation + up * rngRange(rng, ...STREAK.END), STREAK.MIN_ELEVATION);
+    // The part of the upper half of the view that is sky: from its middle up to its top edge, but never under the haze.
+    const low = Math.max(elevation, STREAK.MIN_ELEVATION);
+    const band = Math.max(elevation + up - low, 0);
+    from.elevation = low + band * rngRange(rng, ...STREAK.START);
+    to.elevation = low + band * rngRange(rng, ...STREAK.END);
     going = true;
     age = 0;
   }

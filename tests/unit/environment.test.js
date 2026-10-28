@@ -244,7 +244,7 @@ test('without an out object every call returns a fresh env', () => {
 test('the winter hills have a few snowy cottages, set well back and added after the rest so nothing else moved', () => {
   const rules = ZONES.winter.props;
   const cottage = rules.find((r) => r.type === 'cottage_snowy');
-  assert.deepEqual([cottage.perMeter, cottage.minOffset, cottage.maxOffset], [0.006, 25, 45]);
+  assert.deepEqual([cottage.perMeter, cottage.minOffset, cottage.maxOffset], [0.014, 25, 45]);
   assert.equal(rules.at(-1), cottage, 'last, so the scatter of every other winter prop is as it was');
   assert.ok(ZONES.evening.props.some((r) => r.type === 'house'), 'the evening keeps its houses');
 });

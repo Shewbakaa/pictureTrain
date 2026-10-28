@@ -135,13 +135,14 @@ function chimneyOfInstance(mesh, i) {
   return new Vector3(...chimneyTop(type, Number(variant))).applyMatrix4(matrix);
 }
 
-test('winter has snowy cottages, set back at least 25 m from the track, and the evening has houses', () => {
+test('winter has a few snowy cottages, set back at least 25 m, most of them past where the tunnel goes, and the evening has houses', () => {
+  // The default ride: its winter runs from 570 to 750 m, and a tunnel will take 530 to 610 m of the way into it.
   const cottages = bodies.filter((m) => m.name.startsWith('props-winter-cottage_snowy-'));
-  assert.ok(cottages.length > 0, 'a cottage or two in the winter hills');
+  const at = cottages.flatMap((mesh) => [...instances(mesh)].map((p) => trackFrameOf(p)));
+  assert.ok(at.length >= 3, `${at.length} cottages in the winter hills`);
+  assert.ok(at.filter(({ d }) => d < 530 || d > 610).length >= 2, `outside the tunnel's way: ${at.map(({ d }) => d.toFixed(0))}`);
+  for (const { d, offset } of at) assert.ok(Math.abs(offset) >= 24.9, `the cottage at ${d.toFixed(0)} m stands ${offset.toFixed(1)} m out`);
   assert.ok(bodies.some((m) => m.name.startsWith('props-evening-house-')));
-  for (const mesh of cottages) {
-    for (const p of instances(mesh)) assert.ok(Math.abs(trackFrameOf(p).offset) >= 24.9, `${mesh.name} stands ${trackFrameOf(p).offset.toFixed(1)} m out`);
-  }
 });
 
 test('every house and cottage has a chimney top over its roof, in the world', () => {

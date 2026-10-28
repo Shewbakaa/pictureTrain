@@ -151,8 +151,9 @@ export const ZONES = deepFreeze({
       propRule('snowman', 0.015, 6, 14),
       propRule('fence', 0.02, 4.5, 6),
       // A few snug cottages, set well back from the track (clear of the signs and the tunnel), each with its curl of
-      // smoke (smoke.js). Last, so that adding them left every other prop of the zone where it was.
-      propRule('cottage_snowy', 0.006, 25, 45),
+      // smoke (smoke.js): about five in a 180 m winter, most of them past the tunnel (540 to 600 m). Last, so that
+      // adding them left every other prop of the zone where it was.
+      propRule('cottage_snowy', 0.014, 25, 45),
     ],
   },
 
