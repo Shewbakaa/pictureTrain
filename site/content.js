@@ -282,7 +282,7 @@ export default {
   ],
 
   // ---------------------------------------------------------------------------
-  //  The little couple: the cartoon pair you will see beside some of the signs and in the finale
+  //  The little couple: the cartoon pair you will see beside every photo sign and in the finale
   //
   //  Make them look a bit like the two of you. A colour is written as a # followed by six
   //  letters or numbers, like '#e98aa6' (a soft pink). To find yours, search for "color picker"
@@ -319,8 +319,8 @@ export default {
   //  Pets
   //
   //  Optional, and not written here: a little dog or cat sits at the couple's feet at each
-  //  stop. Leave it out and the ride picks one at random for each stop. To always have the
-  //  same kind, add a line like
+  //  stop, and one trots over with you in the finale. Leave it out and the ride picks one at
+  //  random for each. To always have the same kind, add a line like
   //    pets: 'cat',
   //  using 'random' (the same as leaving it out), 'dog', 'cat' or 'none' (no pets at all).
   //  See README, "Poses and pets".

@@ -1,26 +1,30 @@
 // The 3D ride: builds the world, then runs the frame loop that moves the train along the track, turns her head
 // where she drags, and keeps the sky, fog and light in step with the scenery the train is passing through.
 //
-// The world is the sky, the ground, the track, the two stations, the props of every zone, clouds and hot-air
-// balloons, the ambient particles of the zone the train is in, a photo sign at every stop with the two of them
-// beside it, posed for its moment (holding hands, waving, in a hug, on a bench, dancing or pointing at the photo) with
-// a little dog or cat at their feet, and the cabin she rides in. At dusk the sky fills with stars and a crescent moon
-// comes up, a shooting star crosses it 40 m before the last station and again as the finale's wish shows, and smoke
-// curls from the chimneys of the houses and of the station house. The track runs through a hill into winter, and the
-// world's light dims while she is in the tunnel, the world's sounds go muffled and the train's sounds echo. Birds go
-// with the sounds: a flock of songbirds crosses the spring sky, gulls loop over the summer sea (one flaps and banks as
-// a gull calls) and robins on the winter fences flutter off as the train comes. Butterflies flutter low over the spring
-// meadow, and two deer stand at the autumn forest's edge and lift their heads as the train comes by.
+// The world is the sky, the ground, the track, the two stations, the props of every zone (snug cottages among them in
+// the winter hills), clouds and hot-air balloons, the ambient particles of the zone the train is in, a photo sign at
+// every stop with the two of them beside it, posed for its moment (holding hands, waving, in a hug, on a bench, dancing
+// or pointing at the photo) with a little dog or cat at their feet, and the cabin she rides in. The trees, the grass
+// and the flowers sway in the breeze (world/wind.js), each zone's breeze its own. At dusk the sky fills with stars and
+// a crescent moon comes up, a shooting star crosses it 40 m before the last station and again as the finale's wish
+// shows, and smoke curls from the chimneys of the houses, of the snowy cottages and of the station house. The track
+// runs through a hill into winter, and the world's light dims while she is in the tunnel, the world's sounds go muffled
+// and the train's sounds echo. Birds go with the sounds: a flock of songbirds crosses the spring sky, gulls loop over
+// the summer sea (one flaps and banks as a gull calls) and robins on the winter fences flutter off as the train comes.
+// Butterflies flutter low over the spring meadow, and two deer stand at the autumn forest's edge and lift their heads
+// as the train comes by.
 //
-// On top of it sits the ride UI: the intro card, a card at every stop, the timeline, the controls and the progress
-// pill, with the furthest moment she has reached remembered across reloads. If the phone takes the GPU away
-// mid-ride, a toast offers a fresh start. The sound starts with her tap on Begin: the music, the train's own sounds
-// (whistle, steam, chugs and the rail joints' clickety-clack), which follow the ride, and each zone's ambience
-// (birds, waves, leaves, wind, crickets...), which follows the scenery. The music follows the scenery too: each
-// scene has a piece of its own (Chopin, and a carol in the winter hills), unless her own song plays throughout.
-// A card rustles as it comes up. At the Day 365 station a bell rings as the train pulls in, and the finale has its own
-// little sounds (her hop down, his door and footsteps, heartbeats, the bouquet's paper, doves), its hearts' sparkle
-// and its fireworks, all hushed again as she rides again or jumps back. One Sound button turns it all on and off.
+// On top of it sits the ride UI: the first screen, a boarding ticket that is punched as she taps Begin (ui/intro.js),
+// with a line under the button suggesting sound and headphones; a card at every stop, the timeline, the controls and
+// the progress pill, with the furthest moment she has reached remembered across reloads. If the phone takes the GPU
+// away mid-ride, a toast offers a fresh start. The sound starts with her tap on Begin, with the click of her ticket
+// being punched: the music, the train's own sounds (whistle, steam, chugs and the rail joints' clickety-clack), which
+// follow the ride, and each zone's ambience (birds, waves, leaves, wind, crickets...), which follows the scenery. The
+// music follows the scenery too: each scene has a piece of its own (Chopin, and a carol in the winter hills), unless
+// her own song plays throughout. A card rustles as it comes up. At the Day 365 station a bell rings as the train pulls
+// in, and the finale has its own little sounds (her hop down, his door and footsteps, heartbeats, the bouquet's paper,
+// doves), its hearts' sparkle and its fireworks, all hushed again as she rides again or jumps back. One Sound button
+// turns it all on and off.
 // Her tap on Begin also asks the phone to keep its screen on for the whole ride (ui/wakeLock.js).
 // Her seat moves with the train: a gentle rock, a drop as each bogie strikes a rail joint, a tip as it pulls away or
 // brakes (ride/trainMotion.js), all of it left out if her phone asks for less motion.
@@ -32,13 +36,14 @@
 // behind it from her taps. A phone button beside the Sound button lets her look around by moving her phone
 // (ride/tilt.js), and once she has closed her first card a toast tells her about the taps and the button.
 //
-// At the Day 365 station the ride ends in the finale (finale/finale.js): under a blush fade her seat gives way to
-// the train seen from outside, the two of them meet on the platform (a little dog or cat trots over with him, and doves
-// fly off the station house's roof as the fireworks start), and his message comes up on a card with the timeline below
-// it. "Ride again" takes her back to the start; a moment on the timeline takes her back there. The music plays on
-// throughout, except while his voice note plays (content.js finale.voice, audio/voiceNote.js): it starts by itself as
-// his message writes itself, if her sound is on, and all the ride's sound fades out under it and comes back after. A
-// round button on the card plays it again; Ride again or a jump stops it. Her tap on Begin unlocks it, as phones ask.
+// At the Day 365 station the ride ends in the finale (finale/finale.js): under a blush fade her seat gives way to the
+// train seen from outside, the two of them meet on the platform (a little dog or cat trots over with him, and doves fly
+// off the station house's roof as the fireworks start), and his message comes up on a card, writing itself in ink as if
+// by hand (ui/handwriting.js), with the timeline below it. "Ride again" takes her back to the start; a moment on the
+// timeline takes her back there. The music plays on throughout, except while his voice note plays (content.js
+// finale.voice, audio/voiceNote.js): it starts by itself as his message writes itself, if her sound is on, and all the
+// ride's sound fades out under it and comes back after. A round button on the card plays it again; Ride again or a jump
+// stops it. Her tap on Begin unlocks it, as phones ask.
 
 import { DirectionalLight, Fog, Group, HemisphereLight, Matrix4, Vector3 } from './three.js';
 import { appState } from './state.js';

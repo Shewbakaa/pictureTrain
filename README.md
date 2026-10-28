@@ -9,6 +9,17 @@ last stop is the Day 365 station, where your message to her appears. It is built
 plays gentle piano music by Chopin in each scene (or your own song) with the little train's own sounds and
 the sounds of each scene, and works on a computer too.
 
+**What's in the ride:** the first screen is a boarding ticket, punched as she taps Begin, with a little line
+suggesting sound and headphones. Her screen stays on for the whole ride (on phones that allow it). The train
+rocks gently under her, bumps over the rail joints and runs through a tunnel into the winter hills. The trees
+and grass sway in the breeze, and there is life to go with the sounds: butterflies and a flock of birds in
+spring, gulls over the sea, deer at the edge of the autumn forest, robins on the winter fences, and at dusk the
+stars, a crescent moon, a shooting star and smoke from the chimneys. The two of you stand beside every photo
+sign, posed for the moment, with a little dog or cat (section 2). Some things answer a tap, like the whistle
+cord, the lantern, the balloons, the snowman and the two of you, and she can look around by moving her phone
+(the phone button at the top). At the end, white doves fly up as the fireworks start, your message writes
+itself as if by hand, and your voice note plays, if you leave one (section 4).
+
 It is a plain folder of files: no accounts, no server and no tracking. Nothing is fetched from anywhere
 else when she opens it.
 
@@ -81,9 +92,9 @@ The poses are `'holding-hands'` (the one you get if you leave `pose` out), `'wav
 `'dancing'`, `'pointing'` (she points at the photo) and `'none'` (no couple at that stop). A pose the ride
 does not know is swapped for `'holding-hands'`, and the console says so.
 
-A little dog or cat sits at their feet at each stop, and one trots over with him at the end. Leave it to chance
-(`'random'`, which is what you get if you write nothing), or add a `pets` line to the main block of `content.js`
-(the one that holds `herName`):
+A little dog or cat sits at their feet at each stop (a stop with `pose: 'none'` has neither), and one trots over
+with him at the end. Leave it to chance (`'random'`, which is what you get if you write nothing), or add a `pets`
+line to the main block of `content.js` (the one that holds `herName`):
 
 ```js
 pets: 'cat',
@@ -195,9 +206,10 @@ music: 'music/our-song.mp3',
 Your song then replaces them all: it plays throughout, through every scene and the finale, with no scene's
 piece and no carol (and their files are never downloaded). It starts when she taps "Begin the ride", loops,
 and she can switch it off and on with the Sound button at the top, which also switches the ride's other
-sounds: the train's (its whistle, steam, chugs and the clickety-clack of the rails), each scene's (birds and a
-breeze in the meadow, waves at the beach, rustling leaves, a soft wind over the snow, crickets and a clock
-tower in the evening town), a rustle as each card comes up, and the finale's sparkle and fireworks. If the
+sounds: the click of her ticket being punched, the train's (its whistle, steam, chugs and the clickety-clack of
+the rails, and their echo in the tunnel), each scene's (birds and a breeze in the meadow, waves at the beach,
+rustling leaves, a soft wind over the snow, crickets and a clock tower in the evening town), the little sounds of
+the things she taps, a rustle as each card comes up, and the finale's sparkle, fireworks and doves. If the
 file is missing or will not play, each scene's own music plays instead and the console says why.
 Keep the file to a few MB (a 128 kbps mp3 is about 1 MB per minute).
 
@@ -232,7 +244,7 @@ voice: 'voice/message.m4a',
 How it plays:
 
 - It starts by itself as your message appears on the last card and begins to write itself.
-- While it plays, everything else fades out under it: the music, the train, the fireworks and the doves. The
+- While it plays, all the ride's other sound fades out under it, the music and the fireworks' pops included. The
   fireworks keep going on screen. When it ends, the sound fades back in.
 - A small round button beside **Ride again** shows a ring that fills as it plays. She can tap it to pause your
   voice and tap it again to carry on. Once it has finished, a tap plays it again from the start.
@@ -302,8 +314,8 @@ second.)
 - Her own song plays at the phone's volume on iPhones (see section 4).
 - After the phone is locked and unlocked again, the sound may need one tap on the Sound button to come back.
 - A phone call or a Siri interruption can leave the Sound button showing the wrong state until you tap it.
-- The finale plays: the train pulls into the Day 365 station, fireworks go off and doves fly up off the station
-  roof, and your message appears.
+- The finale plays: the train pulls into the Day 365 station, fireworks go off and a few white doves fly up over
+  the station, and your message appears and writes itself.
 - Try it inside the app you will send the link with. Instagram and WhatsApp open links in their own small
   browser, which can behave a little differently. iMessage opens Safari, so that one is the same as above.
 
@@ -430,7 +442,8 @@ npm run shot -- name "?at=120"    # screenshot into artifacts/shots/name.png
 ```
 
 The in-browser tests ride the whole way through the ride once, on Chromium only. On WebKit that one test is
-skipped on purpose (one full ride is enough); everything else runs on both.
+skipped on purpose (one full ride is enough), and so are the checks that measure how loud the sounds are, which
+are measured in Chromium alone; everything else runs on both.
 
 `npm run vendor` re-copies Three.js and the fonts from `node_modules` into `site/`, if you ever need it.
 
