@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PROP_TYPES, PROP_VARIANTS, chimneyTop, createPropGeometry } from '../../site/src/world/props.js';
+import { PROP_TYPES, PROP_VARIANTS, chimneyTop, createPropGeometry, perchTops } from '../../site/src/world/props.js';
 import { triangleCount } from '../../site/src/util/geo.js';
 import { ZONES } from '../../site/src/world/zones.js';
 import { ZONE_IDS } from '../../site/src/content/normalize.js';
@@ -213,4 +213,34 @@ test('a snowy cottage is a house with a white snow cap on its roof', () => {
   const pink = new THREE.Color('#ff7aa2');
   const blooms = (geometry) => vertices(geometry).filter(([, , , r, g, b]) => Math.hypot(r - pink.r, g - pink.g, b - pink.b) < 0.02).length;
   assert.ok(blooms(built('house', 0).body) > 0 && blooms(built('cottage_snowy', 0).body) === 0);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Perches (Task 8): where a robin sits, on a fence's posts and on the snowman's bobble hat.
+// ---------------------------------------------------------------------------------------------
+
+test('a robin perches on the top of each of a fence\'s two posts, and on the snowman\'s bobble', () => {
+  const fence = perchTops('fence');
+  assert.equal(fence.length, 2);
+  const { max } = built('fence').body.boundingBox;
+  for (const [x, y, z] of fence) {
+    // On a post's cap: the highest vertices over the post (0.13 m across) are its point, a little above the robin's feet.
+    const cap = Math.max(...vertices(built('fence').body).filter(([vx, , vz]) => Math.abs(vx - x) < 0.08 && Math.abs(vz - z) < 0.08).map(([, vy]) => vy));
+    assert.ok(Math.abs(cap - max.y) < 1e-6, 'the posts stand highest');
+    assert.ok(y > cap - 0.1 && y < cap, `post at x ${x}: feet ${y.toFixed(2)} m up, under its cap's point ${cap.toFixed(2)}`);
+  }
+  assert.deepEqual(fence.map(([x]) => Math.sign(x)).sort(), [-1, 1], 'one at each end');
+
+  const [bobble, ...more] = perchTops('snowman');
+  assert.equal(more.length, 0);
+  const snowman = built('snowman').body.boundingBox;
+  assert.ok(Math.abs(bobble[1] - snowman.max.y) < 0.02, `on top of the hat: ${bobble[1].toFixed(3)} against ${snowman.max.y.toFixed(3)}`);
+  assert.ok(Math.hypot(bobble[0], bobble[2]) < 0.1, 'over the snowman\'s middle');
+});
+
+test('nothing else has a perch', () => {
+  for (const type of PROP_TYPES) {
+    if (type === 'fence' || type === 'snowman') continue;
+    assert.deepEqual(perchTops(type), [], type);
+  }
 });

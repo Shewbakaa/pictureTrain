@@ -10,7 +10,7 @@ import { tunnelSpan } from '../../site/src/world/tunnel.js';
 import { ZONES } from '../../site/src/world/zones.js';
 import { MATERIALS } from '../../site/src/render/materials.js';
 import { swayMaterialFor } from '../../site/src/world/wind.js';
-import { chimneyTop } from '../../site/src/world/props.js';
+import { chimneyTop, perchTops } from '../../site/src/world/props.js';
 import { normalizeContent } from '../../site/src/content/normalize.js';
 import { Matrix4, Vector3 } from '../../site/src/three.js';
 import fixture from '../fixtures/content.fixture.js';
@@ -200,4 +200,32 @@ test('the chimneys follow the density: a chimney is up while its house is drawn'
     }
   }
   assert.ok(chimneys.every((c) => c.rank >= 0 && c.rank < 1));
+});
+
+// ---------------------------------------------------------------------------------------------
+// Perches (Task 8): where the robins sit, and which of them go with their prop when the props are thinned.
+// ---------------------------------------------------------------------------------------------
+
+test('every fence post and snowman has a perch on its top, in the world, with its zone and its rank', () => {
+  const { perches } = dressing.spots;
+  const perched = bodies.filter((m) => /-(fence|snowman)-\d$/.test(m.name));
+  const total = perched.reduce((sum, m) => sum + perchTops(m.name.split('-')[2]).length * m.instanceMatrix.count, 0);
+  assert.ok(perched.some((m) => m.name.startsWith('props-winter-fence-')) && perched.some((m) => m.name.startsWith('props-winter-snowman-')));
+  assert.equal(perches.length, total, 'one for each post and each snowman');
+  const matrix = new Matrix4();
+  for (const mesh of perched) {
+    const [, zone, type] = mesh.name.split('-');
+    for (let i = 0; i < mesh.instanceMatrix.count; i++) {
+      mesh.getMatrixAt(i, matrix);
+      for (const top of perchTops(type)) {
+        const at = new Vector3(...top).applyMatrix4(matrix);
+        const mine = perches.find((p) => p.distanceTo(at) < SAME);
+        assert.ok(mine, `${mesh.name} #${i} has its perch`);
+        assert.equal(mine.zone, zone);
+        assert.equal(mine.rank, i / mesh.instanceMatrix.count, 'its prop is drawn while the density is above this');
+        const base = new Vector3().setFromMatrixPosition(matrix);
+        assert.ok(mine.y - base.y > 0.9 && mine.y - base.y < 2.4, `${mesh.name} #${i}: ${(mine.y - base.y).toFixed(2)} m over its own ground`);
+      }
+    }
+  }
 });

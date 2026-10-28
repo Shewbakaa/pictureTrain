@@ -18,8 +18,9 @@
 // grass sway in the breeze, in the vertex shader of their own material (wind.js).
 //
 // It also says where things stand that others need (`spots`): the top of every house's and snowy cottage's chimney in
-// the world, for the smoke, each with the share of the density (`rank`) above which its house is drawn, so the smoke
-// goes with the house when a slow phone thins the props.
+// the world, for the smoke, and every fence post's and snowman's top, where the robins perch (birds.js). Each has the
+// share of the density (`rank`) above which its prop is drawn, so the smoke and the robins go with their prop when a
+// slow phone thins the props.
 //
 // DOM-free (only Three's classes are used), so the Node unit tests can import it.
 
@@ -28,7 +29,7 @@ import { MATERIALS } from '../render/materials.js';
 import { clamp } from '../util/math.js';
 import { createRng } from '../util/rng.js';
 import { envAt } from './environment.js';
-import { chimneyTop, createPropGeometry } from './props.js';
+import { chimneyTop, createPropGeometry, perchTops } from './props.js';
 import { scatterZone } from './scatter.js';
 import { SIGN } from './signs.js';
 import { START_STATION_DISTANCE } from './stations.js';
@@ -93,17 +94,25 @@ function footprintRadius(geometry) {
  */
 
 /**
+ * @typedef {Vector3 & { rank: number, zone: import('../content/normalize.js').ZoneId }} Perch
+ *   The world position of a perch on a prop's top (props.js `perchTops`), for a little bird's feet: a fence post's
+ *   cap or a snowman's bobble hat. Its prop is drawn while the density is above `rank` (0 to 1), and stands in
+ *   `zone`'s scenery.
+ */
+
+/**
  * Builds the props of every zone of the ride.
  * @param {{ path: import('./trackPath.js').TrackPath, layout: import('./layout.js').Layout, seed?: number }} options
  *   `seed` is the first zone's scatter seed; each zone after it takes the next one (the default, 1, gives every
  *   zone its position in the ride + 1, as the world is meant to be built).
  * @returns {{
  *   group: Group, setDensity: (share: number) => void, update: (dt: number, time: number) => void,
- *   spots: { chimneys: Chimney[] },
+ *   spots: { chimneys: Chimney[], perches: Perch[] },
  * }}
  *   Add `group` to the scene. `setDensity` draws that share (0 to 1) of every mesh's props: the quality tier's
  *   `density`. Call `update` every frame with the seconds since the last frame and the seconds since the start.
- *   `spots` lists where things stand: `chimneys`, the top of every chimney (smoke.js).
+ *   `spots` lists where things stand: `chimneys`, the top of every chimney (smoke.js), and `perches`, the top of
+ *   every fence post and snowman (birds.js).
  */
 export function createDressing({ path, layout, seed = 1 }) {
   const group = new Group();
@@ -122,6 +131,8 @@ export function createDressing({ path, layout, seed = 1 }) {
   const size = new Vector3();
   /** @type {Chimney[]} */
   const chimneys = [];
+  /** @type {Perch[]} */
+  const perches = [];
 
   layout.zones.forEach((zone, index) => {
     const def = ZONES[zone.id];
@@ -158,6 +169,7 @@ export function createDressing({ path, layout, seed = 1 }) {
       const lit = glow ? new InstancedMesh(glow, MATERIALS.glow, list.length) : null;
       if (lit) lit.name = `${name}-glow`;
       const top = chimneyTop(type, Number(variant));
+      const perched = perchTops(type);
       list.forEach((p, i) => {
         matrix.compose(position.set(p.x, p.y, p.z), turn.setFromAxisAngle(UP, p.rotY), size.setScalar(p.scale));
         solid.setMatrixAt(i, matrix);
@@ -165,6 +177,7 @@ export function createDressing({ path, layout, seed = 1 }) {
         // Where the smoke leaves it, in the world: the house's turn and size put on the point the prop's frame gives.
         // Its house is the i-th of the list, so it is drawn while the density is more than i / total.
         if (top) chimneys.push(Object.assign(new Vector3(...top).applyMatrix4(matrix), { rank: i / list.length }));
+        for (const at of perched) perches.push(Object.assign(new Vector3(...at).applyMatrix4(matrix), { rank: i / list.length, zone: zone.id }));
       });
       for (const mesh of lit ? [solid, lit] : [solid]) {
         mesh.computeBoundingSphere();
@@ -230,6 +243,6 @@ export function createDressing({ path, layout, seed = 1 }) {
       }
     },
     update,
-    spots: { chimneys },
+    spots: { chimneys, perches },
   };
 }

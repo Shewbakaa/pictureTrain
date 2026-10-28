@@ -19,7 +19,7 @@
 // Pure and DOM-free (only Three's geometry classes are used), so the Node unit tests can import it.
 
 import {
-  BoxGeometry, ConeGeometry, CylinderGeometry, DodecahedronGeometry, IcosahedronGeometry, SphereGeometry, Vector3,
+  BoxGeometry, ConeGeometry, CylinderGeometry, DodecahedronGeometry, Euler, IcosahedronGeometry, SphereGeometry, Vector3,
 } from '../three.js';
 import { part, moveParts, mergeParts, jitterColor } from '../util/geo.js';
 import { createRng, rngRange, rngPick } from '../util/rng.js';
@@ -416,6 +416,13 @@ function hayBale() {
   ];
 }
 
+/**
+ * Where the snowman's head sits on its body and how it is tipped (a little forward and to one side), and the bobble
+ * on its hat in the head's own frame: its middle and its radius (m). A robin perches on the bobble (`perchTops`).
+ */
+const SNOWMAN_HEAD = Object.freeze({ position: Object.freeze([0, 1.48, 0]), rotation: Object.freeze([0.06, 0, 0.1]) });
+const BOBBLE = Object.freeze({ AT: Object.freeze([0, 0.35, 0]), RADIUS: 0.075 });
+
 /** Three snowballs with a carrot nose, rosy cheeks, a red scarf, stick arms and a bobble hat, facing +Z. */
 function snowman() {
   const { snow, coal } = COLOURS;
@@ -429,12 +436,12 @@ function snowman() {
     // The bobble hat: a dome, a turned-up brim and a pompom.
     part(new SphereGeometry(0.25, 8, 4, 0, TAU, 0, Math.PI / 2), COLOURS.hat, { position: [0, 0.09, 0] }),
     part(cylinder(0.255, 0.268, 0.08, 8), '#ffffff', { position: [0, 0.1, 0] }),
-    part(blob(0.075, 0), '#ffffff', { position: [0, 0.35, 0] }),
+    part(blob(BOBBLE.RADIUS, 0), '#ffffff', { position: [...BOBBLE.AT] }),
   ];
   return [
     part(sphere(0.48, 7, 6), snow, { position: [0, 0.44, 0], scale: [1, 0.92, 1] }),
     part(sphere(0.35, 7, 6), snow, { position: [0, 1.02, 0] }),
-    ...moveParts(head, { position: [0, 1.48, 0], rotation: [0.06, 0, 0.1] }),
+    ...moveParts(head, { position: [...SNOWMAN_HEAD.position], rotation: [...SNOWMAN_HEAD.rotation] }),
     part(sphere(0.04, 4, 3), coal, { position: [0, 1.12, 0.335] }),
     part(sphere(0.04, 4, 3), coal, { position: [0, 0.94, 0.345] }),
     part(cylinder(0.265, 0.295, 0.11, 8), COLOURS.scarf, { position: [0, 1.3, 0] }),
@@ -627,12 +634,16 @@ function bench() {
   return parts;
 }
 
+/** A fence's two posts: how far either side of its middle they stand, how tall they are and their caps' height (m). */
+const FENCE_POST = Object.freeze({ X: 1.25, HEIGHT: 1.0, CAP: 0.12 });
+
 /** A section of picket fence along X: two posts, two rails behind, six pointed pickets in front. */
 function fence() {
   const post = '#a5734a', picket = '#c79560';
+  const { X, HEIGHT, CAP } = FENCE_POST;
   const parts = [];
-  for (const x of [-1.25, 1.25]) {
-    parts.push(part(box(0.13, 1.0, 0.13), post, { position: [x, 0.5, 0] }), pyramid(0.15, 0.12, 0.15, post, [x, 1.0, 0]));
+  for (const x of [-X, X]) {
+    parts.push(part(box(0.13, HEIGHT, 0.13), post, { position: [x, HEIGHT / 2, 0] }), pyramid(0.15, CAP, 0.15, post, [x, HEIGHT, 0]));
   }
   for (const y of [0.33, 0.72]) parts.push(part(box(2.5, 0.08, 0.05), post, { position: [0, y, -0.06] }));
   for (let i = 0; i < 6; i++) {
@@ -640,6 +651,31 @@ function fence() {
     parts.push(part(box(0.14, 0.76, 0.04), picket, { position: [x, 0.42, 0] }), pyramid(0.14, 0.13, 0.04, picket, [x, 0.8, 0]));
   }
   return parts;
+}
+
+/** The top of an icosahedron (geo's `blob` at detail 0) of radius 1 is this far above its middle: two of its corners. */
+const BLOB_TOP = 0.8507;
+
+/**
+ * Where a little bird may perch on a prop, in the prop's own frame: a list of [x, y, z] points for its feet, on the
+ * caps of a fence's two posts and on the bobble of the snowman's hat, or [] for a prop with none. Like chimneyTop, it
+ * agrees with the geometry from `createPropGeometry`, so a prop placed with a turn and a scale (dressing.js) has its
+ * perches at that same transform of these points.
+ * @param {string} type
+ * @returns {Array<[number, number, number]>}
+ */
+export function perchTops(type) {
+  if (type === 'fence') {
+    const { X, HEIGHT, CAP } = FENCE_POST;
+    return [-X, X].map((x) => [x, HEIGHT + CAP / 2, 0]);
+  }
+  if (type === 'snowman') {
+    const top = new Vector3(BOBBLE.AT[0], BOBBLE.AT[1] + BLOB_TOP * BOBBLE.RADIUS, BOBBLE.AT[2])
+      .applyEuler(new Euler(...SNOWMAN_HEAD.rotation))
+      .add(new Vector3(...SNOWMAN_HEAD.position));
+    return [top.toArray()];
+  }
+  return [];
 }
 
 // ------------------------------------------------------------------------------------------------

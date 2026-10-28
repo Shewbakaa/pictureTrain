@@ -13,7 +13,8 @@
 // nothing), and every TICK of real time it tends the beds (making one as its zone comes near, fading it with the
 // zone, taking it down once its zone has been silent for RELEASE) and books their sound LOOKAHEAD ahead, and steps
 // the events' clocks, which keep to real time (ambienceTiming.js): a ?speed= time warp never piles sounds up.
-// `weights` are the zones' weights, which the scenes' music follows too (music.js setZones).
+// `weights` are the zones' weights, which the scenes' music follows too (music.js setZones). Whoever listens with
+// onEvent hears each passing sound as it plays, so a gull call can have a gull to see (world/birds.js).
 
 import { AMBIENCE, bedGain, createChimeTrigger, createEventClock, wavePan, zoneWeights } from './ambienceTiming.js';
 import { BED_ZONES, createBed } from './ambienceBeds.js';
@@ -63,9 +64,11 @@ const EVENT_SEED = 1026;
 /**
  * @typedef {{ readonly weights: Readonly<Record<string, number>>, readonly beds: string[],
  *             update: (env: import('../world/environment.js').Env, yaw: number, seconds: number,
- *             distance: number) => void }} Ambience
+ *             distance: number) => void, onEvent: (listener: (name: string) => void) => void }} Ambience
  *   `weights` is each zone's weight at the last update (zoneWeights), every frame, sound or no sound; `beds` lists
- *   the zones whose beds are up (for tests and a curious look in the console)
+ *   the zones whose beds are up (for tests and a curious look in the console). `onEvent` adds a listener that hears
+ *   the name of each passing sound (EVENTS: 'gull', 'bird-spring'...) as it plays; one skipped (the sound off, no
+ *   room in the node budget) is not heard.
  */
 
 /**
@@ -103,6 +106,8 @@ export function createAmbience(sfx) {
   let seaPan = 0; // where the sea is from where she is looking (stereo pan), for the waves and the gulls
   let chimeWait = 0; // while the chime is due: how much longer (real s) it may wait for room
   let since = 0; // real seconds since the last tick
+  /** @type {Array<(name: string) => void>} */
+  const listeners = [];
 
   /** Makes, fades, books or takes down `zone`'s bed. */
   function tend(kit, zone, weight, step, audible) {
@@ -145,6 +150,9 @@ export function createAmbience(sfx) {
      * How many waves she has heard come in, its fraction how far into the one now (ambienceBeds.js waveAt); NaN
      * while none is heard, the sound's clock standing still (a video's sound, the page away) among those times.
      */
+    onEvent(listener) {
+      listeners.push(listener);
+    },
     seaWave() {
       const kit = sfx.kit;
       return kit && beds.summer && sfx.audible ? beds.summer.waveAt(kit.ctx.currentTime) : NaN;
@@ -171,7 +179,8 @@ export function createAmbience(sfx) {
         const c = clocks[i];
         const weight = weights[c.zone];
         if (!c.clock.step(step, weight)) continue;
-        sfx.play(c.name, random() * TICK, weight * (NEAR[0] + random() * (NEAR[1] - NEAR[0])));
+        if (!sfx.play(c.name, random() * TICK, weight * (NEAR[0] + random() * (NEAR[1] - NEAR[0])))) continue;
+        for (let k = 0; k < listeners.length; k++) listeners[k](c.name);
       }
     },
   };

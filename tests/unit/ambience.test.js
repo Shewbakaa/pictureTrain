@@ -199,6 +199,22 @@ test('the gulls call from over the sea, wherever she looks, like the waves', () 
   assert.ok(facing.length >= 2 && facing.every((p) => Math.abs(p) <= 0.2), `facing the sea: ${facing}`);
 });
 
+test('whoever listens hears each passing sound as it plays: a gull as the gull clock fires, so the gulls can call', () => {
+  const t = setup();
+  const heard = [];
+  t.ambience.onEvent((name) => heard.push({ name, t: t.ctx.currentTime }));
+  t.ride(20, middleOf('summer')); // the sound is off: the clocks are not even stepped, and nothing is heard
+  assert.deepEqual(heard, []);
+  t.on();
+  t.ride(120, middleOf('summer'));
+  const gulls = heard.filter((h) => h.name === 'gull');
+  assert.ok(gulls.length >= 2, `${gulls.length} gulls heard`);
+  assert.deepEqual(gulls, t.named('gull'), 'each one as it plays, and only those that play');
+  assert.deepEqual(heard.filter((h) => h.name !== 'gull'), [], 'the summer has no other passing sounds');
+  t.ride(60, middleOf('spring'));
+  assert.ok(heard.some((h) => h.name === 'bird-spring'), 'and the other zones\' sounds too');
+});
+
 test('without StereoPannerNode the sounds play unpanned', () => {
   const t = setup({ panning: false });
   t.on();

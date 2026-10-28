@@ -6,7 +6,9 @@
 // standing beside every other one, and the cabin she rides in. At dusk the sky fills with stars and a crescent moon
 // comes up, a shooting star crosses it 40 m before the last station and again as the finale's wish shows, and smoke
 // curls from the chimneys of the houses and of the station house. The track runs through a hill into winter, and the
-// world's light dims while she is in the tunnel, the world's sounds go muffled and the train's sounds echo.
+// world's light dims while she is in the tunnel, the world's sounds go muffled and the train's sounds echo. Birds go
+// with the sounds: a flock of songbirds crosses the spring sky, gulls loop over the summer sea (one flaps and banks as
+// a gull calls) and robins on the winter fences flutter off as the train comes.
 //
 // On top of it sits the ride UI: the intro card, a card at every stop, the timeline, the controls and the progress
 // pill, with the furthest moment she has reached remembered across reloads. If the phone takes the GPU away
@@ -46,6 +48,7 @@ import { createDressing } from './world/dressing.js';
 import { SWAY_LOW_MATERIAL, SWAY_MATERIAL, updateWind, windStrength } from './world/wind.js';
 import { createStation, START_STATION_DISTANCE } from './world/stations.js';
 import { createSkyDecor } from './world/skyDecor.js';
+import { BIRD_MATERIAL, createBirds } from './world/birds.js';
 import { createAmbientParticles } from './world/particles.js';
 import { createPhotoSign, placeCouple, placeSign, SIGN, signLookYaw, signTurn, turnSign } from './world/signs.js';
 import { createCouple } from './world/figures.js';
@@ -181,7 +184,9 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   const particles = createAmbientParticles({ maxCount: AMBIENT_PARTICLES });
   // Smoke from every house's chimney, and from the station house's.
   const smoke = createSmoke([...dressing.spots.chimneys, finaleStation.userData.chimney]);
-  scene.add(dressing.group, skyDecor.group, nightSky.group, particles.points, smoke.points);
+  // Songbirds, gulls and robins, the robins on the fences and snowmen.
+  const birds = createBirds({ path, perches: dressing.spots.perches });
+  scene.add(dressing.group, skyDecor.group, nightSky.group, particles.points, smoke.points, birds.group);
 
   // A photo sign at every stop, and the two of them beside every other one.
   const signs = new Group();
@@ -275,8 +280,8 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   const onDensity = [];
   /** @type {Array<(particles: number) => void>} */
   const onParticles = [];
-  onDensity.push(dressing.setDensity, smoke.setDensity); // the smoke goes with its house
-  onParticles.push(particles.setQuality, smoke.setQuality);
+  onDensity.push(dressing.setDensity, smoke.setDensity, birds.setDensity); // the smoke and the robins go with their prop
+  onParticles.push(particles.setQuality, smoke.setQuality, birds.setQuality);
   function applyTier() {
     const tier = governor.settings();
     stage.setPixelRatio(effectivePixelRatio(tier, window.devicePixelRatio));
@@ -286,6 +291,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     SEA_MATERIAL.needsUpdate = true;
     SWAY_MATERIAL.needsUpdate = true;
     SWAY_LOW_MATERIAL.needsUpdate = true;
+    BIRD_MATERIAL.needsUpdate = true;
     for (const fn of onDensity) fn(tier.density);
     for (const fn of onParticles) fn(tier.particles);
     finale.setQuality(governor.tier);
@@ -479,6 +485,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     skyDecor.update(dt, eye, env);
     particles.update(dt, env, eye, inside); // nothing falls in the tunnel
     smoke.update(dt, eye);
+    birds.update(dt, env, eye, d);
     dressing.update(dt, elapsed);
     updateWind(elapsed, windStrength(env));
     cabin.update(dt, ride.speed, elapsed);
@@ -555,6 +562,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   sfx = createSfx(music);
   sfx.setTunnel(span);
   ambience = createAmbience(sfx);
+  ambience.onEvent((name) => { if (name === 'gull') birds.gullCall(); }); // the gull she hears is one she can see
   cues = createCues(sfx);
   document.addEventListener('visibilitychange', () => music.setHidden(document.hidden), { signal });
   onVideoSound = () => {
