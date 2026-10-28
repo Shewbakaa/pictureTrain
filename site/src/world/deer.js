@@ -31,12 +31,12 @@ import { smoothstep } from '../util/math.js';
 import { createRng, rngRange } from '../util/rng.js';
 
 /**
- * SPOTS: where the deer may stand too, as a share of the autumn zone's length from its start, when the autumn has
- * fewer than two places between its stops (`deerSpots`); there are as many deer as SPOTS at most. The sides alternate,
- * the first on the right (the track's right when the train faces ahead). OFFSET: how far out from the track (m), each
- * deer somewhere between these. HEAD_UP: how far (rad) the head and neck lift, turning about the withers. STOP_CLEAR
- * and TUNNEL_CLEAR: how far (m, along the track) a deer stands at least from every stop, where it would be behind the
- * photo sign, and from the tunnel.
+ * SPOTS: where the deer may stand too, as a share of the autumn zone's length from its start, when fewer than two
+ * places between the autumn's stops are clear (`deerSpots`); there are as many deer as SPOTS at most. The sides
+ * alternate, the first on the right (the track's right when the train faces ahead). OFFSET: how far out from the track
+ * (m), each deer somewhere between these. HEAD_UP: how far (rad) the head and neck lift, turning about the withers.
+ * STOP_CLEAR and TUNNEL_CLEAR: how far (m, along the track) a deer stands at least from every stop, where it would be
+ * behind the photo sign, and from the tunnel.
  */
 export const DEER = Object.freeze({
   SPOTS: Object.freeze([0.3, 0.7]),
@@ -195,7 +195,8 @@ function earFlick(since) {
  */
 function deerSpots(layout, autumn, tunnel) {
   const { STOP_CLEAR, TUNNEL_CLEAR, SPOTS } = DEER;
-  const edges = [autumn.start, ...layout.stops.filter((stop) => stop.zone === autumn.id).map((stop) => stop.distance), autumn.end];
+  const stops = layout.stops.filter((stop) => stop.zone === autumn.id).map((stop) => stop.distance);
+  const edges = [autumn.start, ...stops, autumn.end];
   const halfway = edges.slice(1).map((edge, i) => (edges[i] + edge) / 2);
   const shares = SPOTS.map((share) => autumn.start + share * (autumn.end - autumn.start));
   const clear = (d) => layout.stops.every((stop) => Math.abs(stop.distance - d) >= STOP_CLEAR)
