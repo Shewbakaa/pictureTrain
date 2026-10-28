@@ -4,23 +4,28 @@
 // it stands there, and a longer, happy whistle at the Day 365 station; and, from tapSounds.js, the soft shimmer of a
 // shooting star.
 //
-// They play on the music's AudioContext, into the effects bus of its master chain (mixer.js), so the Sound button,
-// a video's sound and the page going into the background govern them together with the music (music.js). Nothing
-// plays while the sound is off, ducked or held: those sounds are skipped, not saved up. The one exception is the
-// moment the sound is coming on: a sound asked for then (the whistle as she taps Begin, before the browser has let
-// the context run, or as she taps Continue after a video's sound, while the rest of the sound comes back) plays
-// once it is fully on, if it comes on within WAKE_GRACE. Likewise a one-shot asked for while the master fader is
-// still rising starts once it is up, so the first toot of a whistle is never lost in a fade.
+// They play on the music's AudioContext, into the effects bus of its master chain (mixer.js; the train's by a bus of
+// its own, which the tunnel's echo takes them from), so the Sound button, a video's sound and the page going into
+// the background govern them together with the music (music.js). Nothing plays while the sound is off, ducked or
+// held: those sounds are skipped, not saved up. The one exception is the moment the sound is coming on: a sound
+// asked for then (the whistle as she taps Begin, before the browser has let the context run, or as she taps Continue
+// after a video's sound, while the rest of the sound comes back) plays once it is fully on, if it comes on within
+// WAKE_GRACE. Likewise a one-shot asked for while the master fader is still rising starts once it is up, so the
+// first toot of a whistle is never lost in a fade.
 //
 // The app drives it: depart(), arrive() and finale() from the ride's events, and update(speed, distance, seconds,
-// toStop) every frame, which allocates nothing unless a sound starts. Its timing keeps to real time under a
+// toStop, inside) every frame, which allocates nothing unless a sound starts. Its timing keeps to real time under a
 // ?speed= time warp and skips rather than bursts (sfxTiming.js), and every sound plays at most once per its own
 // gap. All the sounds together, the ambience's beds included, hold at most NODE_BUDGET audio nodes at a time: a
 // passing sound that does not fit is skipped, and a bed waits until there is room for it.
 //
+// The tunnel: the app says where it is (setTunnel) once and how far inside it she is (`inside`) every frame. While she
+// is inside, the ambience goes muffled (mixer.js) and the train's sounds echo (tunnelEcho.js, built only within reach
+// of the tunnel), and the train toots as it comes up to the tunnel's mouth.
+//
 // The ambience and the cues use it this way:
 //   sfx.kit      null until the Begin tap has made the AudioContext; then what a sound needs to make itself (Kit,
-//                below): the context, the three buses, the shared noise and dust, a seeded random, and the node
+//                below): the context, the buses, the shared noise and dust, a seeded random, and the node
 //                budget.
 //   sfx.define(name, { gap, play(kit, at, level) })
 //                adds a one-shot. `play` builds its nodes to start at context time `at`, counts them with
@@ -41,6 +46,7 @@ import {
 } from './sfxTiming.js';
 import { createTrainSounds } from './trainSounds.js';
 import { createTapSounds } from './tapSounds.js';
+import { ECHO, createTunnelEcho } from './tunnelEcho.js';
 import { RIDE } from '../ride/rideController.js';
 import { createRng } from '../util/rng.js';
 
@@ -71,13 +77,17 @@ const DUST_SEED = 31;
 /** When the steam puffs after the whistle as the train sets off (s). The finale's whistle is in sfxTiming.js. */
 const PUFF_AFTER = 0.95;
 
+/** The train toots this far before the tunnel's mouth (m), as it comes up to it. */
+const TUNNEL_TOOT = 15;
+
 /** Beyond this distance from its stop (m) the train cannot be braking yet: the brake hiss is ready for the stop. */
 const BRAKE_ARM = (RIDE.CRUISE * RIDE.CRUISE) / (2 * RIDE.BRAKE) + 1;
 
 /**
  * @typedef {object} Kit
  * @property {BaseAudioContext} ctx
- * @property {{ music: GainNode, ambience: GainNode, effects: GainNode }} buses  into the master chain
+ * @property {{ music: GainNode, ambience: GainNode, effects: GainNode, train: GainNode }} buses  into the master chain;
+ *   `train` is the train's sounds, on their way into `effects`
  * @property {AudioBuffer} noise  NOISE_SECONDS of white noise, mono, made once; loop it from a random point
  * @property {AudioBuffer} dust  NOISE_SECONDS of sparse crackles, mono, made once
  * @property {() => number} random  a seeded random number in [0, 1)
@@ -87,6 +97,7 @@ const BRAKE_ARM = (RIDE.CRUISE * RIDE.CRUISE) / (2 * RIDE.BRAKE) + 1;
  * @property {(nodes: number) => boolean} hold  counts a continuous sound's `nodes` until release(), if they fit
  *   (false, counting nothing, if they do not)
  * @property {(nodes: number) => void} release  stops counting `nodes` that hold() counted
+ * @property {(amount: number) => void} setMuffle  closes the ambience's low-pass, 0 (open) to 1 (deep in the tunnel)
  * @property {number} live  audio nodes playing now
  */
 
@@ -115,7 +126,7 @@ export function createKit(mixer, { budget = NODE_BUDGET } = {}) {
   let live = 0;
   return {
     ctx,
-    buses: { music: mixer.music, ambience: mixer.ambience, effects: mixer.effects },
+    buses: { music: mixer.music, ambience: mixer.ambience, effects: mixer.effects, train: mixer.train },
     noise,
     dust,
     random,
@@ -128,6 +139,7 @@ export function createKit(mixer, { budget = NODE_BUDGET } = {}) {
     release(nodes) {
       live -= nodes;
     },
+    setMuffle: mixer.setMuffle,
     track(source, nodes, last) {
       live += nodes;
       source.onended = () => {
@@ -147,7 +159,8 @@ export function createKit(mixer, { budget = NODE_BUDGET } = {}) {
  *   define: (name: string, shot: { gap: number, play: (kit: Kit, at: number, level: number) => boolean|void }) => void,
  *   play: (name: string, delay?: number, level?: number) => boolean,
  *   depart: () => void, arrive: () => void, finale: () => void,
- *   update: (speed: number, distance: number, seconds: number, toStop?: number) => void,
+ *   setTunnel: (span: { from: number, to: number }|null) => void,
+ *   update: (speed: number, distance: number, seconds: number, toStop?: number, inside?: number) => void,
  * }} Sfx
  */
 
@@ -165,6 +178,10 @@ export function createSfx(music, { now = () => performance.now() } = {}) {
   let train = null;
   /** @type {ReturnType<typeof createTapSounds>|null} */
   let tap = null;
+  /** @type {import('./tunnelEcho.js').TunnelEcho|null} */
+  let echo = null;
+  /** @type {{ from: number, to: number }|null} where the tunnel is (distances along the track, m) */
+  let tunnel = null;
 
   /** @type {Map<string, { gate: ReturnType<typeof createGate>, play: (kit: Kit, at: number, level: number) => boolean|void }>} */
   const shots = new Map();
@@ -189,6 +206,7 @@ export function createSfx(music, { now = () => performance.now() } = {}) {
     kit = createKit(music.mixer);
     train = createTrainSounds(kit);
     tap = createTapSounds(kit);
+    echo = createTunnelEcho(kit);
     return kit;
   }
 
@@ -297,12 +315,17 @@ export function createSfx(music, { now = () => performance.now() } = {}) {
       sfx.play('sigh');
       sfx.play('whistle-finale', FINALE_WHISTLE_AFTER);
     },
+    /** Where the tunnel is, once: the span the world was built with (world/tunnel.js), or null for no tunnel. */
+    setTunnel(span) {
+      tunnel = span;
+    },
     /**
      * Every frame: the train makes `speed` m/s (the ride's own speed, 0 standing still or paused), is `distance` m
      * along the track and has `toStop` m to go to where it stops next (Infinity when it is not moving). `seconds`
-     * is the frame's real time.
+     * is the frame's real time. `inside` (0 to 1) is how far inside the tunnel it is (world/tunnel.js
+     * `tunnelInside`): 0 out in the open.
      */
-    update(speed, distance, seconds, toStop = Infinity) {
+    update(speed, distance, seconds, toStop = Infinity, inside = 0) {
       const from = lastDistance;
       lastDistance = distance;
       if (toStop > BRAKE_ARM) brakeReady = true;
@@ -310,9 +333,18 @@ export function createSfx(music, { now = () => performance.now() } = {}) {
       if (brake) brakeReady = false;
       if (!audible()) {
         if (!coming()) waiting = 0;
+        // The echo's nodes count in the budget: not held while nothing can be heard, or if the sound goes off in the
+        // tunnel and she jumps away from it.
+        if (echo) echo.release();
         return;
       }
       if (waiting > 0 && !music.waking) playWaiting();
+
+      kit.setMuffle(inside);
+      echo.update(inside, tunnel !== null && distance >= tunnel.from - ECHO.NEAR && distance <= tunnel.to + ECHO.NEAR);
+      // The toot as it comes up to the tunnel: once, going forwards. A jump or a restart (TRAIN.MAX_HOP) toots none.
+      const mark = tunnel ? tunnel.from - TUNNEL_TOOT : NaN;
+      if (speed > 0 && from < mark && distance >= mark && distance - from <= TRAIN.MAX_HOP) sfx.play('whistle');
 
       const ago = chugs.step(speed, seconds);
       if (ago >= 0) fire(chug, -ago, chugLevel(speed));

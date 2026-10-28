@@ -16,6 +16,8 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
     const { createKit } = await import('./src/audio/sfx.js');
     const { createTrainSounds } = await import('./src/audio/trainSounds.js');
     const { createTapSounds } = await import('./src/audio/tapSounds.js');
+    const { ECHO, createTunnelEcho } = await import('./src/audio/tunnelEcho.js');
+    const { tunnelInside } = await import('./src/world/tunnel.js');
     const { TRAIN, chugInterval, chugLevel, clickLevel, bogieDelay } = await import('./src/audio/sfxTiming.js');
     const { RIDE } = await import('./src/ride/rideController.js');
 
@@ -94,6 +96,21 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
       sounds.steam('brake', 8);
     });
 
+    // The tunnel's echo: a rail-joint click, heard `at` m along a ride whose tunnel runs from 540 m to 600 m, through
+    // a kit on the ride's own node budget. `peakNodes` is what the kit holds once the click is booked, echo and all.
+    const span = { from: 540, to: 600, boundary: 570 };
+    const CLICK_AT = 0.5;
+    let peakNodes = 0;
+    const clickAt = (at) => render(1.2, (ctx, mixer) => {
+      const kit = createKit(mixer);
+      const echo = createTunnelEcho(kit);
+      echo.update(tunnelInside(span, at), at >= span.from - ECHO.NEAR && at <= span.to + ECHO.NEAR);
+      createTrainSounds(kit).click(CLICK_AT, 1);
+      peakNodes = Math.max(peakNodes, kit.live);
+    });
+    const inTunnel = await clickAt(570);
+    const inOpen = await clickAt(400);
+
     // Loudness in 50 ms windows: a noise burst's sample peak says little about how loud it sounds, its loudest
     // 50 ms (its momentary level) says more.
     const windowed = (data) => {
@@ -107,6 +124,16 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
     const sighWindows = windowed(steam.sigh);
     const sighTop = Math.max(...sighWindows);
     const sighHeard = sighWindows.filter((x) => x > sighTop * 10 ** (-30 / 20)).length * 0.05;
+
+    // Energy in a window `from`–`to` s after the click (−120 dBFS at the quietest, so silence compares).
+    const after = (data, from, to) => db(Math.max(rms(data, Math.round((CLICK_AT + from) * RATE), Math.round((CLICK_AT + to) * RATE)), 1e-6));
+    // The loudest 10 ms from `from` to `to` s after the click: the click itself, then its first echo.
+    const burst = (data, from, to) => {
+      const n = Math.round(0.01 * RATE);
+      let loudest = 0;
+      for (let i = Math.round((CLICK_AT + from) * RATE); i + n <= Math.round((CLICK_AT + to) * RATE); i += n) loudest = Math.max(loudest, rms(data, i, i + n));
+      return db(loudest);
+    };
 
     // Chug RMS over whole chug periods (from the first chug to the last full period).
     const period = chugInterval(RIDE.CRUISE);
@@ -137,6 +164,10 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
       shimmerLoudestDb: loudest(shimmer),
       mixPeak: peak(mix),
       mixRmsDb: db(rms(mix, afterFade)),
+      echoTailDb: after(inTunnel, 0.12, 0.3),
+      openTailDb: after(inOpen, 0.12, 0.3),
+      echoUnderDryDb: burst(inTunnel, 0.1, 0.2) - burst(inTunnel, 0, 0.1),
+      echoPeakNodes: peakNodes,
     };
   });
 
@@ -168,4 +199,9 @@ test('the mix never clips, the music is a third quieter, and the train sits at i
   for (const key of ['puffLoudestDb', 'brakeLoudestDb', 'sighLoudestDb']) expect(m.shimmerLoudestDb, key).toBeLessThan(m[key]);
   expect(m.sighHeardS).toBeGreaterThanOrEqual(1.2);
   expect(m.sighHeardS).toBeLessThanOrEqual(2);
+  // The tunnel's echo: a click at 570 m has a tail 120 to 300 ms after it that the same click at 400 m, out in the
+  // open, does not, and its first repeat is about 10 dB under the click. The echo fits in the 40-node budget.
+  expect(m.echoTailDb - m.openTailDb).toBeGreaterThanOrEqual(6);
+  expect(Math.abs(m.echoUnderDryDb - -10)).toBeLessThanOrEqual(3);
+  expect(m.echoPeakNodes).toBeLessThanOrEqual(40);
 });

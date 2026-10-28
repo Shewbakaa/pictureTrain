@@ -53,14 +53,15 @@ const TRAIN_NODES = Object.freeze({ whistle: 12, chug: 3, click: 3, steam: 4 });
  */
 
 /**
- * The train's sounds, played into the kit's effects bus. Each starts at context time `at` and returns false,
+ * The train's sounds, played into the kit's train bus (which joins the effects bus, and is where the tunnel's echo
+ * takes them from). Each starts at context time `at` and returns false,
  * playing nothing, when the kit has no room for it. `level` (0–1) scales a chug or click with the train's speed.
  * @param {import('./sfx.js').Kit} kit
  * @returns {TrainSounds}
  */
 export function createTrainSounds(kit) {
   const { ctx } = kit;
-  const out = kit.buses.effects;
+  const out = kit.buses.train;
   let accent = false;
 
   /** The shared noise, from a random point in it, between `at` and `end`. */

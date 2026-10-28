@@ -167,8 +167,9 @@ test('Ride again or a jump hushes the finale\'s sounds at once, and nothing more
   const { audio, music, cues } = engine();
   cues.arrival();
   run(cues, 0, 9.3, { audio });
-  // Everything of the finale plays through its own bus, the one node it joins the effects bus by.
-  const [bus, ...others] = audio.made.filter((n) => n.outputs.includes(music.mixer.effects));
+  // Everything of the finale plays through its own bus, the one node it joins the effects bus by (the mixer's own
+  // train bus is the other way in: it carries the train's sounds).
+  const [bus, ...others] = audio.made.filter((n) => n !== music.mixer.train && n.outputs.includes(music.mixer.effects));
   assert.equal(others.length, 0, 'one way into the effects bus');
   assert.ok(audio.made.filter((n) => n.outputs.includes(bus)).length >= 10, 'the cues play into it');
   const sounding = audio.starts.length;
@@ -315,7 +316,7 @@ test('the wish: a shimmer for the finale\'s shooting star, on the finale\'s own 
   cues.wish();
   assert.equal(tones() - before, 6, 'three bells, each two sines');
   // It joins the effects bus by the finale's bus, the same one node as every other sound of the finale.
-  const [bus, ...others] = audio.made.filter((n) => n.outputs.includes(music.mixer.effects));
+  const [bus, ...others] = audio.made.filter((n) => n !== music.mixer.train && n.outputs.includes(music.mixer.effects));
   assert.equal(others.length, 0, 'one way into the effects bus');
   assert.ok(audio.made.some((n) => n.outputs.includes(bus) && n.gain && n.gain.value > 0.004 && n.gain.value < 0.006), 'the shimmer plays into it');
   assert.deepEqual(cues.heard, ['bell'], 'it is not one of the sounds the app state lists');

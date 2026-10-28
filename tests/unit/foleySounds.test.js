@@ -39,7 +39,7 @@ test('each voice counts in the budget exactly the nodes it makes, until it ends,
       assert.ok(panning ? over === 0 : over === 0 || over === 1, `${name}: ${kit.live} counted, ${audio.nodes - before} made`);
       const joined = audio.made.filter((n) => n.outputs.includes(out));
       assert.equal(joined.length, 1, `${name} joins its output by one node`);
-      assert.ok(audio.made.every((n) => !n.outputs.includes(kit.buses.effects)), `${name} goes through its output, not round it`);
+      assert.ok(audio.made.every((n) => n === kit.buses.train || !n.outputs.includes(kit.buses.effects)), `${name} goes through its output, not round it`);
       audio.advance(60);
       assert.equal(kit.live, 0, `${name} lets them go`);
       assert.equal(joined[0].disconnected, true, `${name} leaves its output when it ends`);

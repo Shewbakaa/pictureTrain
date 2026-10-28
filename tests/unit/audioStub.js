@@ -42,10 +42,14 @@ export function stubContext({ panning = true } = {}) {
   const node = (extra) => {
     nodes += 1;
     const n = {
-      disconnected: false,
+      disconnected: false, // all its outputs were cut: disconnect()
+      cut: [], // the single nodes it was cut from: disconnect(node)
       outputs: [], // the nodes and params it was connected to
       connect(target) { this.outputs.push(target); return target; },
-      disconnect() { this.disconnected = true; },
+      disconnect(target) {
+        if (target) this.cut.push(target);
+        else this.disconnected = true;
+      },
       ...extra,
     };
     made.push(n);

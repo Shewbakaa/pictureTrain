@@ -6,7 +6,7 @@
 // standing beside every other one, and the cabin she rides in. At dusk the sky fills with stars and a crescent moon
 // comes up, a shooting star crosses it 40 m before the last station and again as the finale's wish shows, and smoke
 // curls from the chimneys of the houses and of the station house. The track runs through a hill into winter, and the
-// world's light dims while she is in the tunnel.
+// world's light dims while she is in the tunnel, the world's sounds go muffled and the train's sounds echo.
 //
 // On top of it sits the ride UI: the intro card, a card at every stop, the timeline, the controls and the progress
 // pill, with the furthest moment she has reached remembered across reloads. If the phone takes the GPU away
@@ -487,7 +487,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       updateSea(elapsed, seaWave, d);
     }
     if (sfx) {
-      sfx.update(ride.speed, d, dt, toStop(d));
+      sfx.update(ride.speed, d, dt, toStop(d), inside);
       ambience.update(env, look.yaw, dt, d);
       music.setZones(ambience.weights, zonesToLoad(layout.zones, d, musicNear)); // each scene's own music
     }
@@ -553,6 +553,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     },
   });
   sfx = createSfx(music);
+  sfx.setTunnel(span);
   ambience = createAmbience(sfx);
   cues = createCues(sfx);
   document.addEventListener('visibilitychange', () => music.setHidden(document.hidden), { signal });

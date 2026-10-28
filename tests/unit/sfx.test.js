@@ -309,3 +309,161 @@ test('the shimmer is skipped, not queued, when the sound is off', () => {
   assert.equal(t.sfx.play('shimmer'), false);
   assert.equal(t.starts.length, 0);
 });
+
+// The tunnel's sound: the ambience goes muffled and the train's sounds echo while she is inside it.
+const TUNNEL = { from: 540, to: 600, boundary: 570 };
+
+test('the mixer has a train bus into the effects bus, and a low-pass between the ambience bus and the master', () => {
+  const t = setup();
+  const { mixer } = t.music;
+  assert.equal(mixer.train.gain.value, 1);
+  assert.deepEqual(mixer.train.outputs, [mixer.effects]);
+  const filter = mixer.ambience.outputs[0];
+  assert.equal(filter.type, 'lowpass');
+  assert.equal(filter.frequency.value, 20000, 'wide open by default');
+  assert.deepEqual(filter.outputs, mixer.effects.outputs, 'on into the same master as the other buses');
+});
+
+test('setMuffle closes the ambience low-pass from 20 kHz to 700 Hz over a 0.15 s time constant', () => {
+  const t = setup();
+  const { mixer } = t.music;
+  const filter = mixer.ambience.outputs[0];
+  const near = (actual, wanted) => assert.ok(Math.abs(actual - wanted) < 1e-6, `${actual} is not ${wanted}`);
+  mixer.setMuffle(1);
+  near(filter.frequency.target, 700);
+  assert.equal(filter.frequency.log.at(-1)[0], 'target');
+  assert.equal(filter.frequency.log.at(-1)[2], 0, 'from now');
+  mixer.setMuffle(0);
+  near(filter.frequency.target, 20000);
+  mixer.setMuffle(0.5);
+  near(filter.frequency.target, Math.sqrt(20000 * 700)); // halfway in pitch
+  mixer.setMuffle(7); // out of range counts as fully closed
+  near(filter.frequency.target, 700);
+  mixer.setMuffle(-1);
+  near(filter.frequency.target, 20000);
+  mixer.setMuffle(7);
+  const events = filter.frequency.events;
+  mixer.setMuffle(7);
+  assert.equal(filter.frequency.events, events, 'the same setting again schedules nothing');
+});
+
+test('the kit puts the train bus beside the others and passes the muffle on', () => {
+  const t = setup();
+  const kit = createKit(t.music.mixer);
+  assert.equal(kit.buses.train, t.music.mixer.train);
+  kit.setMuffle(1);
+  assert.ok(Math.abs(t.music.mixer.ambience.outputs[0].frequency.target - 700) < 1e-6);
+});
+
+test('the train\'s sounds play into the train bus, and so reach the effects bus through it', () => {
+  const t = setup();
+  t.on();
+  t.sfx.play('whistle');
+  const joined = t.made.filter((n) => n.outputs.includes(t.music.mixer.train));
+  assert.ok(joined.length >= 1, 'the whistle\'s envelope joins the train bus');
+  assert.ok(t.made.every((n) => !n.outputs.includes(t.music.mixer.effects) || n === t.music.mixer.train), 'none goes round it');
+});
+
+test('update(…, inside) muffles the ambience by how far inside the tunnel she is', () => {
+  const t = setup();
+  t.on();
+  const filter = t.music.mixer.ambience.outputs[0];
+  t.sfx.setTunnel(TUNNEL);
+  t.sfx.update(RIDE.CRUISE, 570, 0, Infinity, 1);
+  assert.ok(Math.abs(filter.frequency.target - 700) < 1e-6);
+  t.sfx.update(RIDE.CRUISE, 610, 0, Infinity, 0);
+  assert.ok(Math.abs(filter.frequency.target - 20000) < 1e-6);
+  t.sfx.update(RIDE.CRUISE, 570, 0, Infinity, 1);
+  t.sfx.update(RIDE.CRUISE, 100, 0, Infinity); // no `inside` given: the open air
+  assert.ok(Math.abs(filter.frequency.target - 20000) < 1e-6);
+});
+
+test('the echo is built within 40 m of the tunnel, with the sound on, and let go beyond it', () => {
+  const t = setup();
+  t.on();
+  t.sfx.setTunnel(TUNNEL);
+  const frame = (d, inside = 0) => t.sfx.update(RIDE.CRUISE, d, 0, Infinity, inside); // no frame time: no chugs
+  frame(100);
+  assert.equal(t.sfx.kit.live, 0, 'far from it, nothing');
+  frame(500);
+  assert.equal(t.sfx.kit.live, 4, 'at 40 m before the mouth');
+  frame(570, 1);
+  assert.equal(t.sfx.kit.live, 4);
+  frame(639);
+  assert.equal(t.sfx.kit.live, 4, 'within 40 m past the far mouth');
+  frame(641);
+  assert.equal(t.sfx.kit.live, 0, 'out of reach');
+});
+
+test('jumping out of the tunnel releases the echo at once, and so does the sound going off', () => {
+  const t = setup();
+  t.on();
+  t.sfx.setTunnel(TUNNEL);
+  t.sfx.update(RIDE.CRUISE, 570, 0, Infinity, 1);
+  assert.equal(t.sfx.kit.live, 4);
+  t.sfx.update(0, 100, 0, Infinity, 0); // a timeline jump: far away in one update
+  assert.equal(t.sfx.kit.live, 0);
+
+  t.sfx.update(RIDE.CRUISE, 570, 0, Infinity, 1);
+  assert.equal(t.sfx.kit.live, 4);
+  t.music.audible = false; // the Sound button, or a video's sound: update() returns early now
+  t.sfx.update(RIDE.CRUISE, 571, 0, Infinity, 1);
+  assert.equal(t.sfx.kit.live, 0, 'the echo is let go even when nothing is audible');
+  t.ctx.state = 'suspended';
+  t.sfx.update(RIDE.CRUISE, 572, 0, Infinity, 1);
+  assert.equal(t.sfx.kit.live, 0);
+});
+
+test('with no tunnel (no span, or none set) there is no echo and no toot', () => {
+  const t = setup();
+  t.on();
+  const echoes = () => t.made.filter((n) => n.delayTime).length;
+  t.sfx.update(RIDE.CRUISE, 570, 0, Infinity, 1);
+  assert.equal(echoes(), 0);
+  t.sfx.setTunnel(null);
+  for (let d = 500; d < 560; d += 0.5) t.sfx.update(RIDE.CRUISE, d, 0, Infinity);
+  assert.equal(echoes(), 0);
+  assert.equal(t.whistles(), 0);
+});
+
+test('the train toots once as it comes up to the tunnel, 15 m before it, and again after a jump back', () => {
+  const t = setup();
+  t.on();
+  t.sfx.setTunnel({ from: 540, to: 600 });
+  const ride = (from, to) => {
+    for (let d = from; d <= to; d += RIDE.CRUISE / 60) t.sfx.update(RIDE.CRUISE, d, 1 / 60, Infinity);
+  };
+  ride(520, 530);
+  assert.equal(t.whistles(), 1, 'it crossed 525');
+  ride(530, 560);
+  assert.equal(t.whistles(), 1, 'once, not on every frame after');
+  t.advance(2); // past the whistle's gap
+  t.sfx.update(0, 400, 0, Infinity); // a jump back
+  ride(520, 530);
+  assert.equal(t.whistles(), 2, 'it crosses 525 again');
+});
+
+test('the toot is only for a moving train going forwards, crossing from outside: not a jump past it, not backing, not standing', () => {
+  const t = setup();
+  t.on();
+  t.sfx.setTunnel(TUNNEL);
+  t.sfx.update(RIDE.CRUISE, 100, 0, Infinity);
+  t.sfx.update(RIDE.CRUISE, 530, 0, Infinity); // a jump forward past 525
+  assert.equal(t.whistles(), 0, 'a teleport toots nothing');
+  t.sfx.update(RIDE.CRUISE, 530.1, 0, Infinity);
+  t.sfx.update(-RIDE.CRUISE, 520, 0, Infinity); // backwards, across it
+  assert.equal(t.whistles(), 0);
+  t.sfx.update(0, 524.9, 0, Infinity);
+  t.sfx.update(0, 525.1, 0, Infinity); // crossing it without moving (a nudge): no toot
+  assert.equal(t.whistles(), 0, 'standing still');
+});
+
+test('the toot is skipped, not saved up, while the sound is off', () => {
+  const t = setup();
+  t.sfx.setTunnel(TUNNEL);
+  t.sfx.update(RIDE.CRUISE, 520, 0, Infinity);
+  t.sfx.update(RIDE.CRUISE, 530, 0, Infinity);
+  t.on();
+  t.sfx.update(RIDE.CRUISE, 531, 0, Infinity);
+  assert.equal(t.starts.length, 0);
+});
