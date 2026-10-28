@@ -3,8 +3,8 @@
 //
 // The world is the sky, the ground, the track, the two stations, the props of every zone, clouds and hot-air
 // balloons, the ambient particles of the zone the train is in, a photo sign at every stop with the two of them
-// beside it, posed for its moment (holding hands, waving, in a hug, on a bench, dancing or pointing at the photo), and
-// the cabin she rides in. At dusk the sky fills with stars and a crescent moon
+// beside it, posed for its moment (holding hands, waving, in a hug, on a bench, dancing or pointing at the photo) with
+// a little dog or cat at their feet, and the cabin she rides in. At dusk the sky fills with stars and a crescent moon
 // comes up, a shooting star crosses it 40 m before the last station and again as the finale's wish shows, and smoke
 // curls from the chimneys of the houses and of the station house. The track runs through a hill into winter, and the
 // world's light dims while she is in the tunnel, the world's sounds go muffled and the train's sounds echo. Birds go
@@ -26,9 +26,9 @@
 // brakes (ride/trainMotion.js), all of it left out if her phone asks for less motion.
 //
 // At the Day 365 station the ride ends in the finale (finale/finale.js): under a blush fade her seat gives way to
-// the train seen from outside, the two of them meet on the platform, and his message comes up on a card with the
-// timeline below it. "Ride again" takes her back to the start; a moment on the timeline takes her back there.
-// The music plays on throughout.
+// the train seen from outside, the two of them meet on the platform (a little dog or cat trots over with him), and his
+// message comes up on a card with the timeline below it. "Ride again" takes her back to the start; a moment on the
+// timeline takes her back there. The music plays on throughout.
 
 import { DirectionalLight, Fog, Group, HemisphereLight, Matrix4, Vector3 } from './three.js';
 import { appState } from './state.js';
@@ -56,6 +56,7 @@ import { createDeer } from './world/deer.js';
 import { createAmbientParticles } from './world/particles.js';
 import { createPhotoSign, placeCouple, placeSign, SIGN, signLookYaw, signTurn, turnSign } from './world/signs.js';
 import { createStopCouple } from './world/stopCouple.js';
+import { petFor } from './world/pets.js';
 import { createCabin } from './train/cabin.js';
 import { createTrainExterior } from './train/exterior.js';
 import { createFinale } from './finale/finale.js';
@@ -200,7 +201,8 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
   const deer = createDeer({ layout, path });
   scene.add(dressing.group, skyDecor.group, nightSky.group, particles.points, smoke.points, birds.group, butterflies.mesh, deer.group);
 
-  // A photo sign at every stop, and the two of them beside it, posed for the moment (unless its pose is 'none').
+  // A photo sign at every stop, and the two of them beside it, posed for the moment (unless its pose is 'none'), with
+  // a little dog or cat at their feet (unless content.js pets says 'none').
   const signs = new Group();
   signs.name = 'signs';
   /** @type {Array<{ distance: number, group: Group, sign: Group, couple: ReturnType<typeof createStopCouple>|null }>} */
@@ -214,7 +216,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
     group.add(sign);
     let couple = null;
     if (moment.pose !== 'none') {
-      couple = createStopCouple(content.characters, moment.pose, null, stop.side);
+      couple = createStopCouple(content.characters, moment.pose, petFor(stop.index, content.pets), stop.side);
       placeCouple(couple.group, path, stop, sign.userData.photoW, couple.halfWidth);
       group.add(couple.group);
     }
@@ -403,6 +405,7 @@ async function buildRide({ stage, container, signal, content, debug, assets }) {
       appState.finaleCues = cues.heard;
     }
     appState.finaleTime = finale.active ? finale.time : null;
+    appState.finalePets = finale.pets;
     if (wakeLock) appState.wakeLock = wakeLock.state;
     appState.quality = governor.tier;
     const { drawCalls, triangles } = stage.info();

@@ -6,6 +6,8 @@ import { createTrackPath } from '../../site/src/world/trackPath.js';
 import { triangleCount } from '../../site/src/util/geo.js';
 import { MATERIALS } from '../../site/src/render/materials.js';
 import { Raycaster, Vector3 } from '../../site/src/three.js';
+import { FINALE_TIMES } from '../../site/src/finale/finaleTimes.js';
+import { finaleOnStage } from './finaleStage.js';
 
 const FINALE = 960;
 const path = createTrackPath(1030, 7, { straightRanges: [[0, 120], [FINALE - 90, 1090]] });
@@ -62,6 +64,24 @@ test('the finale platform is clear where she steps off and he walks from the doo
     for (const [da, dr] of [[0, 0], [0.3, 0], [-0.3, 0], [0, 0.3], [0, -0.3]]) {
       const y = surfaceUnder(finale, FINALE + along + da, right + dr);
       assert.ok(Math.abs(y - STATION.PLATFORM_TOP) < 0.01, `something stands at ${along + da} along, ${right + dr} right (${y})`);
+    }
+  }
+});
+
+test('the finale platform is clear where their pet trots beside him and round to their feet', () => {
+  // Once it is out of the doorway (Task 11): where the finale puts it, on this same track.
+  const { scene, finale: finaleScene } = finaleOnStage(path);
+  const pet = scene.children.find((o) => o.name.startsWith('pet-'));
+  const centre = path.pointAt(FINALE), ahead = path.tangentAt(FINALE), side = path.sideAt(FINALE);
+  finaleScene.begin();
+  for (let t = FINALE_TIMES.himWalkStart + 0.5; t <= FINALE_TIMES.end; t += 0.05) {
+    finaleScene.skipTo(t);
+    finaleScene.update(0);
+    const rel = pet.position.clone().sub(centre);
+    const along = rel.dot(ahead), right = rel.dot(side);
+    for (const [da, dr] of [[0, 0], [0.2, 0], [-0.2, 0], [0, 0.15], [0, -0.15]]) {
+      const y = surfaceUnder(finale, FINALE + along + da, right + dr);
+      assert.ok(Math.abs(y - STATION.PLATFORM_TOP) < 0.01, `at ${t.toFixed(2)} s something stands at ${(along + da).toFixed(2)} along, ${(right + dr).toFixed(2)} right (${y})`);
     }
   }
 });

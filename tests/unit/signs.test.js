@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { signDimensions, coverUv, signLookYaw, createPhotoSign, placeSign, placeCouple, signTurn, turnSign, SIGN } from '../../site/src/world/signs.js';
 import { createCouple, COUPLE_HALF_WIDTH } from '../../site/src/world/figures.js';
 import { createStopCouple } from '../../site/src/world/stopCouple.js';
+import { petFor } from '../../site/src/world/pets.js';
 import { createTrackPath, TRACK } from '../../site/src/world/trackPath.js';
 import { buildLayout } from '../../site/src/world/layout.js';
 import { normalizeContent, POSES } from '../../site/src/content/normalize.js';
@@ -194,7 +195,7 @@ test('the couple stands beside the sign, toward the front, just clear of it in h
   }
 });
 
-test('a wider couple stands further ahead, so the sign still hides none of them, whatever their pose', () => {
+test('a wider couple stands further ahead, so the sign still hides none of them (or their pet), whatever their pose', () => {
   const ahead = (halfWidth) => {
     const couple = new Group();
     placeCouple(couple, path, rightStop, 1.28, halfWidth);
@@ -208,13 +209,14 @@ test('a wider couple stands further ahead, so the sign still hides none of them,
       const sign = createPhotoSign({ index: stop.index, aspect, width: 0, height: 0, canvas: null, src: '', isPlaceholder: true }, { date: 'Oct 2025' });
       placeSign(sign, path, stop);
       const signSpan = bearings(worldVertices(sign), stop);
-      for (const pose of POSES.filter((p) => p !== 'none')) {
-        const couple = createStopCouple(content.characters, pose, null, stop.side);
+      for (const [k, pose] of POSES.filter((p) => p !== 'none').entries()) {
+        // With their pet at their feet, a dog or a cat.
+        const couple = createStopCouple(content.characters, pose, petFor(k, k % 2 ? 'dog' : 'cat'), stop.side);
         placeCouple(couple.group, path, stop, sign.userData.photoW, couple.halfWidth);
         for (const t of [0, 1.1, 3.4, 6.3, 9.8]) {
           couple.update(t);
           const coupleSpan = bearings(worldVertices(couple.group), stop);
-          assert.ok(Math.max(...coupleSpan) < Math.min(...signSpan), `${stop.side}, ${pose}, photo aspect ${aspect}, at ${t} s: the sign hides none of them`);
+          assert.ok(Math.max(...coupleSpan) < Math.min(...signSpan), `${stop.side}, ${pose}, photo aspect ${aspect}, at ${t} s: the sign hides none of them or their pet`);
         }
         const toSeat = path.pointAt(stop.distance).sub(couple.group.position).setY(0).normalize();
         assert.ok(couple.group.getWorldDirection(new Vector3()).dot(toSeat) > 0.999, `${stop.side}, ${pose}: they face her`);

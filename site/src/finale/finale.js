@@ -5,7 +5,9 @@
 // figure at the carriage door: she steps to the edge, crouches and hops down onto the platform, and turns to the
 // station house, where he has been waiting by the door with a bouquet. He walks over to her with a happy bob and
 // holds the flowers out, she takes them in both hands and hugs them, and hearts rise between them while soft
-// fireworks bloom over the town and confetti flutters down. Then the app shows his message.
+// fireworks bloom over the town and confetti flutters down. Their pet, a little dog or cat (world/pets.js), trots out
+// of the station house as he sets off, keeps beside him all the way over, then runs on round him and sits at their
+// feet, facing the camera, for the photo. Then the app shows his message.
 //
 // Everything is a pure function of the finale's clock (`time`), so `skipTo` and `freeze` (the ?ft= debug param)
 // show any instant exactly, and screenshots are repeatable. The choreography is a set of keyframed tracks
@@ -29,6 +31,7 @@ import { MATERIALS } from '../render/materials.js';
 import { EYE_HEIGHT } from '../world/layout.js';
 import { fovForAspect } from '../ride/look.js';
 import { createFigure, walkPose } from '../world/figures.js';
+import { createPet, petFor, TROT } from '../world/pets.js';
 import { heartShape } from '../world/signs.js';
 import { mergeParts, moveParts, part, triangleSoup } from '../util/geo.js';
 import { clamp, smoothstep } from '../util/math.js';
@@ -81,6 +84,28 @@ const WIDE = 1.25;
 const add3 = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 
 /**
+ * Their pet ([along, right, up], like HER and HIM). It waits just inside the station house door (`door`), and comes
+ * out over OUT seconds as he sets off, to BESIDE metres to his right and BEHIND metres behind him (his right as he
+ * walks), where it keeps all the way over. Once he has stopped it runs on round behind him by way of `round` for RUN
+ * seconds, and sits down over SIT seconds as it arrives at their feet (`feet`: in front of them, between them, on the
+ * camera's side). At FULL m/s or faster it trots in full; slower, its legs swing less.
+ */
+const PET = Object.freeze({
+  door: [7.75, 7.05, 0.6], OUT: 0.5, BESIDE: 0.5, BEHIND: 0.3,
+  round: [1.9, 4.05, 0.6], feet: [0.5, 4.0, 0.6], RUN: 1.4, SIT: 0.5, FULL: 0.5,
+});
+
+/** Where their pet keeps as he walks over, from him ([along, right, up]): PET.BESIDE to his right, PET.BEHIND behind. */
+const PET_SLOT = (() => {
+  const along = HIM.end[0] - HIM.door[0], right = HIM.end[1] - HIM.door[1];
+  const length = Math.hypot(along, right);
+  const [a, r] = [along / length, right / length];
+  // His right, seen from above, is a quarter turn clockwise from the way he walks: [-r, a] (right of the track is
+  // to the right of facing along it).
+  return Object.freeze([-r * PET.BESIDE - a * PET.BEHIND, a * PET.BESIDE - r * PET.BEHIND, 0]);
+})();
+
+/**
  * The finale's choreography as keyframed tracks (timeline.js). Positions are world points (`frameAt`), numbers
  * are as their key says:
  * - camera: her seat → the glide out (at cameraDone) → a slow push-in (by card). `glide` is how far along the
@@ -92,6 +117,9 @@ const add3 = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
  *   eased so that the hop is an arc rather than the peak the straight `her` segments would draw.
  * - him: at the station house door, then over to her (himWalkStart to himWalkEnd).
  * - bouquet: in his hand (his keys and eases, offset by HAND) until handoffStart, then into her hands by handoffEnd.
+ * - pet: beside him as he walks over (his keys and ease, offset by PET_SLOT). `petOut` (0 to 1) brings it out of the
+ *   doorway to there as he sets off, `petRound` (0 to 1) takes it on from there round to their feet once he has
+ *   stopped (how far along the curve through PET.round that createFinale lays), and `petSit` (0 to 1) sits it down.
  * @param {import('../world/trackPath.js').TrackPath} path
  * @param {number} finaleDistance
  * @returns {import('./timeline.js').Track[]}
@@ -148,6 +176,10 @@ export function finaleTracks(path, finaleDistance) {
         key(T.handoffEnd, HER_HANDS, 'inOut'),
       ],
     },
+    { key: 'pet', keys: [key(T.himWalkStart, add3(HIM.door, PET_SLOT)), key(T.himWalkEnd, add3(HIM.end, PET_SLOT), WALK_EASE)] },
+    { key: 'petOut', keys: [num(T.himWalkStart, 0), num(T.himWalkStart + PET.OUT, 1, 'out')] },
+    { key: 'petRound', keys: [num(T.himWalkEnd, 0), num(T.himWalkEnd + PET.RUN, 1, 'inOut')] },
+    { key: 'petSit', keys: [num(T.himWalkEnd + PET.RUN - PET.SIT / 2, 0), num(T.himWalkEnd + PET.RUN + PET.SIT / 2, 1, 'inOut')] },
   ];
 }
 
@@ -464,9 +496,10 @@ function reachFor(figure, side, target, weight) {
  *           layout: import('../world/layout.js').Layout, content: import('../content/normalize.js').Content,
  *           cabin: { setVisible: (visible: boolean) => void }, exterior: import('../three.js').Group }} options
  *   `exterior` is train/exterior.js's train; the finale places it at the station and shows it while it plays.
- * @returns {{ readonly active: boolean, readonly time: number, readonly bursts: number, begin: () => void,
- *             update: (dt: number) => string[], skipTo: (t: number) => void, freeze: (frozen: boolean) => void,
- *             reset: () => void, setQuality: (tier: 'low'|'medium'|'high') => void }}
+ * @returns {{ readonly active: boolean, readonly time: number, readonly bursts: number, readonly pets: number,
+ *             begin: () => void, update: (dt: number) => string[], skipTo: (t: number) => void,
+ *             freeze: (frozen: boolean) => void, reset: () => void, setQuality: (tier: 'low'|'medium'|'high') => void }}
+ *   `pets` is how many pets it is showing: 1 once theirs has come out with him (none with content.js pets 'none').
  *   `begin` swaps her cabin for the train outside and starts the clock at 0. `update` moves the clock on by `dt`
  *   seconds (at most a tenth of a second per frame), draws that instant and returns the events passed on the way
  *   ('hearts', 'fireworks', 'card'), each once. `skipTo` moves the clock to `t`; `freeze` stops it. `reset` puts
@@ -502,6 +535,14 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
     figure.group.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
     baseSpread[name] = { left: figure.parts.leftArm.rotation.z, right: figure.parts.rightArm.rotation.z };
     scene.add(figure.group);
+  }
+  // Their pet (none with content.js pets 'none'), hidden until he sets off.
+  const look = petFor(-1, content.pets);
+  const pet = look ? createPet(look) : null;
+  if (pet) {
+    pet.group.visible = false;
+    pet.group.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
+    scene.add(pet.group);
   }
   const bouquet = createBouquet();
   const hearts = createHearts();
@@ -539,12 +580,32 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
   const herPose = { leftLeg: 0, rightLeg: 0, leftArm: 0, rightArm: 0, bob: 0 };
   const hisPose = { leftLeg: 0, rightLeg: 0, leftArm: 0, rightArm: 0, bob: 0 };
 
+  // Their pet's way: out of the doorway, beside him, and round him to their feet.
+  const petDoor = path.frameAt(fd + PET.door[0], PET.door[1], PET.door[2]);
+  const petStart = path.frameAt(fd + HIM.door[0] + PET_SLOT[0], HIM.door[1] + PET_SLOT[1], HIM.door[2]);
+  const petEnd = path.frameAt(fd + HIM.end[0] + PET_SLOT[0], HIM.end[1] + PET_SLOT[1], HIM.end[2]);
+  const petRound = new CatmullRomCurve3([petEnd, ...[PET.round, PET.feet].map(([a, r, u]) => path.frameAt(fd + a, r, u))], false, 'centripetal');
+  const petOutTo = headingOf(petStart.clone().sub(petDoor));
+  const petWalks = headingOf(petEnd.clone().sub(petStart));
+  const petLength = { out: petDoor.distanceTo(petStart), round: petRound.getLength() };
+  const petAt = new Vector3();
+  const petBefore = new Vector3();
+  const petAfter = new Vector3();
+  const petWay = new Vector3();
+  const petMove = { sit: 0, stride: 0, trot: 0 };
+
   /** How fast (m/s, across the ground) a position track is moving at t. */
   function speedOf(name, t) {
     timeline.sample(t - PACE_SPAN, before);
     timeline.sample(t + PACE_SPAN, after);
     const a = before[name], b = after[name];
     return Math.hypot(b[0] - a[0], b[2] - a[2]) / (2 * PACE_SPAN);
+  }
+
+  /** Where their pet is in the sampled instant `at` (a sample of the timeline). */
+  function petSpot(at, out) {
+    if (at.petRound > 0) return petRound.getPointAt(at.petRound, out);
+    return out.copy(petDoor).lerp(petWay.fromArray(at.pet), at.petOut);
   }
 
   function placeCamera() {
@@ -703,6 +764,31 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
     bouquet.quaternion.copy(leanTurn);
   }
 
+  /**
+   * Their pet: out of the doorway and over beside him, trotting, then on round him to their feet, where it sits facing
+   * the camera. It looks the way it goes, and while it sits it wags its tail and looks round (world/pets.js).
+   */
+  function posePet(t) {
+    if (!pet) return;
+    pet.group.visible = t >= T.himWalkStart;
+    if (!pet.group.visible) return;
+    petSpot(s, petAt);
+    pet.group.position.copy(petAt);
+    let heading = lerpAngle(petOutTo, petWalks, s.petOut);
+    if (s.petRound > 0) heading = lerpAngle(heading, headingOf(petRound.getTangentAt(s.petRound, petWay)), smoothstep(0, 0.15, s.petRound));
+    heading = lerpAngle(heading, headingOf(petWay.subVectors(camera.position, petAt)), smoothstep(0.7, 1, s.petRound));
+    pet.group.rotation.y = heading;
+    // Its pace, from where it is a moment either side, and how far it has come, for its stride.
+    timeline.sample(t - PACE_SPAN, before);
+    timeline.sample(t + PACE_SPAN, after);
+    const pace = petSpot(after, petAfter).distanceTo(petSpot(before, petBefore)) / (2 * PACE_SPAN);
+    const come = s.petOut * petLength.out + petWay.fromArray(s.pet).distanceTo(petStart) + s.petRound * petLength.round;
+    petMove.sit = s.petSit;
+    petMove.stride = (come / TROT.STRIDE) * Math.PI * 2;
+    petMove.trot = clamp(pace / PET.FULL, 0, 1) * (1 - s.petSit);
+    pet.update(t, petMove);
+  }
+
   function updateHearts(t) {
     const age = t - T.hearts;
     hearts.visible = age > 0;
@@ -792,6 +878,7 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
     poseHim(t);
     placeBouquet(t);
     poseHer(t);
+    posePet(t);
     updateHearts(t);
     updateFireworks(t);
     updateConfetti(t);
@@ -803,6 +890,7 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
     him.group.visible = shown;
     bouquet.visible = shown;
     if (!shown) for (const effect of effects) effect.visible = false;
+    if (pet && !shown) pet.group.visible = false; // shown, `draw` brings it out when he sets off
   }
 
   return {
@@ -810,6 +898,8 @@ export function createFinale({ stage, path, layout, content, cabin, exterior }) 
     get time() { return time; },
     /** How many firework bursts are going (fewer on the low tier), for fireworkTiming.js's fireworkBlooms. */
     get bursts() { return bursts; },
+    /** How many pets it is showing: theirs, once it has come out with him. */
+    get pets() { return pet && pet.group.visible ? 1 : 0; },
     begin() {
       active = true;
       time = 0;

@@ -41,6 +41,19 @@ test('jumping from the finale to a moment', async ({ page }) => {
   expect(s.view).toBe('cabin');
 });
 
+test('their pet trots over with him in the finale', async ({ page }) => {
+  await page.goto('index.html?finale=1&ft=7.5&ui=0');
+  await expect.poll(async () => (await appState(page)).finaleTime).toBe(7.5);
+  expect((await appState(page)).finalePets).toBe(1);
+});
+
+test('no pet in the finale with pets: none', async ({ page }) => {
+  await useFixture(page, { pets: 'none' });
+  await page.goto('index.html?finale=1&ft=7.5&ui=0');
+  await expect.poll(async () => (await appState(page)).finaleTime).toBe(7.5);
+  expect((await appState(page)).finalePets).toBe(0);
+});
+
 test('full ride end to end', async ({ page, browserName }) => {
   test.skip(browserName === 'webkit', 'one full ride is enough');
   const errors = collectConsoleErrors(page);

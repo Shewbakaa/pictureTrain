@@ -184,3 +184,98 @@ test('the first bloom comes one shell\'s rise after the fireworks event', () => 
   assert.equal(pieces.length, whole.length);
   assert.ok(whole.length > 20);
 });
+
+// Their pet (Task 11): it trots out of the station house with him, and sits at their feet.
+
+import { HER, HIM } from '../../site/src/finale/finaleTimes.js';
+
+/** Where `p` (a world point) is in the frame of the finale station: [along, right, up]. */
+function inStation(p) {
+  const rel = p.clone().sub(path.pointAt(960));
+  return [rel.dot(path.tangentAt(960)), rel.dot(path.sideAt(960)), p.y];
+}
+
+test('their pet trots out of the station house with him, 0.5 m to his right and 0.3 m behind, and sits at their feet', () => {
+  const { scene, camera, finale } = finaleOnStage();
+  const pet = scene.children.find((o) => o.name.startsWith('pet-'));
+  assert.ok(pet, 'a dog or a cat, as content.js pets says (random by default)');
+  assert.equal(pet.visible, false);
+  assert.equal(finale.pets, 0);
+  const her = scene.getObjectByName('finale-her'), him = scene.getObjectByName('finale-him');
+  const body = pet.getObjectByName('body');
+  const show = (t) => { finale.skipTo(t); finale.update(0); };
+  finale.begin();
+  show(T.himWalkStart - 0.1);
+  assert.equal(pet.visible, false, 'not before he sets off');
+  assert.equal(finale.pets, 0);
+
+  // As the door opens it comes out of the doorway (the house's front is 7.0 m out, the door 7.1 to 7.9 m along).
+  show(T.himWalkStart);
+  assert.ok(pet.visible);
+  assert.equal(finale.pets, 1);
+  const [along, right] = inStation(pet.position);
+  assert.ok(right > 6.95 && along > 7.1 && along < 7.9, `in the doorway at ${along.toFixed(2)} along, ${right.toFixed(2)} right`);
+
+  // Over with him: 0.5 m to his right and 0.3 m behind as he walks, on the platform, trotting.
+  const ahead = path.frameAt(960 + HIM.end[0], HIM.end[1], 0).sub(path.frameAt(960 + HIM.door[0], HIM.door[1], 0)).normalize();
+  const hisRight = ahead.clone().cross(new THREE.Vector3(0, 1, 0));
+  const legs = new Set();
+  for (let t = T.himWalkStart + 0.6; t <= T.himWalkEnd + 1e-9; t += 0.1) {
+    show(t);
+    const rel = pet.position.clone().sub(him.position);
+    assert.ok(Math.abs(rel.dot(hisRight) - 0.5) < 0.01, `at ${t.toFixed(1)} s, ${rel.dot(hisRight).toFixed(3)} m to his right`);
+    assert.ok(Math.abs(rel.dot(ahead) + 0.3) < 0.01, `at ${t.toFixed(1)} s, ${(-rel.dot(ahead)).toFixed(3)} m behind him`);
+    assert.ok(Math.abs(pet.position.y - 0.6) < 1e-6, 'on the platform');
+    legs.add(pet.getObjectByName('frontLeft').rotation.x.toFixed(2));
+    if (t > T.himWalkStart + 1 && t < T.himWalkEnd - 1) {
+      const facing = pet.getWorldDirection(new THREE.Vector3());
+      assert.ok(facing.dot(ahead) > 0.99, `at ${t.toFixed(1)} s it trots the way he walks`);
+    }
+  }
+  assert.ok(legs.size > 5, 'its legs go');
+
+  // Never through either of them, nor through the house once it is out.
+  for (let t = T.himWalkStart; t <= T.end; t += 0.05) {
+    show(t);
+    for (const [who, figure] of [['her', her], ['him', him]]) {
+      const apart = Math.hypot(pet.position.x - figure.position.x, pet.position.z - figure.position.z);
+      assert.ok(apart > 0.35, `at ${t.toFixed(2)} s it is ${apart.toFixed(2)} m from ${who}`);
+    }
+  }
+
+  // Then it sits at their feet: between them, in front, on the camera's side, facing it.
+  for (const t of [9, T.card, T.end]) {
+    show(t);
+    assert.ok(body.rotation.x < -0.5, `sitting at ${t} s`);
+    const toHer = pet.position.distanceTo(her.position), toHim = pet.position.distanceTo(him.position);
+    assert.ok(toHer < 0.9 && toHim < 0.9 && Math.abs(toHer - toHim) < 0.25, `between them: ${toHer.toFixed(2)} m from her, ${toHim.toFixed(2)} m from him`);
+    const flat = (p) => new THREE.Vector2(p.x - camera.position.x, p.z - camera.position.z).length();
+    assert.ok(flat(pet.position) < Math.min(flat(her.position), flat(him.position)), 'nearer the camera than they are');
+    const toCamera = camera.position.clone().sub(pet.position).setY(0).normalize();
+    assert.ok(pet.getWorldDirection(new THREE.Vector3()).dot(toCamera) > 0.9, 'facing the camera');
+  }
+  const [a, r] = inStation(pet.position);
+  assert.ok(Math.hypot(a - (HER.end[0] + HIM.end[0]) / 2, r - (HER.end[1] + HIM.end[1]) / 2) < 0.6, 'at their feet');
+
+  finale.reset();
+  assert.equal(pet.visible, false, 'gone again when she rides again');
+  assert.equal(finale.pets, 0);
+});
+
+test('a pet in the finale is drawn in two calls, and with pets: \'none\' there is none', () => {
+  const { scene, finale } = finaleOnStage(FINALE_PATH, { pets: 'cat' });
+  const pet = scene.getObjectByName('pet-cat');
+  let meshes = 0;
+  pet.traverse((o) => { if (o.isMesh) meshes++; });
+  assert.equal(meshes, 2);
+  const none = finaleOnStage(FINALE_PATH, { pets: 'none' });
+  assert.equal(none.scene.children.find((o) => o.name.startsWith('pet-')), undefined);
+  none.finale.begin();
+  none.finale.skipTo(9);
+  none.finale.update(0);
+  assert.equal(none.finale.pets, 0);
+  finale.begin();
+  finale.skipTo(9);
+  finale.update(0);
+  assert.equal(finale.pets, 1);
+});

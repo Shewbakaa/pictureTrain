@@ -16,6 +16,8 @@
 //   'firework'), the first 64 of them; [] before
 // tunnel: how far inside the tunnel the train is (world/tunnel.js tunnelInside), 0 out in the open to 1 inside, easing
 //   over the first and last few metres; 0 on a ride without a tunnel
+// finalePets: how many pets the finale is showing (world/pets.js): 1 from the moment its dog or cat trots out of the
+//   station house with him, 0 before that, outside the finale and when content.js `pets` is 'none'
 // wakeLock: whether the screen is being kept awake: 'held', 'off' (not at the moment: before Begin, or the browser has
 //   let it go while the page was away), 'refused' (the browser said no) or 'none' (it has no Wake Lock API)
 export const appState = {
@@ -41,6 +43,7 @@ export const appState = {
   carol: 0,
   finaleCues: [],
   finaleTime: null,
+  finalePets: 0,
   view: 'cabin',
   wakeLock: 'off',
 };

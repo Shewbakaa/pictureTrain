@@ -10,8 +10,8 @@ export const LOOKS = { her: { skin: '#f2c9a5', hair: '#3b2416', outfit: '#e98aa6
 /** The track the finale tests use: straight at the start and through the station at 960 m. */
 export const FINALE_PATH = createTrackPath(1030, 7, { straightRanges: [[0, 120], [870, 1100]] });
 
-/** A fresh finale on its own stage, on `path`. */
-export function finaleOnStage(path = FINALE_PATH) {
+/** A fresh finale on its own stage, on `path`, with `content` (its `characters` are LOOKS unless it gives them). */
+export function finaleOnStage(path = FINALE_PATH, content = {}) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(80, 390 / 844, 0.1, 400);
   const rig = new THREE.Object3D();
@@ -19,6 +19,6 @@ export function finaleOnStage(path = FINALE_PATH) {
   scene.add(rig);
   const cabin = { shown: true, setVisible(v) { this.shown = v; } };
   const exterior = createTrainExterior();
-  const finale = createFinale({ stage: { scene, camera, rig }, path, layout: { finaleDistance: 960 }, content: { characters: LOOKS }, cabin, exterior });
+  const finale = createFinale({ stage: { scene, camera, rig }, path, layout: { finaleDistance: 960 }, content: { characters: LOOKS, ...content }, cabin, exterior });
   return { scene, camera, rig, cabin, exterior, finale };
 }

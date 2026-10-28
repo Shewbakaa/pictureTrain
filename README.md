@@ -81,8 +81,9 @@ The poses are `'holding-hands'` (the one you get if you leave `pose` out), `'wav
 `'dancing'`, `'pointing'` (she points at the photo) and `'none'` (no couple at that stop). A pose the ride
 does not know is swapped for `'holding-hands'`, and the console says so.
 
-A little dog or cat sits at their feet at each stop. Leave it to chance (`'random'`, which is what you get if
-you write nothing), or add a `pets` line to the main block of `content.js` (the one that holds `herName`):
+A little dog or cat sits at their feet at each stop, and one trots over with him at the end. Leave it to chance
+(`'random'`, which is what you get if you write nothing), or add a `pets` line to the main block of `content.js`
+(the one that holds `herName`):
 
 ```js
 pets: 'cat',

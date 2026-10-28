@@ -7,6 +7,7 @@ import { createStopCouple } from '../../site/src/world/stopCouple.js';
 import { POSES } from '../../site/src/content/normalize.js';
 import { createPropGeometry } from '../../site/src/world/props.js';
 import { COUPLE_HALF_WIDTH } from '../../site/src/world/figures.js';
+import { PET_COATS, PET_RADIUS } from '../../site/src/world/pets.js';
 import { Box3, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from '../../site/src/three.js';
 
 const STANDING = POSES.filter((pose) => pose !== 'none');
@@ -190,8 +191,63 @@ test('a stop couple is the two of them, one draw call each, and a bench to sit o
     assert.ok(figureOf(couple, 'her') && figureOf(couple, 'him'), pose);
     assert.equal(meshesOf(couple).length, pose === 'sitting' ? 3 : 2, `${pose}: draw calls`);
   }
+  assert.equal(createStopCouple(characters, 'hug').pet, null, 'no pet unless given one');
   const withPet = createStopCouple(characters, 'hug', { kind: 'dog', coat: ['#c8924f', '#f3e3c8'] });
-  assert.equal(meshesOf(withPet).length, 2, 'a pet is for later (Task 11)');
+  assert.equal(meshesOf(withPet).length, 4, 'and two for their pet');
+});
+
+/** Every corner of `object`, posed, in the frame of the couple `root` (which stands at the origin, unturned). */
+function inCouple(root, object) {
+  root.updateMatrixWorld(true);
+  const points = [];
+  object.traverse((o) => {
+    if (!o.isMesh) return;
+    for (let i = 0; i < o.geometry.attributes.position.count; i++) points.push(o.getVertexPosition(i, new Vector3()).applyMatrix4(o.matrixWorld));
+  });
+  return points;
+}
+
+test('their pet sits at their feet: between them, 0.45 m in front, facing the train like them, and clear of them', () => {
+  for (const pose of STANDING) {
+    for (const side of ['right', 'left']) {
+      for (const kind of ['dog', 'cat']) {
+        const label = `${pose} (${side}), a ${kind}`;
+        const couple = createStopCouple(characters, pose, { kind, coat: PET_COATS[kind][1] }, side);
+        const pet = couple.group.getObjectByName(`pet-${kind}`);
+        assert.ok(pet && couple.pet.group === pet, label);
+        assert.equal(typeof couple.pet.react, 'function', 'for a tap on it (Task 14)');
+        const layout = coupleLayout(pose);
+        const middle = (layout.her.z + layout.him.z) / 2;
+        assert.equal(pet.position.x, 0, `${label}: between them`);
+        if (pose === 'dancing') {
+          // Further out for a dance, clear of the circle they turn in.
+          assert.ok(pet.position.z >= layout.halfWidth + PET_RADIUS - 1e-9, `${label}: ${pet.position.z} m out`);
+        } else {
+          assert.ok(Math.abs(pet.position.z - middle - 0.45) < 1e-9, `${label}: ${pet.position.z} m in front`);
+        }
+        assert.equal(pet.rotation.y, 0, `${label}: facing +Z like them`);
+        assert.ok(couple.halfWidth >= coupleLayout(pose).halfWidth, label);
+        for (const t of [0, 0.9, 2.6, 4.4, 7.3, 11.8]) {
+          couple.update(t);
+          const petPoints = inCouple(couple.group, pet);
+          for (const p of petPoints) assert.ok(Math.abs(p.x) <= couple.halfWidth, `${label}: inside halfWidth`);
+          const low = Math.min(...petPoints.map((p) => p.y));
+          assert.ok(Math.abs(low) < 0.012, `${label} at ${t} s: sitting on the ground (${low.toFixed(3)} m)`);
+          // Nothing of them (or the bench) inside the box round its body, nor within 4 cm of any corner of its slim
+          // tail (which takes in all of it: no part of the tail is further than that from one of its corners).
+          const own = (mesh) => Array.from({ length: mesh.geometry.attributes.position.count }, (_, i) => mesh.getVertexPosition(i, new Vector3()).applyMatrix4(mesh.matrixWorld));
+          const box = new Box3().setFromPoints(own(pet.getObjectByName(`${kind}-body`))).expandByScalar(0.02);
+          const tail = own(pet.getObjectByName(`${kind}-tail`));
+          const reach = new Box3().setFromPoints(tail).expandByScalar(0.04);
+          const nearTail = (p) => reach.containsPoint(p) && tail.some((q) => q.distanceTo(p) < 0.04);
+          for (const other of couple.group.children.filter((o) => o !== pet)) {
+            const inside = inCouple(couple.group, other).find((p) => box.containsPoint(p) || nearTail(p));
+            assert.equal(inside, undefined, `${label} at ${t} s: ${other.name} reaches into the pet at ${inside && inside.toArray().map((v) => v.toFixed(2))}`);
+          }
+        }
+      }
+    }
+  }
 });
 
 test('halfWidth reaches past every part of them, however they idle, and not much further', () => {
