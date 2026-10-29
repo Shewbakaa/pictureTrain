@@ -119,10 +119,13 @@ export default {
   //             Live Photo. The photo is the still and this is its motion, like
   //             live: 'photos/04.mp4' (README, "Live Photos"). It plays once when the train
   //             stops, and again with its sound when she taps it.
-  //    pose     Optional, and not in the blocks below: how the little couple stand beside this
-  //             stop's sign, like pose: 'hug'. Choose 'holding-hands' (the one you get if you
-  //             leave it out), 'waving', 'hug', 'sitting', 'dancing', 'pointing' (she points at
-  //             the photo) or 'none' (no couple at this stop). See README, "Poses and pets".
+  //    pose     Optional: what the little couple are doing beside this stop's sign, like
+  //             pose: 'hug'. Choose 'holding-hands' (the one you get if you leave it out),
+  //             'waving', 'hug', 'sitting', 'dancing', 'pointing' (she points at the photo),
+  //             'celebrate' (they jump for joy), 'walking' (hand in hand, on the spot),
+  //             'selfie' (he holds up a phone), 'goofy' (a silly dance), 'heart' (they make a
+  //             heart with their hands, and keep fumbling it) or 'none' (no couple at this
+  //             stop). Whatever they are doing, a tap makes them wave. See README, "Poses and pets".
   //    date     When it happened. It is just text, so write it however you like: 'Oct 2025',
   //             '14 Feb', 'Our first date'. Short is best, because it also appears on the
   //             photo sign.
@@ -152,6 +155,8 @@ export default {
       caption: "The night I asked you to be my girlfriend, and you said yes. Still the best answer I've ever gotten.",
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'autumn',
+      // What the two of them are doing at this stop (README, "Poses and pets").
+      pose: 'hug',
     },
 
     // Moment 2
@@ -166,6 +171,8 @@ export default {
       caption: 'Our first Thanksgiving together, and the first time I got to meet your family. I was so happy to spend it with you.',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'autumn',
+      // What the two of them are doing at this stop (README, "Poses and pets").
+      pose: 'waving',
     },
 
     // Moment 3
@@ -180,6 +187,8 @@ export default {
       caption: 'Our first Christmas show together, and our first musical too. I had so much fun sitting next to you.',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'autumn',
+      // What the two of them are doing at this stop (README, "Poses and pets").
+      pose: 'dancing',
     },
 
     // Moment 4
@@ -194,6 +203,8 @@ export default {
       caption: "Our New Year's fiasco lol. I will never forget it, and I'm glad I got to laugh through it with you.",
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'winter',
+      // What the two of them are doing at this stop (README, "Poses and pets").
+      pose: 'celebrate',
     },
 
     // Moment 5
@@ -208,6 +219,8 @@ export default {
       caption: "You took me to Universal, and it's one of the highlights of my life. Thank you so much for that day.",
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'winter',
+      // What the two of them are doing at this stop (README, "Poses and pets").
+      pose: 'pointing',
     },
 
     // Moment 6
@@ -222,6 +235,8 @@ export default {
       caption: "Our first hike together. I'll take any trail as long as you're on it with me.",
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'winter',
+      // What the two of them are doing at this stop (README, "Poses and pets").
+      pose: 'walking',
     },
 
     // Moment 7
@@ -236,6 +251,8 @@ export default {
       caption: 'Your pre-birthday celebration. You were traveling on the real day, so getting to celebrate you early meant so much to me.',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'spring',
+      // What the two of them are doing at this stop (README, "Poses and pets").
+      pose: 'selfie',
     },
 
     // Moment 8
@@ -250,6 +267,8 @@ export default {
       caption: 'My birthday trip to Lake Tahoe. I love this picture so much. Look how cute we are!',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'spring',
+      // What the two of them are doing at this stop (README, "Poses and pets").
+      pose: 'hug',
     },
 
     // Moment 9
@@ -264,6 +283,8 @@ export default {
       caption: 'Same trip, and proof of how goofy we are together. I love that we get to be this silly.',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'spring',
+      // What the two of them are doing at this stop (README, "Poses and pets").
+      pose: 'goofy',
     },
 
     // Moment 10
@@ -278,6 +299,8 @@ export default {
       caption: "Look at that background! This one turned out amazing. I'm so glad you put up with my friends (and me).",
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'summer',
+      // What the two of them are doing at this stop (README, "Poses and pets").
+      pose: 'waving',
     },
 
     // Moment 11
@@ -292,6 +315,8 @@ export default {
       caption: "Our first camping trip together, and we made it! I'd go again anytime with you.",
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'summer',
+      // What the two of them are doing at this stop (README, "Poses and pets").
+      pose: 'sitting',
     },
 
     // Moment 12
@@ -306,6 +331,8 @@ export default {
       caption: 'Us trying to make a heart with our hands and failing, LOL. Still my favorite heart.',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'summer',
+      // What the two of them are doing at this stop (README, "Poses and pets").
+      pose: 'heart',
     },
 
     // Moment 13
@@ -320,6 +347,8 @@ export default {
       caption: 'Our Labor Day trip to Arnold was so much fun! Your family is amazing, and having you there made the whole trip.',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'evening',
+      // What the two of them are doing at this stop (README, "Poses and pets").
+      pose: 'celebrate',
     },
 
     // Moment 14
@@ -334,6 +363,8 @@ export default {
       caption: 'Us in Indian traditional wear. So many people texted me about how great you looked! It was also your first time meeting my family, and we made it through. Yay us!',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'evening',
+      // What the two of them are doing at this stop (README, "Poses and pets").
+      pose: 'dancing',
     },
 
     // Moment 15
@@ -348,6 +379,8 @@ export default {
       caption: 'A little slice of our everyday life together. It makes me laugh, and it fills my heart.',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'evening',
+      // What the two of them are doing at this stop (README, "Poses and pets").
+      pose: 'sitting',
     },
   ],
 
