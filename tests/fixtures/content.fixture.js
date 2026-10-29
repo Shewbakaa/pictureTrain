@@ -1,6 +1,6 @@
 // Realistic content for the e2e specs: what site/content.js looks like once it has been filled in.
 // intro.title, finale.wish and finale.signoff are left out on purpose, so the specs also see the
-// ones derived from the names: "For Maya", "Happy 1 year, Maya" and "— Sam".
+// ones derived from the names: "For Maya", "Happy 1 year, Maya" and "Sam".
 export default {
   herName: 'Maya',
   yourName: 'Sam',

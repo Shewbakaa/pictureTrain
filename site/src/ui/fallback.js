@@ -73,7 +73,7 @@ export function showFallback(content, assets) {
   }
   const finaleCard = el('footer', { class: 'fallback-card fallback-finale' }, [
     heart(),
-    el('p', { class: 'eyebrow' }, [finale.eyebrow]),
+    finale.eyebrow ? el('p', { class: 'eyebrow' }, [finale.eyebrow]) : null,
     el('h2', { class: 'fallback-wish' }, [finale.wish]),
     messageEl,
     signoffEl,

@@ -8,7 +8,7 @@ test('locks unreached moments and marks the current one', () => {
   const items = timelineItems(moments, { reachedMax: 1, currentIndex: 1 });
   assert.deepEqual(items.map((i) => i.state), ['reached', 'current', 'locked', 'locked']);
   assert.equal(items[2].label, 'Moment 3 (not reached yet)');
-  assert.equal(items[0].label, 'D0 — T0');
+  assert.equal(items[0].label, 'D0: T0');
 });
 
 test('no current while riding', () => {

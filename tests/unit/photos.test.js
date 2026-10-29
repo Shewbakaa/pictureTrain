@@ -63,7 +63,7 @@ function fakeLoader() {
 }
 
 const momentsFor = (photos) => photos.map((photo, index) => ({ index, photo, date: '', title: '', caption: '', zone: 'spring' }));
-const warningFor = (src) => `[photos] Could not load "${src}" — showing a placeholder. Use JPG or PNG.`;
+const warningFor = (src) => `[photos] Could not load "${src}", so the ride shows a placeholder. Use JPG or PNG.`;
 
 test('the pool and its limits', () => {
   const { CONCURRENCY, TIMEOUT_MS, TOTAL_MS } = PHOTOS;

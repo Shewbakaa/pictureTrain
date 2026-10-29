@@ -132,7 +132,7 @@ export async function loadPhotos(moments, { onProgress, loadImage = loadImageEle
       asset = kind === 'video' ? videoAsset(moment.index, loaded, moment.photo) : photoAsset(moment.index, loaded, moment.photo);
     } catch {
       const advice = kind === 'video' ? 'Use MP4 (H.264) for videos, see the README.' : 'Use JPG or PNG.';
-      console.warn(`[photos] Could not load "${moment.photo}" — showing a placeholder. ${advice}`);
+      console.warn(`[photos] Could not load "${moment.photo}", so the ride shows a placeholder. ${advice}`);
       return placeholderAsset(moment.index);
     }
     if (moment.live && kind === 'image') {
@@ -141,7 +141,7 @@ export async function loadPhotos(moments, { onProgress, loadImage = loadImageEle
         motion.loop = false; // a Live Photo plays once, then settles back to its still
         asset.live = motion;
       } catch {
-        console.warn(`[photos] Could not load the Live Photo motion "${moment.live}" — showing just the still. Use MP4 (H.264), see the README.`);
+        console.warn(`[photos] Could not load the Live Photo motion "${moment.live}", so the ride shows just the still. Use MP4 (H.264), see the README.`);
       }
     }
     return asset;

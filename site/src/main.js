@@ -72,7 +72,7 @@ async function boot() {
     console.error(typo
       ? `[content.js] has a typo, so the ride cannot start. Look just before what the browser names here${where}; it is often a missing comma, quote or bracket:`
       : '[content.js] could not be loaded, so the ride cannot start:', error);
-    cannotStart(`content.js ${typo ? 'has a typo' : 'could not be loaded'} — open the browser console for details`);
+    cannotStart(`content.js ${typo ? 'has a typo' : 'could not be loaded'}. Open the browser console for details`);
     return;
   }
 
@@ -97,5 +97,5 @@ async function boot() {
 
 boot().catch((error) => {
   console.error('[app] The ride could not start.', error);
-  cannotStart('Something went wrong — open the browser console for details');
+  cannotStart('Something went wrong. Open the browser console for details');
 });

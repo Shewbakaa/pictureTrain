@@ -65,7 +65,7 @@ export function createVoiceNote(file, { makeElement = () => new Audio(), doc = d
   function block() {
     if (state === 'failed') return;
     element.pause();
-    console.warn(`[voice] The browser held back "${file}" until a tap — the button on the last card plays it.`);
+    console.warn(`[voice] The browser held back "${file}" until a tap. The button on the last card plays it.`);
     setState('blocked');
   }
 

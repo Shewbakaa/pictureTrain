@@ -111,7 +111,7 @@ export function showFinaleCard(content, { onRideAgain, voice = null }) {
   const signoffEl = signoff ? el('p', { class: 'finale-signoff' }) : null;
   const body = el('div', { class: 'finale-card-body' }, [
     heart(),
-    el('p', { class: 'eyebrow' }, [eyebrow]),
+    eyebrow ? el('p', { class: 'eyebrow' }, [eyebrow]) : null,
     el('h2', { class: 'finale-wish', id: 'finale-wish' }, [wish]),
     messageEl,
     signoffEl,

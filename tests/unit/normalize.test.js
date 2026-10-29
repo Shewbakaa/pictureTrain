@@ -27,7 +27,7 @@ test('derived defaults from names', () => {
   const { content } = normalizeContent({ herName: 'Maya', yourName: 'Sam' });
   assert.equal(content.intro.title, 'For Maya');
   assert.equal(content.finale.wish, 'Happy 1 year, Maya');
-  assert.equal(content.finale.signoff, '— Sam');
+  assert.equal(content.finale.signoff, 'Sam');
   assert.equal(content.intro.button, 'Begin the ride');
 });
 
@@ -383,7 +383,7 @@ test('the e2e fixture is clean and gives the exact strings the e2e specs look fo
   assert.equal(content.intro.button, 'Begin the ride');
   assert.equal(content.finale.wish, 'Happy 1 year, Maya');
   assert.equal(content.finale.message, 'Thank you for the best year of my life.');
-  assert.equal(content.finale.signoff, '— Sam');
+  assert.equal(content.finale.signoff, 'Sam');
   assert.deepEqual(content.zones, ZONE_IDS);
   assert.deepEqual(content.moments.map((m) => m.title),
     ['First coffee', 'Rainy walk', 'Beach day', 'Sunset pier', 'Pumpkin patch', 'Movie night', 'First snow', 'Ice skating', 'City lights', 'Our dinner']);
@@ -429,6 +429,12 @@ test('the sound hint: a default line, your own, or none', () => {
   assert.equal(normalizeContent({}).content.intro.hint, 'Best with sound on and headphones in.');
   assert.equal(normalizeContent({ intro: { hint: 'Headphones!' } }).content.intro.hint, 'Headphones!');
   assert.equal(normalizeContent({ intro: { hint: 'none' } }).content.intro.hint, '');
+});
+
+test("the finale's eyebrow: a default line, your own, or none", () => {
+  assert.equal(normalizeContent({}).content.finale.eyebrow, 'One year of us');
+  assert.equal(normalizeContent({ finale: { eyebrow: 'Us' } }).content.finale.eyebrow, 'Us');
+  assert.equal(normalizeContent({ finale: { eyebrow: 'None' } }).content.finale.eyebrow, '');
 });
 
 test('the voice note is an audio file in the site folder, or nothing', () => {

@@ -210,11 +210,11 @@ function readPose(value, n, warnings) {
   return DEFAULT_POSE;
 }
 
-/** The line under the start button: the default when empty, '' (hidden) for 'none', otherwise the author's words. */
-function readHint(value) {
-  const hint = text(value);
-  if (hint === '') return DEFAULT_HINT;
-  return hint.toLowerCase() === 'none' ? '' : hint;
+/** A line the author can hide, like the one under the start button: `fallback` when empty, '' (hidden) for 'none', otherwise the author's words. */
+function hideable(value, fallback) {
+  const words = text(value);
+  if (words === '') return fallback;
+  return words.toLowerCase() === 'none' ? '' : words;
 }
 
 /** The voice note: an audio file in the site folder, or '' (with a warning when it is something else). */
@@ -300,13 +300,13 @@ export function normalizeContent(raw) {
       title: text(intro.title, herName ? `For ${herName}` : 'For you'),
       note: text(intro.note),
       button: text(intro.button, 'Begin the ride'),
-      hint: readHint(intro.hint),
+      hint: hideable(intro.hint, DEFAULT_HINT),
     },
     finale: {
-      eyebrow: text(finale.eyebrow, 'One year of us'),
+      eyebrow: hideable(finale.eyebrow, 'One year of us'),
       wish: text(finale.wish, herName ? `Happy 1 year, ${herName}` : 'Happy 1 year'),
       message: text(finale.message),
-      signoff: text(finale.signoff, yourName ? `— ${yourName}` : ''),
+      signoff: text(finale.signoff, yourName),
       voice,
     },
     zones,

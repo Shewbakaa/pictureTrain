@@ -67,7 +67,7 @@ export function createRecording(ctx, name, { file, trim }, { makeElement = () =>
     failed = true;
     wanted = false;
     if (element) element.pause();
-    console.warn(`[music] Could not play "${file}" — the built-in tune plays in this scene instead.`);
+    console.warn(`[music] Could not play "${file}", so the built-in tune plays in this scene instead.`);
   }
 
   /** Held back for want of a tap: the tune stands in until retry(). */
@@ -76,7 +76,7 @@ export function createRecording(ctx, name, { file, trim }, { makeElement = () =>
     blocked = true;
     wanted = false;
     element.pause();
-    console.warn(`[music] The browser held back "${file}" until a tap — the built-in tune plays in this scene for now.`);
+    console.warn(`[music] The browser held back "${file}" until a tap, so the built-in tune plays in this scene for now.`);
   }
 
   /**

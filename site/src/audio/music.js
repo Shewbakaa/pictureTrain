@@ -185,7 +185,7 @@ export function createMusic({ src = '', onChange = () => {} } = {}) {
   /** Her song could not be played: say which file, and play each scene's own music instead. */
   function fallBack() {
     if (source !== 'file') return;
-    console.warn(`[music] Could not play "${src}" — each scene's own music plays instead.`);
+    console.warn(`[music] Could not play "${src}", so each scene's own music plays instead.`);
     clearInterval(volumeTimer);
     audio.pause();
     source = 'built-in';

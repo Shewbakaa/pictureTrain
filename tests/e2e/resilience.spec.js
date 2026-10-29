@@ -148,7 +148,7 @@ test('the 2D story tells every moment in order and ends with the wish, message a
   const ending = page.locator('.fallback-finale');
   await expect(ending).toContainText('Happy 1 year, Maya');
   await expect(ending).toContainText('Thank you for the best year of my life.');
-  await expect(ending).toContainText('— Sam');
+  await expect(ending).toContainText('Sam');
   // It scrolls inside itself; the page never does.
   expect(await page.locator('#fallback').evaluate((e) => e.scrollHeight > e.clientHeight)).toBe(true);
   await page.locator('.fallback-finale').scrollIntoViewIfNeeded();
@@ -172,7 +172,7 @@ test('the 2D story writes its message in ink as it scrolls into view', async ({ 
   await expect(message).toContainText('Thank you for the best year of my life.');
   await message.scrollIntoViewIfNeeded();
   await expect(message.locator('.ink-word')).toHaveCount(9);
-  await expect(signoff.locator('.ink-word')).toHaveCount(2);
+  await expect(signoff.locator('.ink-word')).toHaveCount(1);
   await expect(message).not.toHaveClass(/ink-pending/);
   // Written in time, with all of it kept.
   await expect(signoff).toHaveClass(/inked/);
@@ -190,7 +190,7 @@ test('the 2D story writes its message at the bottom of the page on a tall screen
     await page.locator('#fallback').evaluate((e) => { e.scrollTop = e.scrollHeight; });
     await expect(page.locator('.fallback-message .ink-word'), `${width}x${height}`).toHaveCount(9);
     await expect(page.locator('.fallback-message')).not.toHaveClass(/ink-pending/);
-    await expect(page.locator('.fallback-signoff .ink-word')).toHaveCount(2);
+    await expect(page.locator('.fallback-signoff .ink-word')).toHaveCount(1);
   }
 });
 
@@ -262,7 +262,7 @@ test('a typo in content.js shows a friendly message instead of loading forever',
     body: 'export default {\n  herName: "Maya"\n  yourName: "Sam",\n};\n', // the comma after "Maya" is missing
   }));
   await page.goto('index.html');
-  await expect(page.locator('#loading')).toContainText('content.js has a typo — open the browser console for details');
+  await expect(page.locator('#loading')).toContainText('content.js has a typo. Open the browser console for details');
   await expect(page.locator('#loading .loading-bar')).toBeHidden();
   expect(errors.some((e) => e.startsWith('[content.js]'))).toBe(true);
   expect((await appState(page)).phase).toBe('error');

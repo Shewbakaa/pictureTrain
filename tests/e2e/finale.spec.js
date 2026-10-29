@@ -10,7 +10,7 @@ test('finale ends on the message card', async ({ page }) => {
   const card = page.locator('#finale-card');
   await expect(card).toContainText('Happy 1 year, Maya');
   await expect(card).toContainText('Thank you for the best year of my life.');
-  await expect(card).toContainText('— Sam');
+  await expect(card).toContainText('Sam');
   expect((await appState(page)).view).toBe('finale');
   // The music plays on under the card, so its button is there to switch it off; there is nothing left to pause.
   await expect(page.locator('#music-toggle')).toBeVisible();
@@ -57,7 +57,7 @@ test('his message writes itself in ink, a word at a time, signoff after it', asy
   await waitForPhase(page, 'done');
   const message = page.locator('.finale-message');
   await expect(message.locator('.ink-word')).toHaveCount(wordsIn(LONG_MESSAGE));
-  await expect(page.locator('.finale-signoff .ink-word')).toHaveCount(2); // "—" and "Sam"
+  await expect(page.locator('.finale-signoff .ink-word')).toHaveCount(1); // "Sam"
   // The paragraphs and the line break are kept, as <br>s: one for the line, two for each blank line between paragraphs.
   await expect(message.locator('br')).toHaveCount(1 + 2 + 2);
   // The words stay in order, with their spaces, for a screen reader and for copying.
@@ -180,7 +180,7 @@ test('with no message the signoff alone is still written, and a tap finishes it'
   await page.goto('index.html?finale=1&ft=12');
   await waitForPhase(page, 'done');
   await expect(page.locator('.finale-message')).toHaveCount(0);
-  await expect(page.locator('.finale-signoff .ink-word')).toHaveCount(2);
+  await expect(page.locator('.finale-signoff .ink-word')).toHaveCount(1);
   await page.locator('.finale-card-body').click({ position: { x: 12, y: 12 } });
   await expect(page.locator('.finale-signoff')).toHaveClass(/inked/);
   expect(errors).toEqual([]);
@@ -192,7 +192,7 @@ test('the handwriting font is loaded early and has the em dash of the signoff', 
   await expect.poll(() => page.evaluate(() => document.fonts.check('500 20px "Dancing Script"'))).toBe(true);
   expect(await page.evaluate(() => [...document.fonts].some((f) => f.family.includes('Dancing Script') && f.status === 'loaded'))).toBe(true);
   expect(await page.evaluate(() => document.fonts.check('500 20px "Dancing Script"', '— Sam’s “love”…'))).toBe(true);
-  await expect(page.locator('.finale-signoff')).toContainText('— Sam');
+  await expect(page.locator('.finale-signoff')).toContainText('Sam');
 });
 
 test('their pet trots over with him in the finale', async ({ page }) => {

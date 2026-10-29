@@ -23,7 +23,7 @@ export function timelineItems(moments, { reachedMax, currentIndex }) {
     let state = 'reached';
     if (index > reachedMax) state = 'locked';
     else if (index === currentIndex) state = 'current';
-    let label = date ? `${date} — ${title}` : title;
+    let label = date ? `${date}: ${title}` : title;
     if (state === 'locked') label = `Moment ${index + 1} (not reached yet)`;
     return { index, date, title, state, label };
   });

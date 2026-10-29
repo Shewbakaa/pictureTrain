@@ -132,7 +132,7 @@ test('a play the browser refuses fails the recording, with a warning naming the 
     el.answer = refusal;
     const said = await warnings(() => recording.start(true));
     assert.equal(recording.failed, true, refusal);
-    assert.deepEqual(said, [`[music] Could not play "${FILE}" — the built-in tune plays in this scene instead.`]);
+    assert.deepEqual(said, [`[music] Could not play "${FILE}", so the built-in tune plays in this scene instead.`]);
   }
 });
 
@@ -142,7 +142,7 @@ test('a play refused for want of a tap holds the recording back, with a warning 
   const said = await warnings(() => recording.start(true));
   assert.equal(recording.blocked, true);
   assert.equal(recording.failed, false, 'not for good: a tap can let it play');
-  assert.deepEqual(said, [`[music] The browser held back "${FILE}" until a tap — the built-in tune plays in this scene for now.`]);
+  assert.deepEqual(said, [`[music] The browser held back "${FILE}" until a tap, so the built-in tune plays in this scene for now.`]);
   assert.equal(el.paused, true);
   // Asked again while held back, it does not try (the soundtrack plays the tune instead) and says nothing more.
   el.calls.length = 0;

@@ -77,7 +77,8 @@ say something of your own, add a `hint` line to the `intro` block in `content.js
 hint: 'Headphones on, please.',
 ```
 
-To hide the line altogether, write `hint: 'none'`. Leave `hint` out, or as `''`, to keep the default.
+To hide the line altogether, write `hint: 'none'`. Leave `hint` out, or as `''`, to keep the default. The
+small line over the final wish works the same way: `eyebrow: 'none'` in the `finale` block hides it.
 
 ### Poses and pets
 
@@ -459,7 +460,7 @@ Made with:
   in `site/fonts/LICENSE-nunito.txt`.
 - [Dancing Script](https://github.com/googlefonts/DancingScript) for the handwriting of the final message and
   its sign-off. SIL Open Font Licence 1.1, in `site/fonts/LICENSE-dancing-script.txt`.
-- Music: Frédéric Chopin — recordings from Musopen's Complete Chopin Collection (CC0 1.0),
+- Music: Frédéric Chopin, recordings from Musopen's Complete Chopin Collection (CC0 1.0),
   https://archive.org/details/musopen-chopin
 
 The world, the train and the figures are all drawn in code, and the winter carol, the music-box tune and every

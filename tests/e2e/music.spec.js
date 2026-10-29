@@ -178,7 +178,7 @@ test('a scene whose recording is missing plays the built-in tune, and the warnin
 
   await rideTo(page, 'Beach day');
   await expect.poll(async () => (await appState(page)).musicPiece).toBe('tune');
-  expect(warnings).toContain('[music] Could not play "music/zones/summer.mp3" — the built-in tune plays in this scene instead.');
+  expect(warnings).toContain('[music] Could not play "music/zones/summer.mp3", so the built-in tune plays in this scene instead.');
   const tones = (await audioReport(page)).tones;
   await expect.poll(async () => (await audioReport(page)).tones, { message: 'the tune\'s notes' }).toBeGreaterThan(tones + 10);
 
@@ -209,7 +209,7 @@ test('a scene\'s recording the browser holds back for want of a tap plays the tu
   await expect(page.locator('#stop-card')).toContainText('First coffee');
   await rideTo(page, 'Beach day');
   await expect.poll(async () => (await appState(page)).musicPiece).toBe('tune');
-  expect(warnings).toContain('[music] The browser held back "music/zones/summer.mp3" until a tap — the built-in tune plays in this scene for now.');
+  expect(warnings).toContain('[music] The browser held back "music/zones/summer.mp3" until a tap, so the built-in tune plays in this scene for now.');
   expect(warnings.some((w) => w.includes('Could not play'))).toBe(false);
 
   // Her taps on the Sound button, off and on again: the first lets the beach's piece go.
