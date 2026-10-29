@@ -90,8 +90,11 @@ pose: 'hug',
 ```
 
 The poses are `'holding-hands'` (the one you get if you leave `pose` out), `'waving'`, `'hug'`, `'sitting'`,
-`'dancing'`, `'pointing'` (she points at the photo) and `'none'` (no couple at that stop). A pose the ride
-does not know is swapped for `'holding-hands'`, and the console says so.
+`'dancing'`, `'pointing'` (she points at the photo), `'celebrate'` (they jump for joy, hands held high),
+`'walking'` (hand in hand, on the spot, looking about), `'selfie'` (he holds up a phone and they lean in),
+`'goofy'` (a silly dance), `'heart'` (they make a heart with their hands, and keep fumbling it) and `'none'` (no
+couple at that stop). Whatever they are doing, a tap on them makes them wave. A pose the ride does not know is
+swapped for `'holding-hands'`, and the console says so.
 
 A little dog or cat sits at their feet at each stop (a stop with `pose: 'none'` has neither), and one trots over
 with him at the end. Leave it to chance (`'random'`, which is what you get if you write nothing), or add a `pets`

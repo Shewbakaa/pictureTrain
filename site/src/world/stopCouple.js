@@ -1,6 +1,6 @@
 // The two of them at a stop, posed for its moment (world/poses.js): two figures (world/figures.js) and, for
-// 'sitting', the park bench (world/props.js) they sit on, each one draw call, and their pet (world/pets.js) sitting
-// at their feet, in two more.
+// 'sitting', the park bench (world/props.js) they sit on, for 'selfie' his phone, and for 'heart' the heart they make,
+// each one draw call, and their pet (world/pets.js) sitting at their feet, in two more.
 //
 // The group faces +Z with their middle on its origin, for world/signs.js `placeCouple`, which stands it beside the
 // sign and turns it toward her seat. That puts the sign on their left at a stop on the right of the track, and on
@@ -17,15 +17,26 @@
 //
 // DOM-free at import, so the Node unit tests can import it.
 
-import { Group, Mesh, Vector3 } from '../three.js';
+import { BoxGeometry, ExtrudeGeometry, Group, Mesh, Vector3 } from '../three.js';
 import { MATERIALS } from '../render/materials.js';
+import { mergeParts, part } from '../util/geo.js';
 import { createFigure, sittingLift } from './figures.js';
 import { BENCH, coupleLayout, mirrorPose, posesAt } from './poses.js';
 import { createPropGeometry } from './props.js';
 import { createPet, PET_RADIUS } from './pets.js';
+import { heartShape } from './signs.js';
 
 /** How far in front of their middle their pet sits (m). */
 const PET_AHEAD = 0.45;
+
+/**
+ * His phone for a 'selfie' (m): WIDE by TALL and THICK, in his far hand, AHEAD beyond its middle along his arm, its
+ * screen toward the two of them.
+ */
+const PHONE = Object.freeze({ WIDE: 0.075, TALL: 0.14, THICK: 0.016, AHEAD: 0.035, CASE: '#2c2f3a', SCREEN: '#9fd3f2' });
+
+/** The heart they make for 'heart' (m): lobes R across, its middle UP high, AHEAD of the line between them. */
+const HEART_PROP = Object.freeze({ R: 0.07, UP: 1.08, AHEAD: 0.05, DEPTH: 0.035, COLOUR: '#f2577e' });
 
 /**
  * Their hit spheres for taps: the couple's is round their middle, COUPLE_AT metres up, at least COUPLE_REACH metres
@@ -73,6 +84,31 @@ export function createStopCouple(characters, pose, pet = null, side = 'right') {
     pair.add(figure.group);
   }
 
+  if (pose === 'selfie') {
+    // Along his arm the hand's frame runs -Y, so the phone lies across it, its screen on the side toward them (+Y).
+    const { WIDE, TALL, THICK, AHEAD, CASE, SCREEN } = PHONE;
+    const phone = new Mesh(mergeParts([
+      part(new BoxGeometry(WIDE, THICK, TALL), CASE, { position: [0, -AHEAD, 0] }),
+      part(new BoxGeometry(WIDE * 0.84, 0.003, TALL * 0.86), SCREEN, { position: [0, -AHEAD + THICK / 2 + 0.001, 0] }),
+    ]), MATERIALS.solid);
+    phone.name = 'couple-phone';
+    phone.castShadow = true;
+    // His far hand is his right, or his left where the couple is mirrored.
+    him.parts[mirrored ? 'leftHand' : 'rightHand'].add(phone);
+  }
+
+  let heart = null;
+  if (pose === 'heart') {
+    const { R, UP, AHEAD, DEPTH, COLOUR } = HEART_PROP;
+    const shape = new ExtrudeGeometry(heartShape(R), {
+      depth: DEPTH, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 1, curveSegments: 7,
+    });
+    heart = new Mesh(mergeParts([part(shape, COLOUR, { position: [0, 0, -DEPTH / 2] })]), MATERIALS.solid);
+    heart.name = 'couple-made-heart';
+    heart.position.set(0, UP, AHEAD);
+    pair.add(heart);
+  }
+
   if (layout.bench) {
     const bench = new Mesh(createPropGeometry('bench').body, MATERIALS.solid);
     bench.name = 'couple-bench';
@@ -97,6 +133,7 @@ export function createStopCouple(characters, pose, pet = null, side = 'right') {
     him.setPose(mirrored ? mirrorPose(now.him) : now.him);
     her.group.rotation.y = (layout.her.turn + now.twirl) * flip;
     pair.rotation.set(now.sway, now.spin * flip, 0);
+    if (heart) heart.scale.setScalar(now.heart);
     if (companion) companion.update(time);
   }
 

@@ -33,7 +33,9 @@ import { mediaKind } from '../photos/videos.js';
 export const ZONE_IDS = Object.freeze(['spring', 'summer', 'autumn', 'winter', 'evening']);
 
 /** How the couple can stand at a stop. 'none' leaves them out of that stop. */
-export const POSES = Object.freeze(['holding-hands', 'waving', 'hug', 'sitting', 'dancing', 'pointing', 'none']);
+export const POSES = Object.freeze([
+  'holding-hands', 'waving', 'hug', 'sitting', 'dancing', 'pointing', 'celebrate', 'walking', 'selfie', 'goofy', 'heart', 'none',
+]);
 
 const DEFAULT_POSE = 'holding-hands';
 

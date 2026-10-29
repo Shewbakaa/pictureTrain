@@ -463,7 +463,9 @@ test('pets: random unless dog, cat or none', () => {
 
 test('the immersion fields: every pose is accepted, the warnings say what to write, and blank means the default', () => {
   assert.ok(Object.isFrozen(POSES));
-  assert.deepEqual([...POSES], ['holding-hands', 'waving', 'hug', 'sitting', 'dancing', 'pointing', 'none']);
+  assert.deepEqual([...POSES], [
+    'holding-hands', 'waving', 'hug', 'sitting', 'dancing', 'pointing', 'celebrate', 'walking', 'selfie', 'goofy', 'heart', 'none',
+  ]);
   assert.equal(DEFAULT_HINT, 'Best with sound on and headphones in.');
   const all = normalizeContent({ moments: POSES.map((pose) => ({ zone: 'spring', pose })) });
   assert.deepEqual(all.content.moments.map((m) => m.pose), [...POSES]);
@@ -476,7 +478,7 @@ test('the immersion fields: every pose is accepted, the warnings say what to wri
   assert.equal(odd.content.finale.voice, 'voice/Message.M4A');
   assert.equal(odd.content.pets, 'dog');
   assert.deepEqual(odd.warnings, [
-    'Moment 2 pose: "cartwheel" is not one of holding-hands, waving, hug, sitting, dancing, pointing or none, so they hold hands.',
+    'Moment 2 pose: "cartwheel" is not one of holding-hands, waving, hug, sitting, dancing, pointing, celebrate, walking, selfie, goofy, heart or none, so they hold hands.',
   ]);
 
   assert.deepEqual(normalizeContent({ finale: { voice: 'voice/note.jpg' } }).warnings, [

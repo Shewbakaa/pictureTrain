@@ -90,6 +90,7 @@ test('the bench numbers are the bench prop\'s', () => {
 
 test('everyone breathes, 0.012 m every 1.8 s, and only a dance spins', () => {
   for (const pose of STANDING) {
+    if (pose === 'celebrate') continue; // they hop as they breathe (below)
     const bobs = times(3.6, 0.01).map((t) => posesAt(pose, t).her.bob);
     assert.ok(Math.abs(Math.max(...bobs) - Math.min(...bobs) - 0.012) < 0.0005, `${pose}: ${Math.max(...bobs) - Math.min(...bobs)}`);
     assert.ok(Math.abs(posesAt(pose, 1.234).her.bob - posesAt(pose, 1.234 + 1.8).her.bob) < 1e-9, `${pose}: every 1.8 s`);
@@ -189,7 +190,8 @@ test('a stop couple is the two of them, one draw call each, and a bench to sit o
     assert.equal(typeof couple.update, 'function');
     assert.equal(typeof couple.react, 'function');
     assert.ok(figureOf(couple, 'her') && figureOf(couple, 'him'), pose);
-    assert.equal(meshesOf(couple).length, pose === 'sitting' ? 3 : 2, `${pose}: draw calls`);
+    // A third for the bench they sit on, his phone, or the heart they make.
+    assert.equal(meshesOf(couple).length, ['sitting', 'selfie', 'heart'].includes(pose) ? 3 : 2, `${pose}: draw calls`);
   }
   assert.equal(createStopCouple(characters, 'hug').pet, null, 'no pet unless given one');
   const withPet = createStopCouple(characters, 'hug', { kind: 'dog', coat: ['#c8924f', '#f3e3c8'] });
@@ -285,8 +287,12 @@ test('standing, their feet are on the ground; sitting, they sit on the bench', (
   }
 });
 
-test('hands held stay held: holding hands, waving, sitting and dancing', () => {
-  const held = { 'holding-hands': [['rightHand', 'leftHand']], waving: [['rightHand', 'leftHand']], sitting: [['rightHand', 'leftHand']], dancing: [['leftHand', 'rightHand'], ['rightHand', 'leftHand']] };
+test('hands held stay held: holding hands, waving, sitting, dancing, celebrating, walking and being goofy', () => {
+  const near = [['rightHand', 'leftHand']];
+  const held = {
+    'holding-hands': near, waving: near, sitting: near, dancing: [['leftHand', 'rightHand'], ['rightHand', 'leftHand']],
+    celebrate: near, walking: near, goofy: near,
+  };
   for (const [pose, pairs] of Object.entries(held)) {
     for (const side of ['right', 'left']) {
       const couple = createStopCouple(characters, pose, null, side);
@@ -404,4 +410,107 @@ test('far off, a tap on the two of them reaches them, and one at their pet\'s pa
       assert.equal(pickTarget(eye, aim(paws), couple.targets), pet, `${kind}, ${away} m, at the pet`);
     }
   }
+});
+
+// The five poses for the moments of the year: celebrating, walking, a selfie, being goofy and making a heart.
+
+const world = (couple, who, bone) => boneOf(couple, who, bone).getWorldPosition(new Vector3());
+
+test('the new poses stand side by side, facing the train, her on the sign\'s side', () => {
+  for (const pose of ['celebrate', 'walking', 'selfie', 'goofy', 'heart']) {
+    const { her, him, bench } = coupleLayout(pose);
+    assert.ok(her.x > 0 && him.x === -her.x && her.z === 0 && him.z === 0, pose);
+    assert.equal(her.turn, 0, pose);
+    assert.equal(him.turn, 0, pose);
+    assert.equal(bench, false, pose);
+  }
+  assert.equal(coupleLayout('walking').halfWidth, COUPLE_HALF_WIDTH, 'a walk is as wide as holding hands');
+  for (const pose of STANDING.filter((p) => p !== 'heart')) assert.equal(posesAt(pose, 1.7).heart, 0, `${pose}: no heart`);
+});
+
+test('celebrating, they hop together with their arms up, and land between hops', () => {
+  const at = times(3, 0.01).map((t) => posesAt('celebrate', t));
+  const bobs = at.map((p) => p.her.bob);
+  assert.ok(Math.max(...bobs) > 0.06, `up ${Math.max(...bobs).toFixed(3)} m`);
+  assert.ok(Math.min(...bobs) < 0.002, 'and down again');
+  for (const p of at) {
+    assert.ok(Math.abs(p.her.bob - p.him.bob) <= 0.0121, 'together (only their breath apart)');
+    for (const who of [p.her, p.him]) for (const arm of ['leftArm', 'rightArm']) assert.ok(who[arm] > 2.6, `${arm} up`);
+  }
+  const couple = createStopCouple(characters, 'celebrate');
+  const feet = times(1.5, 0.05).map((t) => {
+    couple.update(t);
+    return Math.min(...vertices(figureOf(couple, 'her')).map((p) => p.y));
+  });
+  assert.ok(Math.min(...feet) > -0.01 && Math.min(...feet) < 0.012, `lands (${Math.min(...feet).toFixed(3)} m)`);
+  assert.ok(Math.max(...feet) > 0.04, `and leaves the ground (${Math.max(...feet).toFixed(3)} m)`);
+});
+
+test('walking, they step in step on the spot and look about', () => {
+  const at = times(5, 0.05).map((t) => posesAt('walking', t));
+  const legs = at.map((p) => p.her.leftLeg);
+  assert.ok(Math.max(...legs) - Math.min(...legs) > 0.4, 'a stride');
+  for (const p of at) assert.equal(p.her.leftLeg, p.him.leftLeg, 'in step');
+  const looks = at.map((p) => p.her.headTurn);
+  assert.ok(Math.max(...looks) > 0.3 && Math.min(...looks) < -0.3, 'she looks both ways');
+  assert.notEqual(posesAt('walking', 1).him.headTurn, posesAt('walking', 1).her.headTurn, 'he looks a beat behind');
+});
+
+test('a selfie: his phone is in his far hand, held up in front of their faces, on either side of the track', () => {
+  for (const side of ['right', 'left']) {
+    const couple = createStopCouple(characters, 'selfie', null, side);
+    couple.update(1.2);
+    couple.group.updateMatrixWorld(true);
+    const phone = couple.group.getObjectByName('couple-phone');
+    assert.ok(phone, side);
+    assert.equal(phone.parent, boneOf(couple, 'him', side === 'left' ? 'leftHand' : 'rightHand'), `${side}: in his far hand`);
+    const at = phone.getWorldPosition(new Vector3());
+    const his = figureOf(couple, 'him').getWorldPosition(new Vector3());
+    assert.ok(at.y > 0.85, `${side}: up at their faces (${at.y.toFixed(2)} m)`);
+    assert.ok(at.z > 0.1, `${side}: in front of them (${at.z.toFixed(2)} m)`);
+    assert.ok(Math.sign(at.x - his.x) === Math.sign(his.x), `${side}: out on his far side`);
+  }
+  const p = posesAt('selfie', 0.5);
+  assert.ok(p.her.headTilt > 0.25 && p.him.headTilt < -0.25, 'heads together');
+  const lean = times(6, 0.05).map((t) => posesAt('selfie', t).her.headTilt);
+  assert.ok(Math.max(...lean) - Math.min(...lean) > 0.08, 'and leaning in for the picture');
+});
+
+test('being goofy, their far arms flap and their legs kick, never quite together', () => {
+  const at = times(3, 0.01).map((t) => posesAt('goofy', t));
+  const flaps = at.map((p) => p.her.leftArmOut);
+  assert.ok(Math.max(...flaps) - Math.min(...flaps) > 0.9, 'flapping');
+  assert.ok(Math.max(...flaps) < 1.5, 'below a wave, so a tap still shows');
+  assert.ok(at.some((p) => Math.abs(p.her.leftLeg) > 0.2), 'kicking');
+  assert.ok(at.some((p) => Math.abs(p.her.leftArmOut - p.him.rightArmOut) > 0.8), 'out of step');
+  for (const p of at) assert.equal(p.her.headTilt, p.him.headTilt, 'heads wobbling the same way, so they never knock');
+});
+
+test('a heart: their near hands meet over the middle, then slip apart and the heart shrinks, every 4 s', () => {
+  for (const side of ['right', 'left']) {
+    const couple = createStopCouple(characters, 'heart', null, side);
+    const heart = couple.group.getObjectByName('couple-made-heart');
+    assert.ok(heart, side);
+    const [hers, his] = side === 'left' ? ['leftHand', 'rightHand'] : ['rightHand', 'leftHand'];
+    const hands = (t) => {
+      couple.update(t);
+      couple.group.updateMatrixWorld(true);
+      return [world(couple, 'her', hers), world(couple, 'him', his)];
+    };
+    for (const t of [0.5, 1.5, 4.5]) {
+      const [a, b] = hands(t);
+      assert.ok(a.distanceTo(b) < 0.08, `${side} at ${t} s: hands together (${a.distanceTo(b).toFixed(3)} m)`);
+      assert.ok(Math.abs(a.x) < 0.06 && a.y > 0.85, `${side} at ${t} s: over the middle, up high`);
+      assert.ok(Math.abs(heart.scale.x - 1) <= 0.061, `${side} at ${t} s: the heart full size`);
+      assert.ok(heart.getWorldPosition(new Vector3()).y > a.y, `${side}: the heart above their hands`);
+    }
+    for (const t of [2.95, 6.95]) {
+      const [a, b] = hands(t);
+      assert.ok(a.distanceTo(b) > 0.15, `${side} at ${t} s: slipped apart (${a.distanceTo(b).toFixed(3)} m)`);
+      assert.ok(heart.scale.x < 0.5, `${side} at ${t} s: the heart shrinks`);
+      assert.equal(heart.scale.x, posesAt('heart', t).heart);
+    }
+  }
+  const tilt = (t) => posesAt('heart', t).her.headTilt;
+  assert.ok(tilt(1) > 0 && tilt(2.95) < 0, 'heads together, then tipped away laughing');
 });
