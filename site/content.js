@@ -42,7 +42,7 @@ export default {
     title: '',
 
     // A short, sweet note to her. A sentence or two is plenty: it is the first thing she reads.
-    note: '[A short note to her before the ride starts]',
+    note: "Grab a seat next to me. This little train rides through our first year together, one memory at a time, and I'd take every stop again with you.",
 
     // The words on the start button. Leave it as '' to use "Begin the ride".
     button: '',
