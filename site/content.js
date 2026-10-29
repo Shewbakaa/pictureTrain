@@ -26,10 +26,10 @@ export default {
   // ---------------------------------------------------------------------------
 
   // Her name. It appears in the greeting ("For ...") and in the final "Happy 1 year, ..." wish.
-  herName: '[Her name]',
+  herName: 'Brianna',
 
   // Your name. It signs off your final message.
-  yourName: '[Your name]',
+  yourName: 'Shivba',
 
   // ---------------------------------------------------------------------------
   //  The first screen: what she sees before the ride starts
@@ -57,26 +57,26 @@ export default {
   //  The last screen: after the train pulls into the evening station
   // ---------------------------------------------------------------------------
   finale: {
-    // The small line above the wish. Leave it as '' to use "One year of us".
-    eyebrow: '',
+    // The small line above the wish. Leave it as '' to use "One year of us", or write 'none'
+    // to hide it.
+    eyebrow: 'none',
 
     // The big wish. Leave it as '' to use "Happy 1 year, <her name>".
-    wish: '',
+    wish: 'Happy 1 year of us in a relationship!',
 
     // Your message to her. This is the heart of it, so take your time. To start a new line,
     // type \n in the text. Type \n\n to leave a blank line between two paragraphs.
-    message: '[Your 1-year message to her]',
+    message: 'Thank you for being my partner and being an awesome person. You have such an amazing aura and the way you do things is fascinating and I am happy to do it with you!',
 
-    // How you sign off. Leave it as '' to use "— <your name>", or write your own, like 'Love, Sam'.
+    // How you sign off. Leave it as '' to use your name, or write your own, like 'Love, Sam'.
     signoff: '',
 
-    // Optional, and not written here: a voice note from you, played at the end after your
-    // message appears. To record one, make a Voice Memo on your iPhone, then choose Share →
-    // Save to Files to export it as a .m4a file. Put the file in site/voice/ (make the folder
-    // if it is not there) and add a line like
-    //   voice: 'voice/<name>.m4a',
-    // with the name of your file. It can be .m4a, .mp3, .aac or .wav. Leave it out and the
-    // ride has no voice note (README, "Voice note").
+    // A voice note from you, played at the end after your message appears. To record one, make
+    // a Voice Memo on your iPhone, then choose Share → Save to Files to export it as a .m4a
+    // file. Name it message.m4a and put it in site/voice/, or change the name below to match
+    // yours. It can be .m4a, .mp3, .aac or .wav. Until the file is there, the ride has no voice
+    // note and the console says so. Delete this line for no voice note (README, "Voice note").
+    voice: 'voice/message.m4a',
   },
 
   // ---------------------------------------------------------------------------
@@ -143,13 +143,13 @@ export default {
     // Moment 1
     {
       // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
-      photo: '',
+      photo: 'photos/01.jpg',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
-      date: '[Date]',
+      date: 'Nov 17, 2025',
       // A short title, just a few words.
-      title: '[Moment 1 title]',
+      title: 'Will you be mine?',
       // What made this moment special. A long note scrolls inside the card.
-      caption: '[What made this moment special]',
+      caption: "The night I asked you to be my girlfriend, and you said yes. Still the best answer I've ever gotten.",
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'autumn',
     },
@@ -157,13 +157,13 @@ export default {
     // Moment 2
     {
       // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
-      photo: '',
+      photo: 'photos/02.jpg',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
-      date: '[Date]',
+      date: 'Nov 28, 2025',
       // A short title, just a few words.
-      title: '[Moment 2 title]',
+      title: 'Our first Thanksgiving',
       // What made this moment special. A long note scrolls inside the card.
-      caption: '[What made this moment special]',
+      caption: 'Our first Thanksgiving together, and the first time I got to meet your family. I was so happy to spend it with you.',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'autumn',
     },
@@ -171,13 +171,13 @@ export default {
     // Moment 3
     {
       // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
-      photo: '',
+      photo: 'photos/03.jpg',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
-      date: '[Date]',
+      date: 'Dec 16, 2025',
       // A short title, just a few words.
-      title: '[Moment 3 title]',
+      title: 'Our first musical',
       // What made this moment special. A long note scrolls inside the card.
-      caption: '[What made this moment special]',
+      caption: 'Our first Christmas show together, and our first musical too. I had so much fun sitting next to you.',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'autumn',
     },
@@ -185,13 +185,13 @@ export default {
     // Moment 4
     {
       // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
-      photo: '',
+      photo: 'photos/04.mp4',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
-      date: '[Date]',
+      date: 'Dec 31, 2025',
       // A short title, just a few words.
-      title: '[Moment 4 title]',
+      title: "New Year's fiasco",
       // What made this moment special. A long note scrolls inside the card.
-      caption: '[What made this moment special]',
+      caption: "Our New Year's fiasco lol. I will never forget it, and I'm glad I got to laugh through it with you.",
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'winter',
     },
@@ -199,13 +199,13 @@ export default {
     // Moment 5
     {
       // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
-      photo: '',
+      photo: 'photos/05.jpg',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
-      date: '[Date]',
+      date: 'Feb 13, 2026',
       // A short title, just a few words.
-      title: '[Moment 5 title]',
+      title: 'Universal with you',
       // What made this moment special. A long note scrolls inside the card.
-      caption: '[What made this moment special]',
+      caption: "You took me to Universal, and it's one of the highlights of my life. Thank you so much for that day.",
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'winter',
     },
@@ -213,13 +213,13 @@ export default {
     // Moment 6
     {
       // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
-      photo: '',
+      photo: 'photos/06.jpg',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
-      date: '[Date]',
+      date: 'Apr 25, 2026',
       // A short title, just a few words.
-      title: '[Moment 6 title]',
+      title: 'Our first hike',
       // What made this moment special. A long note scrolls inside the card.
-      caption: '[What made this moment special]',
+      caption: "Our first hike together. I'll take any trail as long as you're on it with me.",
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'winter',
     },
@@ -227,13 +227,13 @@ export default {
     // Moment 7
     {
       // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
-      photo: '',
+      photo: 'photos/07.jpg',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
-      date: '[Date]',
+      date: 'May 2, 2026',
       // A short title, just a few words.
-      title: '[Moment 7 title]',
+      title: 'Your pre-birthday',
       // What made this moment special. A long note scrolls inside the card.
-      caption: '[What made this moment special]',
+      caption: 'Your pre-birthday celebration. You were traveling on the real day, so getting to celebrate you early meant so much to me.',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'spring',
     },
@@ -241,13 +241,13 @@ export default {
     // Moment 8
     {
       // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
-      photo: '',
+      photo: 'photos/08.jpg',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
-      date: '[Date]',
+      date: 'Jun 29, 2026',
       // A short title, just a few words.
-      title: '[Moment 8 title]',
+      title: 'Lake Tahoe',
       // What made this moment special. A long note scrolls inside the card.
-      caption: '[What made this moment special]',
+      caption: 'My birthday trip to Lake Tahoe. I love this picture so much. Look how cute we are!',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'spring',
     },
@@ -255,13 +255,13 @@ export default {
     // Moment 9
     {
       // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
-      photo: '',
+      photo: 'photos/09.jpg',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
-      date: '[Date]',
+      date: 'Jun 30, 2026',
       // A short title, just a few words.
-      title: '[Moment 9 title]',
+      title: 'Still in Tahoe',
       // What made this moment special. A long note scrolls inside the card.
-      caption: '[What made this moment special]',
+      caption: 'Same trip, and proof of how goofy we are together. I love that we get to be this silly.',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'spring',
     },
@@ -269,13 +269,13 @@ export default {
     // Moment 10
     {
       // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
-      photo: '',
+      photo: 'photos/10.jpg',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
-      date: '[Date]',
+      date: 'Jul 2, 2026',
       // A short title, just a few words.
-      title: '[Moment 10 title]',
+      title: 'That view',
       // What made this moment special. A long note scrolls inside the card.
-      caption: '[What made this moment special]',
+      caption: "Look at that background! This one turned out amazing. I'm so glad you put up with my friends (and me).",
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'summer',
     },
@@ -283,13 +283,13 @@ export default {
     // Moment 11
     {
       // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
-      photo: '',
+      photo: 'photos/11.jpg',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
-      date: '[Date]',
+      date: 'Aug 9, 2026',
       // A short title, just a few words.
-      title: '[Moment 11 title]',
+      title: 'Our first camping trip',
       // What made this moment special. A long note scrolls inside the card.
-      caption: '[What made this moment special]',
+      caption: "Our first camping trip together, and we made it! I'd go again anytime with you.",
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'summer',
     },
@@ -297,13 +297,13 @@ export default {
     // Moment 12
     {
       // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
-      photo: '',
+      photo: 'photos/12.jpg',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
-      date: '[Date]',
+      date: 'Aug 22, 2026',
       // A short title, just a few words.
-      title: '[Moment 12 title]',
+      title: 'Almost a heart',
       // What made this moment special. A long note scrolls inside the card.
-      caption: '[What made this moment special]',
+      caption: 'Us trying to make a heart with our hands and failing, LOL. Still my favorite heart.',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'summer',
     },
@@ -311,13 +311,13 @@ export default {
     // Moment 13
     {
       // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
-      photo: '',
+      photo: 'photos/13.jpg',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
-      date: '[Date]',
+      date: 'Sep 5, 2026',
       // A short title, just a few words.
-      title: '[Moment 13 title]',
+      title: 'Labor Day in Arnold',
       // What made this moment special. A long note scrolls inside the card.
-      caption: '[What made this moment special]',
+      caption: 'Our Labor Day trip to Arnold was so much fun! Your family is amazing, and having you there made the whole trip.',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'evening',
     },
@@ -325,13 +325,13 @@ export default {
     // Moment 14
     {
       // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
-      photo: '',
+      photo: 'photos/14.jpg',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
-      date: '[Date]',
+      date: 'Sep 14, 2026',
       // A short title, just a few words.
-      title: '[Moment 14 title]',
+      title: 'Meeting my family',
       // What made this moment special. A long note scrolls inside the card.
-      caption: '[What made this moment special]',
+      caption: 'Us in Indian traditional wear. So many people texted me about how great you looked! It was also your first time meeting my family, and we made it through. Yay us!',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'evening',
     },
@@ -339,13 +339,13 @@ export default {
     // Moment 15
     {
       // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
-      photo: '',
+      photo: 'photos/15.jpg',
       // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
-      date: '[Date]',
+      date: 'Oct 14, 2026',
       // A short title, just a few words.
-      title: '[Moment 15 title]',
+      title: 'Our life together',
       // What made this moment special. A long note scrolls inside the card.
-      caption: '[What made this moment special]',
+      caption: 'A little slice of our everyday life together. It makes me laugh, and it fills my heart.',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
       zone: 'evening',
     },

@@ -3,3 +3,5 @@ test-results/
 playwright-report/
 artifacts/
 .DS_Store
+# The original, full-size photos; the ride uses the converted copies in site/photos/.
+pics/
