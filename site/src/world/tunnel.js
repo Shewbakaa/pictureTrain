@@ -6,7 +6,7 @@
 // winter is first or not in the ride, it goes on the boundary nearest the middle of the ride instead, but never on
 // the one into evening, the finale's town. It is as long as fits, up to MAX_LENGTH, leaving STOP_CLEAR metres of
 // open track to every stop and always covering the whole blend window (layout.js BLEND), where the scenery changes.
-// With the default ride that is 540 to 600 m. If even the blend window will not fit, there is no tunnel.
+// With the default ride that is 250 to 310 m. If even the blend window will not fit, there is no tunnel.
 //
 // The hill is the ground's own (terrain.js, given the span): either side of the track it rises MOUND metres over the
 // tunnel's stretch and eases down beyond the portals, a roof of ground closes over the tunnel between the portals,

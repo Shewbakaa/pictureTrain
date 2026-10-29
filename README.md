@@ -3,8 +3,8 @@
 ## 1. What this is
 
 A little website you send as a link. She taps "Begin the ride" and a cosy cartoon train takes her through
-five scenes (spring, summer, autumn, winter and an evening town). It slows down beside a photo sign for each
-moment you chose (ten to start with), and a card slides up with the photo, the date and your words. The
+five scenes (autumn, winter, spring, summer and an evening town). It slows down beside a photo sign for each
+moment you chose (fifteen to start with), and a card slides up with the photo, the date and your words. The
 last stop is the Day 365 station, where your message to her appears. It is built for phones held upright,
 plays gentle piano music by Chopin in each scene (or your own song) with the little train's own sounds and
 the sounds of each scene, and works on a computer too.
@@ -12,8 +12,8 @@ the sounds of each scene, and works on a computer too.
 **What's in the ride:** the first screen is a boarding ticket, punched as she taps Begin, with a little line
 suggesting sound and headphones. Her screen stays on for the whole ride (on phones that allow it). The train
 rocks gently under her, bumps over the rail joints and runs through a tunnel into the winter hills. The trees
-and grass sway in the breeze, and there is life to go with the sounds: butterflies and a flock of birds in
-spring, gulls over the sea, deer at the edge of the autumn forest, robins on the winter fences, and at dusk the
+and grass sway in the breeze, and there is life to go with the sounds: deer at the edge of the autumn forest,
+robins on the winter fences, butterflies and a flock of birds in spring, gulls over the sea, and at dusk the
 stars, a crescent moon, a shooting star and smoke from the chimneys. The two of you stand beside every photo
 sign, posed for the moment, with a little dog or cat (section 2). Some things answer a tap, like the whistle
 cord, the lantern, the balloons, the snowman and the two of you, and she can look around by moving her phone
@@ -45,7 +45,7 @@ Nothing is sent or published by anything in this folder until you do it yourself
 
 Open `site/content.js` in any text editor. Every field is explained in the notes inside the file. Replace
 everything that is in `[square brackets]`, brackets included: her name, your name, the note on the first
-screen, your message at the end, and the date, title and caption of each of the ten moments. You can add
+screen, your message at the end, and the date, title and caption of each of the fifteen moments. You can add
 moments, remove moments or reorder the seasons. The notes in the file say how.
 
 Two things to know about that file:
@@ -429,8 +429,8 @@ title and a line of text. Those come from the top of `site/index.html` (the titl
 | `ui=0` | Hide the buttons and cards. |
 
 **Ride pace.** The train cruises at 6.5 metres per second, which is about 17 seconds between stops and a
-bit over three and a half minutes for the whole ride. If you want it faster or slower, change `RIDE.CRUISE`
-in `site/src/ride/rideController.js`.
+little under five minutes for the whole ride, plus the time she spends at each stop. If you want it
+faster or slower, change `RIDE.CRUISE` in `site/src/ride/rideController.js`.
 
 **Tests.** Setup once: `npm install`, then `npx playwright install` (it downloads the browsers the tests
 use). Use a recent Node (22 or newer).

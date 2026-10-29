@@ -96,13 +96,13 @@ export default {
   //
   //  Use each name once. You can leave a scene out if you don't want it on the ride.
   // ---------------------------------------------------------------------------
-  zones: ['spring', 'summer', 'autumn', 'winter', 'evening'],
+  zones: ['autumn', 'winter', 'spring', 'summer', 'evening'],
 
   // ---------------------------------------------------------------------------
   //  Your moments: one stop on the ride for each
   //
   //  The train slows down beside a photo sign, and a card slides up with your photo, the
-  //  date, a title and your note. Ten moments is the starting plan, but you can have as many
+  //  date, a title and your note. Fifteen moments is the starting plan, but you can have as many
   //  as you like. To add one, copy a whole moment (from its { to its }, including the comma
   //  after it) and paste it where you want it. To remove one, delete its block. The track
   //  gets longer or shorter to fit.
@@ -135,7 +135,7 @@ export default {
   //
   //  The one rule: moments must go in the same order as the zones above. All the moments for
   //  the first zone come first, then the second zone's, and so on, ending in 'evening'.
-  //  (Two per zone is the starting plan. A zone with no moments is just a short stretch of
+  //  (Three per zone is the starting plan. A zone with no moments is just a short stretch of
   //  scenery.) If a moment is in an earlier zone than the moment before it, the ride puts it
   //  in the same zone as the moment before it and shows a "zone order" error in the console.
   // ---------------------------------------------------------------------------
@@ -151,7 +151,7 @@ export default {
       // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
-      zone: 'spring',
+      zone: 'autumn',
     },
 
     // Moment 2
@@ -165,7 +165,7 @@ export default {
       // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
-      zone: 'spring',
+      zone: 'autumn',
     },
 
     // Moment 3
@@ -179,7 +179,7 @@ export default {
       // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
-      zone: 'summer',
+      zone: 'autumn',
     },
 
     // Moment 4
@@ -193,7 +193,7 @@ export default {
       // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
-      zone: 'summer',
+      zone: 'winter',
     },
 
     // Moment 5
@@ -207,7 +207,7 @@ export default {
       // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
-      zone: 'autumn',
+      zone: 'winter',
     },
 
     // Moment 6
@@ -221,7 +221,7 @@ export default {
       // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
-      zone: 'autumn',
+      zone: 'winter',
     },
 
     // Moment 7
@@ -235,7 +235,7 @@ export default {
       // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
-      zone: 'winter',
+      zone: 'spring',
     },
 
     // Moment 8
@@ -249,7 +249,7 @@ export default {
       // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
-      zone: 'winter',
+      zone: 'spring',
     },
 
     // Moment 9
@@ -263,7 +263,7 @@ export default {
       // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
-      zone: 'evening',
+      zone: 'spring',
     },
 
     // Moment 10
@@ -274,6 +274,76 @@ export default {
       date: '[Date]',
       // A short title, just a few words.
       title: '[Moment 10 title]',
+      // What made this moment special. A long note scrolls inside the card.
+      caption: '[What made this moment special]',
+      // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
+      zone: 'summer',
+    },
+
+    // Moment 11
+    {
+      // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
+      photo: '',
+      // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
+      date: '[Date]',
+      // A short title, just a few words.
+      title: '[Moment 11 title]',
+      // What made this moment special. A long note scrolls inside the card.
+      caption: '[What made this moment special]',
+      // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
+      zone: 'summer',
+    },
+
+    // Moment 12
+    {
+      // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
+      photo: '',
+      // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
+      date: '[Date]',
+      // A short title, just a few words.
+      title: '[Moment 12 title]',
+      // What made this moment special. A long note scrolls inside the card.
+      caption: '[What made this moment special]',
+      // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
+      zone: 'summer',
+    },
+
+    // Moment 13
+    {
+      // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
+      photo: '',
+      // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
+      date: '[Date]',
+      // A short title, just a few words.
+      title: '[Moment 13 title]',
+      // What made this moment special. A long note scrolls inside the card.
+      caption: '[What made this moment special]',
+      // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
+      zone: 'evening',
+    },
+
+    // Moment 14
+    {
+      // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
+      photo: '',
+      // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
+      date: '[Date]',
+      // A short title, just a few words.
+      title: '[Moment 14 title]',
+      // What made this moment special. A long note scrolls inside the card.
+      caption: '[What made this moment special]',
+      // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
+      zone: 'evening',
+    },
+
+    // Moment 15
+    {
+      // Photo (or short video) in site/photos/, like 'photos/01.jpg', or '' for a placeholder.
+      photo: '',
+      // When it happened, as text: 'Oct 2025', '14 Feb', 'Our first date'. Short is best.
+      date: '[Date]',
+      // A short title, just a few words.
+      title: '[Moment 15 title]',
       // What made this moment special. A long note scrolls inside the card.
       caption: '[What made this moment special]',
       // The scene at this stop: spring, summer, autumn, winter or evening, in zone order.
